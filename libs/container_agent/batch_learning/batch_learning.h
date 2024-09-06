@@ -1,0 +1,10 @@
+#ifndef PIPEPLUSPLUS_BATCH_LEARNING_H
+#define PIPEPLUSPLUS_BATCH_LEARNING_H
+
+
+class batch_learning {
+
+};
+
+
+#endif //PIPEPLUSPLUS_BATCH_LEARNING_H
