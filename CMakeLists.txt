@@ -139,6 +139,8 @@ else()
     endif ()
     # Use the correct version of CUDA
     set(CUDA_TOOLKIT_ROOT_DIR /usr/local/cuda)
+    # Use the correct version of Torch
+    list(APPEND CMAKE_PREFIX_PATH /libtorch)
 
     # Set LightGBM include directories
     # set(LIGHTGBM_INCLUDE_DIR "/usr/include/LightGBM")
@@ -167,6 +169,8 @@ else()
     option(protobuf_MODULE_COMPATIBLE TRUE)
     find_package(Protobuf CONFIG REQUIRED)
     message(STATUS "Using protobuf ${Protobuf_VERSION}")
+
+    find_package(Torch REQUIRED)
 
     set(_PROTOBUF_LIBPROTOBUF protobuf::libprotobuf)
     set(_REFLECTION gRPC::grpc++_reflection)

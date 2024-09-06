@@ -1,5 +1,5 @@
 # Builder Image
-FROM pipeplusplus:dev
+FROM pipeplusplus:torch
 
 ARG VERSION=Release
 
