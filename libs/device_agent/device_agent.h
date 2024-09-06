@@ -99,7 +99,7 @@ protected:
                 "-v /ssd0/tung/PipePlusPlus/model_profiles/:/app/model_profiles/ "
                 "-d --rm --runtime nvidia --gpus all --name " +
                 absl::StrFormat(
-                        R"(%s pipeline-base-container %s --json '%s' --device %i --port %i --port_offset %i)",
+                        R"(%s pipeline-base-container:torch %s --json '%s' --device %i --port %i --port_offset %i)",
                         cont_name, executable, start_string, device, port, dev_port_offset) +
                 " --log_dir ../logs";
 
