@@ -170,6 +170,24 @@ else()
     find_package(Protobuf CONFIG REQUIRED)
     message(STATUS "Using protobuf ${Protobuf_VERSION}")
 
+    # Automatically detect the CUDA architecture using nvcc
+    execute_process(
+            COMMAND ${CUDA_TOOLKIT_ROOT_DIR}/bin/nvcc --list-gpu-arch
+            OUTPUT_VARIABLE DETECTED_ARCHITECTURE
+            ERROR_QUIET
+    )
+    # Parse the architecture from the nvcc output
+    string(REGEX MATCHALL "compute_([0-9]+)" DETECTED_ARCHITECTURE "${DETECTED_ARCHITECTURE}")
+    foreach(ARCH ${DETECTED_ARCHITECTURE})
+        string(REGEX REPLACE "compute_" "" ARCH_NUM ${ARCH})
+        list(APPEND CMAKE_CUDA_ARCHITECTURES ${ARCH_NUM})
+    endforeach()
+    if (CMAKE_CUDA_ARCHITECTURES STREQUAL "")
+        message(WARNING "No CUDA architectures detected, resorting to native")
+        set(CMAKE_CUDA_ARCHITECTURES 'native')
+    else ()
+        message(STATUS "Available CUDA architectures: ${CMAKE_CUDA_ARCHITECTURES}")
+    endif ()
     find_package(Torch REQUIRED)
 
     set(_PROTOBUF_LIBPROTOBUF protobuf::libprotobuf)
