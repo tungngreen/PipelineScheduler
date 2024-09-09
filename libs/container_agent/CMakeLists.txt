@@ -25,6 +25,7 @@ add_library(container_agent
 # the export namespace when using add_subdirectory() instead.
 add_library(container_agent::container_agent ALIAS container_agent)
 
+add_subdirectory(batch_learning)
 
 # Required compiler features.
 # https://cmake.org/cmake/help/v3.1/manual/cmake-compile-features.7.html
@@ -45,6 +46,9 @@ find_package(communicator CONFIG REQUIRED)
 
 set(controller_DIR "${CMAKE_CURRENT_BINARY_DIR}/../controller")
 find_package(controller CONFIG REQUIRED)
+
+set(batch_learning_DIR "${CMAKE_CURRENT_BINARY_DIR}/batch_learning")
+find_package(batch_learning CONFIG REQUIRED)
 
 # Defines the headers for this library.
 # https://cmake.org/cmake/help/v3.11/command/target_include_directories.html
