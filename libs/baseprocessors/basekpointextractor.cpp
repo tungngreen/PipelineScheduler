@@ -231,6 +231,7 @@ void BaseKPointExtractor::extractor() {
 
         
         msvc_batchCount++;
+        msvc_miniBatchCount++;
 
         spdlog::get("container_agent")->trace("{0:s} sleeps for {1:d} millisecond", msvc_name, msvc_interReqTime);
         std::this_thread::sleep_for(std::chrono::milliseconds(msvc_interReqTime));

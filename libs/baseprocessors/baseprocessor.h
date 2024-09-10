@@ -230,6 +230,7 @@ public:
         msvc_processRecords.setKeepLength((uint64_t)jsonConfigs.at("cont_metricsScrapeIntervalMillisec") * 2);
         msvc_arrivalRecords.setKeepLength((uint64_t) jsonConfigs.at("cont_metricsScrapeIntervalMillisec") * 2);
     };
+
     virtual ProcessRecordType getProcessRecords() override {
         return msvc_processRecords.getRecords();
     }

@@ -672,6 +672,15 @@ public:
         return msvc_totalReqCount.exchange(0);
     };
 
+    unsigned int GetMiniBatchCount() {
+        return msvc_miniBatchCount.exchange(0);
+    };
+
+    unsigned int GetAvgExecutedBatchSize() {
+        msvc_miniBatchCount = 0;
+        return msvc_avgBatchSize.exchange(0);
+    }
+
     unsigned int GetQueueDrops() {
         unsigned int val = 0;
         for (auto &queue : msvc_OutQueue) {
@@ -760,6 +769,10 @@ public:
         return {};
     }
 
+    virtual ProcessRecord readProcessRecords(int max) {
+        return {};
+    }
+
     virtual BatchInferRecordType getBatchInferRecords() {
         return {};
     }
@@ -833,6 +846,8 @@ protected:
 
     std::atomic<unsigned int> msvc_droppedReqCount = 0;
     std::atomic<unsigned int> msvc_totalReqCount = 0;
+    std::atomic<unsigned int> msvc_avgBatchSize = 0;
+    std::atomic<unsigned int> msvc_miniBatchCount = 0;
 
     //
     NumMscvType nummsvc_upstreamMicroservices = 0;

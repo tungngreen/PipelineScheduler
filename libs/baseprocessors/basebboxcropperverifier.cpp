@@ -300,6 +300,7 @@ void BaseBBoxCropperVerifier::cropping() {
         // }
 
         msvc_batchCount++;
+        msvc_miniBatchCount++;
 
         
         spdlog::get("container_agent")->trace("{0:s} sleeps for {1:d} millisecond", msvc_name, msvc_interReqTime);
