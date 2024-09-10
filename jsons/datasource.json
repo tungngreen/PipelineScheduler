@@ -1,6 +1,6 @@
 {
     "container": {
-        "cont_experimentName": "ex1",
+        "cont_experimentName": "rl1",
         "cont_systemName": "ppp",
         "cont_pipeName": "every",
         "cont_taskName": "dsrc",
