@@ -77,6 +77,8 @@ void PPO::update(double beta, double clip_param) {
 }
 
 void PPO::rewardCallback(double throughput, double drops, double oversize_penalty) {
+    if (isnan(throughput))
+        throughput = 0.0;
     rewards.push_back(torch::tensor({throughput - 0.5 * (drops + oversize_penalty)}, torch::kF64));
 }
 
@@ -89,10 +91,10 @@ int PPO::runStep() {
     actions.push_back(std::get<0>(av));
     values.push_back(std::get<1>(av));
     log_probabilities.push_back(ac->log_prob(actions[counter]));
-    avg_reward += rewards[counter][0][0].item<double>()/update_steps;
-    counter++;
+    avg_reward += rewards[counter].item<double>()/update_steps;
 
     int action = std::max(1, (int)std::floor(actions[counter][0][0].item<double>() * max_batch));
+    counter++;
     out << counter << "," << avg_reward << "," << action << std::endl;
 
     if (counter%update_steps == 0) {
