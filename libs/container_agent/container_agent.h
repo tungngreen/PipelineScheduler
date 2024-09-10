@@ -131,8 +131,6 @@ public:
     virtual void runService(const json &pipeConfigs, const json &configs);
 
 protected:
-    void updateProfileTable();
-
     void ReportStart();
 
     void collectRuntimeMetrics();
@@ -282,10 +280,6 @@ protected:
     RUNMODE cont_RUNMODE;
     uint8_t cont_deviceIndex;
 
-    /**
-     * @brief Metrics
-     */
-
     bool reportHwMetrics;
     std::string cont_hwMetricsTableName;
     SummarizedHardwareMetrics cont_hwMetrics;
@@ -302,6 +296,9 @@ protected:
     std::vector<spdlog::sink_ptr> cont_loggerSinks = {};
     std::shared_ptr<spdlog::logger> cont_logger;    
 
+    PPO *cont_ppo;
+    uint64_t cont_rlIntervalMillisec = 1000;
+    ClockType cont_nextRLDecisionTime = std::chrono::system_clock::now();
 };
 
 #endif //CONTAINER_AGENT_H

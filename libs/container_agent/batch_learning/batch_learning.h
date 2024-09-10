@@ -2,7 +2,7 @@
 #include <fstream>
 #include <torch/torch.h>
 #include <random>
-#include <math.h>
+#include <cmath>
 
 #ifndef PIPEPLUSPLUS_BATCH_LEARNING_H
 #define PIPEPLUSPLUS_BATCH_LEARNING_H
@@ -13,26 +13,26 @@ using VT = std::vector<torch::Tensor>;
 // Network model for Proximal Policy Optimization
 struct ActorCriticImpl : public torch::nn::Module{
     // Actor.
-    torch::nn::Linear a_lin1_, a_lin2_, a_lin3_;
+    torch::nn::Linear a_lin1_, a_lin2_;
     torch::Tensor mu_, log_std_;
     // Critic.
-    torch::nn::Linear c_lin1_, c_lin2_, c_lin3_, c_val_;
+    torch::nn::Linear c_lin1_, c_lin2_, c_val_;
 
     ActorCriticImpl(int64_t n_in, int64_t n_out, double std = 2e-2) :
-            a_lin1_(torch::nn::Linear(n_in, 16)), a_lin2_(torch::nn::Linear(16, 16)),
-            a_lin3_(torch::nn::Linear(16, n_out)),
+            a_lin1_(torch::nn::Linear(n_in, 16)), a_lin2_(torch::nn::Linear(16, n_out)),
+//            a_lin3_(torch::nn::Linear(16, n_out)),
             mu_(torch::full(n_out, 0.)), log_std_(torch::full(n_out, std)),
-            c_lin1_(torch::nn::Linear(n_in, 16)), c_lin2_(torch::nn::Linear(16, 16)),
-            c_lin3_(torch::nn::Linear(16, n_out)),
+            c_lin1_(torch::nn::Linear(n_in, 16)), c_lin2_(torch::nn::Linear(16, n_out)),
+//            c_lin3_(torch::nn::Linear(16, n_out)),
             c_val_(torch::nn::Linear(n_out, 1)) {
         // Register the modules.
         register_module("a_lin1", a_lin1_);
         register_module("a_lin2", a_lin2_);
-        register_module("a_lin3", a_lin3_);
+//        register_module("a_lin3", a_lin3_);
         register_parameter("log_std", log_std_);
         register_module("c_lin1", c_lin1_);
         register_module("c_lin2", c_lin2_);
-        register_module("c_lin3", c_lin3_);
+//        register_module("c_lin3", c_lin3_);
         register_module("c_val", c_val_);
     }
 
@@ -40,12 +40,12 @@ struct ActorCriticImpl : public torch::nn::Module{
     std::tuple<torch::Tensor, torch::Tensor> forward(torch::Tensor x) {
         // Actor.
         mu_ = torch::relu(a_lin1_->forward(x));
-        mu_ = torch::relu(a_lin2_->forward(mu_));
-        mu_ = torch::tanh(a_lin3_->forward(mu_));
+        mu_ = torch::tanh(a_lin2_->forward(mu_));
+//        mu_ = torch::tanh(a_lin3_->forward(mu_));
         // Critic.
         torch::Tensor val = torch::relu(c_lin1_->forward(x));
-        val = torch::relu(c_lin2_->forward(val));
-        val = torch::tanh(c_lin3_->forward(val));
+        val = torch::tanh(c_lin2_->forward(val));
+//        val = torch::tanh(c_lin3_->forward(val));
         val = c_val_->forward(val);
 
         torch::NoGradGuard no_grad;
@@ -75,7 +75,7 @@ TORCH_MODULE(ActorCritic);
 // Proximal policy optimization, https://arxiv.org/abs/1707.06347
 class PPO {
 public:
-    PPO(ActorCritic& ac, uint update_steps = 512, uint mini_batch_size = 128, uint epochs = 4,
+    PPO(ActorCritic ac, uint update_steps = 256, uint mini_batch_size = 64, uint epochs = 4,
         double lambda = 0.95, double gamma = 0.99);
 
     ~PPO() {
@@ -84,9 +84,9 @@ public:
     }
     double runStep();
     void rewardCallback(double throughput, double drops, double oversize_penalty);
-    void setState(int curr_batch, int arrival, int target_latency, int pre_queue_size, int inf_queue_size, int mem);
+    void setState(int curr_batch, int arrival, int pre_queue_size, int inf_queue_size);
 
-    static ActorCritic initActorCritic(int64_t n_in, int64_t n_out, double std, const std::string& model_save = "") {
+    static ActorCritic initActorCritic(int64_t n_in, int64_t n_out, double std = 2e-2, const std::string& model_save = "") {
         ActorCritic ac = ActorCritic(n_in, n_out, std);
         ac->to(torch::kF64);
         ac->normal(0., std);

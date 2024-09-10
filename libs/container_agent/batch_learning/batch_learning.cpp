@@ -1,6 +1,6 @@
 #include "batch_learning.h"
 
-PPO::PPO(ActorCritic& ac, uint update_steps, uint mini_batch_size, uint epochs, double lambda, double gamma)
+PPO::PPO(ActorCritic ac, uint update_steps, uint mini_batch_size, uint epochs, double lambda, double gamma)
     : ac(ac), update_steps(update_steps), mini_batch_size(mini_batch_size), epochs(epochs), lambda(lambda), gamma(gamma) {
     std::filesystem::create_directories(std::filesystem::path("../models/batch_learning"));
     out.open("../models/batch_learning/latest_log.csv");
@@ -78,8 +78,8 @@ void PPO::rewardCallback(double throughput, double drops, double oversize_penalt
     rewards.push_back(torch::tensor({throughput - 0.5 * (drops + oversize_penalty)}, torch::kF64));
 }
 
-void PPO::setState(int curr_batch, int arrival, int target_latency, int pre_queue_size, int inf_queue_size, int mem) {
-    states.push_back(torch::tensor({{curr_batch, arrival, target_latency, pre_queue_size, inf_queue_size, mem}}, torch::kF64));
+void PPO::setState(int curr_batch, int arrival, int pre_queue_size, int inf_queue_size) {
+    states.push_back(torch::tensor({{curr_batch, arrival, pre_queue_size, inf_queue_size}}, torch::kF64));
 }
 
 double PPO::runStep() {
@@ -92,14 +92,13 @@ double PPO::runStep() {
     avg_reward += rewards[counter][0][0].item<double>()/update_steps;
     counter++;
 
+    out << counter << "," << avg_reward << "," << act << std::endl;
     if (counter%update_steps == 0) {
         printf("Updating the network.\n");
         std::thread t(&PPO::update, this, 1e-3, 0.2);
         t.detach();
-        out << avg_reward << std::endl;
         counter = 0;
         avg_reward = 0.0;
     }
-
     return act;
 }
