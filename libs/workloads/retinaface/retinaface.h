@@ -1,10 +1,6 @@
-#include <baseprocessor.h>
-#include <trtengine.h>
-#include <misc.h>
 #include "container_agent.h"
-#include "data_reader.h"
+#include <baseprocessor.h>
 #include "data_source.h"
-#include "receiver.h"
 
 class RetinaFaceAgent : public ContainerAgent {
 public:

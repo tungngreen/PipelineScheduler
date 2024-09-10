@@ -55,11 +55,11 @@ target_compile_features(retinaface
 # we can have multiple versions installed at the same time.
 set(PROJECT_PREFIX retinaface)
 
-set(baseprocessors_DIR "${CMAKE_CURRENT_BINARY_DIR}/../../baseprocessors")
-find_package(baseprocessors CONFIG REQUIRED)
-
 set(container_agent_DIR "${CMAKE_CURRENT_BINARY_DIR}/../../container_agent")
 find_package(container_agent CONFIG REQUIRED)
+
+set(baseprocessors_DIR "${CMAKE_CURRENT_BINARY_DIR}/../../baseprocessors")
+find_package(baseprocessors CONFIG REQUIRED)
 
 set(data_source_DIR "${CMAKE_CURRENT_BINARY_DIR}/../data_source")
 find_package(data_source CONFIG REQUIRED)
@@ -72,21 +72,14 @@ target_include_directories(retinaface
             $<BUILD_INTERFACE:${retinaface_SOURCE_DIR}/>
             # Used when installing the library:
             $<INSTALL_INTERFACE:${PROJECT_PREFIX}>
-            ${OpenCV_INCLUDE_DIRS}
-            ${CUDA_INCLUDE_DIRS}
-            ${TensorRT_INCLUDE_DIRS}
         PRIVATE
             # Used only when building the library:
             src)
 
 target_link_libraries(retinaface
         PUBLIC
-        ${OpenCV_LIBS}
-        ${CUDA_LIBRARIES}
-        ${CMAKE_THREAD_LIBS_INIT}
-        ${TensorRT_LIBRARIES}
-        baseprocessors
         container_agent
+        baseprocessors
         data_source
 )
 

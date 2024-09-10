@@ -1,13 +1,6 @@
-#include <baseprocessor.h>
-#include <trtengine.h>
-#include <misc.h>
-#include <chrono>
 #include "container_agent.h"
-#include "data_reader.h"
+#include <baseprocessor.h>
 #include "data_source.h"
-#include "receiver.h"
-#include "sender.h"
-#include "spdlog/spdlog.h"
 
 using namespace spdlog;
 

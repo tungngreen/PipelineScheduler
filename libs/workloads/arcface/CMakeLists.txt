@@ -55,11 +55,11 @@ target_compile_features(arcface
 # we can have multiple versions installed at the same time.
 set(PROJECT_PREFIX arcface)
 
-set(baseprocessors_DIR "${CMAKE_CURRENT_BINARY_DIR}/../../baseprocessors")
-find_package(baseprocessors CONFIG REQUIRED)
-
 set(container_agent_DIR "${CMAKE_CURRENT_BINARY_DIR}/../../container_agent")
 find_package(container_agent CONFIG REQUIRED)
+
+set(baseprocessors_DIR "${CMAKE_CURRENT_BINARY_DIR}/../../baseprocessors")
+find_package(baseprocessors CONFIG REQUIRED)
 
 # Defines the headers for this library.
 # https://cmake.org/cmake/help/v3.11/command/target_include_directories.html
@@ -69,21 +69,14 @@ target_include_directories(arcface
             $<BUILD_INTERFACE:${arcface_SOURCE_DIR}/>
             # Used when installing the library:
             $<INSTALL_INTERFACE:${PROJECT_PREFIX}>
-            ${OpenCV_INCLUDE_DIRS}
-            ${CUDA_INCLUDE_DIRS}
-            ${TensorRT_INCLUDE_DIRS}
         PRIVATE
             # Used only when building the library:
             src)
 
 target_link_libraries(arcface
         PUBLIC
-        ${OpenCV_LIBS}
-        ${CUDA_LIBRARIES}
-        ${CMAKE_THREAD_LIBS_INIT}
-        ${TensorRT_LIBRARIES}
-        baseprocessors
         container_agent
+        baseprocessors
 )
 
 # Here we configure variables specifying the target directories.

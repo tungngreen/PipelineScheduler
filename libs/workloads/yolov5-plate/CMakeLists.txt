@@ -55,11 +55,11 @@ target_compile_features(yolov5-plate
 # we can have multiple versions installed at the same time.
 set(PROJECT_PREFIX yolov5-plate)
 
-set(baseprocessors_DIR "${CMAKE_CURRENT_BINARY_DIR}/../../baseprocessors")
-find_package(baseprocessors CONFIG REQUIRED)
-
 set(container_agent_DIR "${CMAKE_CURRENT_BINARY_DIR}/../../container_agent")
 find_package(container_agent CONFIG REQUIRED)
+
+set(baseprocessors_DIR "${CMAKE_CURRENT_BINARY_DIR}/../../baseprocessors")
+find_package(baseprocessors CONFIG REQUIRED)
 
 # Defines the headers for this library.
 # https://cmake.org/cmake/help/v3.11/command/target_include_directories.html
@@ -69,21 +69,14 @@ target_include_directories(yolov5-plate
             $<BUILD_INTERFACE:${yolov5_SOURCE_DIR}/>
             # Used when installing the library:
             $<INSTALL_INTERFACE:${PROJECT_PREFIX}>
-            ${OpenCV_INCLUDE_DIRS}
-            ${CUDA_INCLUDE_DIRS}
-	    	${TensorRT_INCLUDE_DIRS}
         PRIVATE
             # Used only when building the library:
             src)
 
 target_link_libraries(yolov5-plate
         PUBLIC
-        ${OpenCV_LIBS}
-        ${CUDA_LIBRARIES}
-		${CMAKE_THREAD_LIBS_INIT}
-		${TensorRT_LIBRARIES}
+		container_agent
 		baseprocessors
-        container_agent
 )
 
 # Here we configure variables specifying the target directories.
