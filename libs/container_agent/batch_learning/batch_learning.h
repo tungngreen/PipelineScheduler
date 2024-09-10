@@ -75,11 +75,11 @@ TORCH_MODULE(ActorCritic);
 // Proximal policy optimization, https://arxiv.org/abs/1707.06347
 class PPO {
 public:
-    PPO(ActorCritic ac, uint update_steps = 256, uint mini_batch_size = 64, uint epochs = 4,
+    PPO(std::string& cont_name, ActorCritic ac, uint update_steps = 256, uint mini_batch_size = 64, uint epochs = 4,
         double lambda = 0.95, double gamma = 0.99);
 
     ~PPO() {
-        torch::save(ac, "../models/batch_learning/latest_model.pt");
+        torch::save(ac, path + "/latest_model.pt");
         out.close();
     }
     double runStep();
@@ -104,6 +104,7 @@ private:
 
     std::mt19937 re;
     std::ofstream out;
+    std::string path;
 
     uint counter = 0;
     uint update_steps;

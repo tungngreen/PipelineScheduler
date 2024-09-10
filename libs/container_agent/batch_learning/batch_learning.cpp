@@ -1,9 +1,10 @@
 #include "batch_learning.h"
 
-PPO::PPO(ActorCritic ac, uint update_steps, uint mini_batch_size, uint epochs, double lambda, double gamma)
+PPO::PPO(std::string& cont_name, ActorCritic ac, uint update_steps, uint mini_batch_size, uint epochs, double lambda, double gamma)
     : ac(ac), update_steps(update_steps), mini_batch_size(mini_batch_size), epochs(epochs), lambda(lambda), gamma(gamma) {
-    std::filesystem::create_directories(std::filesystem::path("../models/batch_learning"));
-    out.open("../models/batch_learning/latest_log.csv");
+    path = "../models/batch_learning/" + cont_name;
+    std::filesystem::create_directories(std::filesystem::path(path));
+    out.open(path + "/latest_log.csv");
 
     std::random_device rd;
     re = std::mt19937(rd());

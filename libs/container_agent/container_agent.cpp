@@ -621,7 +621,7 @@ ContainerAgent::ContainerAgent(const json& configs) {
     run = true;
     reportHwMetrics = false;
     profiler = nullptr;
-    cont_ppo = new PPO(PPO::initActorCritic(4,1));
+    cont_ppo = new PPO(cont_name, PPO::initActorCritic(4,1));
     std::thread receiver(&ContainerAgent::HandleRecvRpcs, this);
     receiver.detach();
 }
