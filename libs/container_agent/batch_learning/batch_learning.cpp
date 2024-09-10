@@ -1,7 +1,8 @@
 #include "batch_learning.h"
 
-PPO::PPO(std::string& cont_name, ActorCritic ac, uint update_steps, uint mini_batch_size, uint epochs, double lambda, double gamma)
-    : ac(ac), update_steps(update_steps), mini_batch_size(mini_batch_size), epochs(epochs), lambda(lambda), gamma(gamma) {
+PPO::PPO(std::string& cont_name, ActorCritic ac, uint max_batch, uint update_steps, uint mini_batch_size, uint epochs,
+         double lambda, double gamma) : ac(ac), max_batch(max_batch), update_steps(update_steps),
+                                        mini_batch_size(mini_batch_size), epochs(epochs), lambda(lambda), gamma(gamma) {
     path = "../models/batch_learning/" + cont_name;
     std::filesystem::create_directories(std::filesystem::path(path));
     out.open(path + "/latest_log.csv");
@@ -83,17 +84,17 @@ void PPO::setState(int curr_batch, int arrival, int pre_queue_size, int inf_queu
     states.push_back(torch::tensor({{curr_batch, arrival, pre_queue_size, inf_queue_size}}, torch::kF64));
 }
 
-double PPO::runStep() {
+int PPO::runStep() {
     auto av = ac->forward(states[counter]);
     actions.push_back(std::get<0>(av));
     values.push_back(std::get<1>(av));
     log_probabilities.push_back(ac->log_prob(actions[counter]));
-
-    double act = actions[counter][0][0].item<double>();
     avg_reward += rewards[counter][0][0].item<double>()/update_steps;
     counter++;
 
-    out << counter << "," << avg_reward << "," << act << std::endl;
+    int action = std::max(1, (int)std::floor(actions[counter][0][0].item<double>() * max_batch));
+    out << counter << "," << avg_reward << "," << action << std::endl;
+
     if (counter%update_steps == 0) {
         printf("Updating the network.\n");
         std::thread t(&PPO::update, this, 1e-3, 0.2);
@@ -101,5 +102,6 @@ double PPO::runStep() {
         counter = 0;
         avg_reward = 0.0;
     }
-    return act;
+
+    return action;
 }
