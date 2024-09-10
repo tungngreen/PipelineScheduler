@@ -20,6 +20,7 @@
 #include "sender.h"
 #include "indevicecommunication.grpc.pb.h"
 #include "controller.h"
+#include "batch_learning.h"
 
 ABSL_DECLARE_FLAG(std::optional<std::string>, json);
 ABSL_DECLARE_FLAG(std::optional<std::string>, json_path);
@@ -135,6 +136,10 @@ protected:
     void ReportStart();
 
     void collectRuntimeMetrics();
+
+    void updateArrivalRecords(RunningArrivalRecord &perSecondArrivalRecords);
+
+    void updateProcessRecords();
 
     class RequestHandler {
     public:

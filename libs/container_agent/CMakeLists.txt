@@ -82,6 +82,7 @@ target_link_libraries(container_agent
         microservice
         controller
         communicator
+        batch_learning
 )
 
 # add_executable(ContainerAgent container_agent.cpp)
