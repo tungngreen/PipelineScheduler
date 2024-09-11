@@ -700,9 +700,9 @@ std::vector<float> getThrptsInPeriods(const std::vector<ClockType> &timestamps, 
 
 
 void ContainerAgent::collectRuntimeMetrics() {
-    unsigned int lateCount, queueDrops = 0, totalRequests = 0;
+    unsigned int tmp_lateCount, lateCount = 0, queueDrops = 0;
+    double avgRequestRate, avgExecutedBatchSize, pre_queueDrops = 0, inf_queueDrops = 0;
     std::string sql;
-    float avgRequestRate;
 
     // If we are not running in profiling mode, container_agent should not collect hardware metrics
     if (cont_RUNMODE != RUNMODE::PROFILING) {
@@ -773,11 +773,23 @@ void ContainerAgent::collectRuntimeMetrics() {
         }
 
         if (cont_RUNMODE == RUNMODE::DEPLOYMENT && timePointCastMillisecond(startTime) >= timePointCastMillisecond(cont_nextRLDecisionTime)) {
-            avgRequestRate = perSecondArrivalRecords.getAvgArrivalRate();
-            double pre_queueDrops = cont_msvcsList[0]->GetQueueDrops();
-            double inf_queueDrops = cont_msvcsList[1]->GetQueueDrops();
-            queueDrops += pre_queueDrops + inf_queueDrops;
-            cont_ppo->rewardCallback(cont_msvcsList[3]->GetMiniBatchCount() / avgRequestRate, (pre_queueDrops + inf_queueDrops) / 200, cont_msvcsList[1]->msvc_idealBatchSize / cont_msvcsList[1]->GetAvgExecutedBatchSize());
+            tmp_lateCount = cont_msvcsList[0]->GetDroppedReqCount();
+            lateCount += tmp_lateCount;
+            avgRequestRate = perSecondArrivalRecords.getAvgArrivalRate() - tmp_lateCount;
+            if (isnan(avgRequestRate)) {
+                cont_ppo->rewardCallback(0,
+                                         0,
+                                         cont_msvcsList[1]->msvc_idealBatchSize);
+                avgRequestRate = 0;
+            } else {
+                pre_queueDrops = cont_msvcsList[0]->GetQueueDrops();
+                inf_queueDrops = cont_msvcsList[1]->GetQueueDrops();
+                queueDrops += pre_queueDrops + inf_queueDrops;
+                avgExecutedBatchSize = cont_msvcsList[1]->GetAvgExecutedBatchSize() + 0.1;
+                cont_ppo->rewardCallback(cont_msvcsList[3]->GetMiniBatchCount() / avgRequestRate,
+                                         (pre_queueDrops + inf_queueDrops) / avgRequestRate,
+                                         cont_msvcsList[1]->msvc_idealBatchSize / avgExecutedBatchSize);
+            }
             cont_ppo->setState(cont_msvcsList[1]->msvc_idealBatchSize, avgRequestRate, pre_queueDrops, inf_queueDrops);
             int newBS = cont_ppo->runStep();
             for (auto msvc : cont_msvcsList) {
@@ -796,12 +808,11 @@ void ContainerAgent::collectRuntimeMetrics() {
             Stopwatch pushMetricsStopWatch;
             pushMetricsStopWatch.start();
             lateCount = cont_msvcsList[0]->GetDroppedReqCount();
-            totalRequests = perSecondArrivalRecords.getAvgArrivalRate();
             for (auto msvc: cont_msvcsList) {
                 queueDrops += msvc->GetQueueDrops();
             }
 
-            spdlog::get("container_agent")->info("{0:s} had {1:d} late requests of {2:d} total requests. ({3:d} queue drops)", cont_name, lateCount, totalRequests, queueDrops);
+            spdlog::get("container_agent")->info("{0:s} had {1:d} late requests of {2:f} total requests. ({3:d} queue drops)", cont_name, lateCount, perSecondArrivalRecords.getAvgArrivalRate(), queueDrops);
 
             std::string modelName = cont_msvcsList[2]->getModelName();
             if (cont_RUNMODE == RUNMODE::PROFILING) {
@@ -891,7 +902,7 @@ void ContainerAgent::updateArrivalRecords(RunningArrivalRecord &perSecondArrival
                                cont_inferModel,
                                senderHostAbbr,
                                abbreviate(cont_hostDevice));
-        for (auto i = 0; i < requestRates.size(); i++) {
+        for (unsigned int i = 0; i < requestRates.size(); i++) {
             sql += ", " + std::to_string(requestRates[i]);
             sql += ", " + std::to_string(coeffVars[i]);
         }

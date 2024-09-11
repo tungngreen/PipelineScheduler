@@ -3,6 +3,7 @@
 #include <torch/torch.h>
 #include <random>
 #include <cmath>
+#include <chrono>
 
 #ifndef PIPEPLUSPLUS_BATCH_LEARNING_H
 #define PIPEPLUSPLUS_BATCH_LEARNING_H

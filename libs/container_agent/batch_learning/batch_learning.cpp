@@ -77,7 +77,6 @@ void PPO::update(double beta, double clip_param) {
 }
 
 void PPO::rewardCallback(double throughput, double drops, double oversize_penalty) {
-    if (isnan(throughput)) throughput = 0.0;
     rewards.push_back(torch::tensor({throughput - drops + (1 - oversize_penalty)}, torch::kF64));
 }
 
@@ -86,6 +85,8 @@ void PPO::setState(int curr_batch, int arrival, int pre_queue_size, int inf_queu
 }
 
 int PPO::runStep() {
+    Stopwatch sw;
+    sw.start();
     auto av = ac->forward(states[counter]);
     actions.push_back(std::get<0>(av));
     values.push_back(std::get<1>(av));
@@ -94,7 +95,8 @@ int PPO::runStep() {
 
     unsigned int action = std::max(1, (int)std::floor(actions[counter][0][0].item<double>() * max_batch));
     counter++;
-    out << counter << "," << avg_reward << "," << action << std::endl;
+    sw.stop();
+    out << sw.elapsed_microseconds() << "," << counter << "," << avg_reward << "," << action << std::endl;
 
     if (counter%update_steps == 0) {
         printf("Updating the network.\n");
