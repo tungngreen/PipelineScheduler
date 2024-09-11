@@ -808,7 +808,7 @@ inline bool BaseReqBatcher::isTimeToBatch() {
     timeout = 100000;
     if ((msvc_RUNMODE == RUNMODE::PROFILING || 
          msvc_BATCH_MODE == BATCH_MODE::FIXED) && 
-        msvc_onBufferBatchSize == msvc_idealBatchSize) {
+        msvc_onBufferBatchSize >= msvc_idealBatchSize) {
         return true;
     }
 
