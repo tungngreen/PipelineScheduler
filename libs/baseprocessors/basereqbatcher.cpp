@@ -820,7 +820,7 @@ inline bool BaseReqBatcher::isTimeToBatch() {
     if (msvc_onBufferBatchSize == 0) {
         return false;
     // If the batch is empty, then it doesn't really matter if it's time to batch or not
-    } else if (msvc_onBufferBatchSize == msvc_idealBatchSize) {
+    } else if (msvc_onBufferBatchSize >= msvc_idealBatchSize) {
         spdlog::get("container_agent")->trace("{0:s} got the ideal batch.", msvc_name);
         updateCycleTiming();
         return true;
