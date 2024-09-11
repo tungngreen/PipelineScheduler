@@ -79,7 +79,7 @@ void PPO::update(double beta, double clip_param) {
 void PPO::rewardCallback(double throughput, double drops, double oversize_penalty) {
     if (isnan(throughput))
         throughput = 0.0;
-    rewards.push_back(torch::tensor({throughput - 0.5 * (drops + oversize_penalty)}, torch::kF64));
+    rewards.push_back(torch::tensor({throughput - drops - oversize_penalty}, torch::kF64));
 }
 
 void PPO::setState(int curr_batch, int arrival, int pre_queue_size, int inf_queue_size) {
@@ -93,7 +93,7 @@ int PPO::runStep() {
     log_probabilities.push_back(ac->log_prob(actions[counter]));
     avg_reward += rewards[counter].item<double>()/update_steps;
 
-    int action = std::max(1, (int)std::floor(actions[counter][0][0].item<double>() * max_batch));
+    unsigned int action = std::max(1, (int)std::floor(actions[counter][0][0].item<double>() * max_batch));
     counter++;
     out << counter << "," << avg_reward << "," << action << std::endl;
 
@@ -105,5 +105,5 @@ int PPO::runStep() {
         avg_reward = 0.0;
     }
 
-    return action;
+    return std::min(action, max_batch);
 }
