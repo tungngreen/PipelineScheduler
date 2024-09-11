@@ -77,9 +77,8 @@ void PPO::update(double beta, double clip_param) {
 }
 
 void PPO::rewardCallback(double throughput, double drops, double oversize_penalty) {
-    if (isnan(throughput))
-        throughput = 0.0;
-    rewards.push_back(torch::tensor({throughput - drops - oversize_penalty}, torch::kF64));
+    if (isnan(throughput)) throughput = 0.0;
+    rewards.push_back(torch::tensor({throughput - drops + (1 - oversize_penalty)}, torch::kF64));
 }
 
 void PPO::setState(int curr_batch, int arrival, int pre_queue_size, int inf_queue_size) {

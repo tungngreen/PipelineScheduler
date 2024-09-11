@@ -777,7 +777,7 @@ void ContainerAgent::collectRuntimeMetrics() {
             double pre_queueDrops = cont_msvcsList[0]->GetQueueDrops();
             double inf_queueDrops = cont_msvcsList[1]->GetQueueDrops();
             queueDrops += pre_queueDrops + inf_queueDrops;
-            cont_ppo->rewardCallback(cont_msvcsList[3]->GetMiniBatchCount() / avgRequestRate, (pre_queueDrops + inf_queueDrops) / 200, cont_msvcsList[1]->GetAvgExecutedBatchSize() / cont_msvcsList[1]->msvc_idealBatchSize);
+            cont_ppo->rewardCallback(cont_msvcsList[3]->GetMiniBatchCount() / avgRequestRate, (pre_queueDrops + inf_queueDrops) / 200, cont_msvcsList[1]->msvc_idealBatchSize / cont_msvcsList[1]->GetAvgExecutedBatchSize());
             cont_ppo->setState(cont_msvcsList[1]->msvc_idealBatchSize, avgRequestRate, pre_queueDrops, inf_queueDrops);
             int newBS = cont_ppo->runStep();
             for (auto msvc : cont_msvcsList) {
