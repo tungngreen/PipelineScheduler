@@ -78,8 +78,8 @@ public:
 
     virtual PerSecondArrivalRecord getPerSecondArrivalRecord() override {
         auto reqCount = msvc_totalReqCount.exchange(0);
-        auto mean = msvc_interReqTimeRunningMean.exchange(0);
-        auto var = msvc_interReqTimeRunningVar.exchange(0);
+        MsvcSLOType mean = msvc_interReqTimeRunningMean.exchange(0);
+        MsvcSLOType var = msvc_interReqTimeRunningVar.exchange(0);
         return {reqCount, mean, var};
     }
     

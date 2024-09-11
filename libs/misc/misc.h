@@ -170,6 +170,11 @@ public:
         }
     }
 
+    float getAvgArrivalRate() {
+        float totalRequests = std::accumulate(arrivalRatesInPeriods.begin(), arrivalRatesInPeriods.end(), 0.0f);
+        return totalRequests / arrivalRatesInPeriods.size();
+    }
+
     std::vector<float> getArrivalRatesInPeriods() {
         return arrivalRatesInPeriods;
     }

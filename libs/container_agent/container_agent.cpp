@@ -702,6 +702,7 @@ std::vector<float> getThrptsInPeriods(const std::vector<ClockType> &timestamps, 
 void ContainerAgent::collectRuntimeMetrics() {
     unsigned int lateCount, queueDrops = 0, totalRequests = 0;
     std::string sql;
+    float avgRequestRate;
 
     // If we are not running in profiling mode, container_agent should not collect hardware metrics
     if (cont_RUNMODE != RUNMODE::PROFILING) {
@@ -772,13 +773,12 @@ void ContainerAgent::collectRuntimeMetrics() {
         }
 
         if (cont_RUNMODE == RUNMODE::DEPLOYMENT && timePointCastMillisecond(startTime) >= timePointCastMillisecond(cont_nextRLDecisionTime)) {
-            double tmp_totalRequests = cont_msvcsList[0]->GetTotalReqCount();
-            totalRequests += tmp_totalRequests;
+            avgRequestRate = perSecondArrivalRecords.getAvgArrivalRate();
             double pre_queueDrops = cont_msvcsList[0]->GetQueueDrops();
             double inf_queueDrops = cont_msvcsList[1]->GetQueueDrops();
             queueDrops += pre_queueDrops + inf_queueDrops;
-            cont_ppo->rewardCallback(cont_msvcsList[3]->GetMiniBatchCount() / tmp_totalRequests, (pre_queueDrops + inf_queueDrops) / 200, cont_msvcsList[1]->GetAvgExecutedBatchSize() / cont_msvcsList[1]->msvc_idealBatchSize);
-            cont_ppo->setState(cont_msvcsList[1]->msvc_idealBatchSize, tmp_totalRequests, pre_queueDrops, inf_queueDrops);
+            cont_ppo->rewardCallback(cont_msvcsList[3]->GetMiniBatchCount() / avgRequestRate, (pre_queueDrops + inf_queueDrops) / 200, cont_msvcsList[1]->GetAvgExecutedBatchSize() / cont_msvcsList[1]->msvc_idealBatchSize);
+            cont_ppo->setState(cont_msvcsList[1]->msvc_idealBatchSize, avgRequestRate, pre_queueDrops, inf_queueDrops);
             int newBS = cont_ppo->runStep();
             for (auto msvc : cont_msvcsList) {
                 // The batch size of the data reader (aka FPS) should be updated by `UpdateBatchSizeRequestHandler`
@@ -796,7 +796,7 @@ void ContainerAgent::collectRuntimeMetrics() {
             Stopwatch pushMetricsStopWatch;
             pushMetricsStopWatch.start();
             lateCount = cont_msvcsList[0]->GetDroppedReqCount();
-            totalRequests = cont_msvcsList[0]->GetTotalReqCount();
+            totalRequests = perSecondArrivalRecords.getAvgArrivalRate();
             for (auto msvc: cont_msvcsList) {
                 queueDrops += msvc->GetQueueDrops();
             }
