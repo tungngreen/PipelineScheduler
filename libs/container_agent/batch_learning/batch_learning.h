@@ -50,6 +50,7 @@ struct ActorCriticImpl : public torch::nn::Module{
         val = c_val_->forward(val);
 
         torch::NoGradGuard no_grad;
+        std::cout << "mu: " << mu_ << " std: " << log_std_.exp().expand_as(mu_) << std::endl;
         torch::Tensor action = at::normal(mu_, log_std_.exp().expand_as(mu_));
         return std::make_tuple(action, val);
     }
@@ -85,7 +86,7 @@ public:
     }
     int runStep();
     void rewardCallback(double throughput, double drops, double oversize_penalty);
-    void setState(int curr_batch, int arrival, int pre_queue_size, int inf_queue_size);
+    void setState(double curr_batch, double arrival, double pre_queue_size, double inf_queue_size);
 
     static ActorCritic initActorCritic(int64_t n_in, int64_t n_out, double std = 2e-2, const std::string& model_save = "") {
         ActorCritic ac = ActorCritic(n_in, n_out, std);

@@ -621,7 +621,7 @@ ContainerAgent::ContainerAgent(const json& configs) {
     run = true;
     reportHwMetrics = false;
     profiler = nullptr;
-    cont_ppo = new PPO(cont_name, PPO::initActorCritic(4,1), configs["profiling"]["profile_maxBatch"]);
+    cont_ppo = new PPO(cont_name, PPO::initActorCritic(4,1), configs["profiling"]["profile_maxBatch"], 64, 32, 2);
     std::thread receiver(&ContainerAgent::HandleRecvRpcs, this);
     receiver.detach();
 }
@@ -738,6 +738,7 @@ void ContainerAgent::collectRuntimeMetrics() {
     uint16_t maxNumSeconds = cont_metricsServerConfigs.queryArrivalPeriodMillisec.back() / 1000;
     // Initiate a fixed-size vector to store the arrival records for each second
     RunningArrivalRecord perSecondArrivalRecords(maxNumSeconds);
+    srand(1337);
     while (run) {
         bool hwMetricsScraped = false;
         auto metricsStopwatch = Stopwatch();
@@ -777,8 +778,8 @@ void ContainerAgent::collectRuntimeMetrics() {
             lateCount += tmp_lateCount;
             avgRequestRate = perSecondArrivalRecords.getAvgArrivalRate() - tmp_lateCount;
             if (isnan(avgRequestRate)) {
-                cont_ppo->rewardCallback(0,
-                                         0,
+                cont_ppo->rewardCallback((double)(rand() % 15) / 15.0,
+                                         (double)(rand() % 15) / 15.0,
                                          cont_msvcsList[1]->msvc_idealBatchSize);
                 avgRequestRate = 0;
             } else {
@@ -790,7 +791,8 @@ void ContainerAgent::collectRuntimeMetrics() {
                                          (pre_queueDrops + inf_queueDrops) / avgRequestRate,
                                          cont_msvcsList[1]->msvc_idealBatchSize / avgExecutedBatchSize);
             }
-            cont_ppo->setState(cont_msvcsList[1]->msvc_idealBatchSize, avgRequestRate, pre_queueDrops, inf_queueDrops);
+            // TODO: Replace with variable values for max queuesizes and system fps
+            cont_ppo->setState(cont_msvcsList[1]->msvc_idealBatchSize, (double)(rand() % 15) / 15.0, (double)(rand() % 10) / 100.0, (double)(rand() % 10) / 100.0);
             int newBS = cont_ppo->runStep();
             for (auto msvc : cont_msvcsList) {
                 // The batch size of the data reader (aka FPS) should be updated by `UpdateBatchSizeRequestHandler`

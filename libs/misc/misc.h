@@ -171,6 +171,7 @@ public:
     }
 
     float getAvgArrivalRate() {
+        if (arrivalRatesInPeriods.empty()) return 0;
         float totalRequests = std::accumulate(arrivalRatesInPeriods.begin(), arrivalRatesInPeriods.end(), 0.0f);
         return totalRequests / arrivalRatesInPeriods.size();
     }
