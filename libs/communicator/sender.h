@@ -41,9 +41,6 @@ protected:
         return dist(generator());
     }
 
-    static std::string HandleRpcs(std::unique_ptr<ClientAsyncResponseReader<EmptyMessage>> &rpc, CompletionQueue &cq,
-                                  EmptyMessage &reply, Status &status);
-
     void addToName(const std::string substring, const std::string strToAdd) {
         msvc_name.replace(msvc_name.find(substring), substring.length(), strToAdd + substring);
         msvc_microserviceLogPath.replace(msvc_microserviceLogPath.find(substring), substring.length(), strToAdd + substring);

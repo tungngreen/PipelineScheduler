@@ -310,7 +310,10 @@ void Receiver::HandleRpcs() {
         }
         GPR_ASSERT(cq->Next(&tag, &ok));
         GPR_ASSERT(ok);
-        static_cast<RequestHandler *>(tag)->Proceed();
+        std::thread thread_([tag]() {
+            static_cast<RequestHandler *>(tag)->Proceed();
+        });
+        thread_.detach();
     }
     msvc_logFile.close();
 }

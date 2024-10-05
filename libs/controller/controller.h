@@ -5,11 +5,13 @@
 #include <grpcpp/grpcpp.h>
 #include "../utils/json.h"
 #include <thread>
-#include "controlcommunication.grpc.pb.h"
+#include "controlcommands.grpc.pb.h"
+#include "controlmessages.grpc.pb.h"
 #include <pqxx/pqxx>
 #include "absl/strings/str_format.h"
 #include "absl/flags/parse.h"
 #include "absl/flags/flag.h"
+#include <random>
 
 using grpc::Status;
 using grpc::CompletionQueue;
@@ -18,16 +20,17 @@ using grpc::ClientAsyncResponseReader;
 using grpc::ServerBuilder;
 using grpc::ServerContext;
 using grpc::ServerCompletionQueue;
-using controlcommunication::ControlCommunication;
-using controlcommunication::ConnectionConfigs;
-using controlcommunication::SystemInfo;
-using controlcommunication::LoopRange;
-using controlcommunication::DummyMessage;
-using controlcommunication::ContainerConfig;
-using controlcommunication::TimeKeeping;
-using controlcommunication::ContainerLink;
-using controlcommunication::ContainerInts;
-using controlcommunication::ContainerSignal;
+using controlcommands::ControlCommands;
+using controlcommands::LoopRange;
+using controlcommands::ContainerConfig;
+using controlcommands::TimeKeeping;
+using controlcommands::ContainerLink;
+using controlcommands::ContainerInts;
+using controlcommands::ContainerSignal;
+using controlmessages::ControlMessages;
+using controlmessages::ConnectionConfigs;
+using controlmessages::SystemInfo;
+using controlmessages::DummyMessage;
 using EmptyMessage = google::protobuf::Empty;
 
 ABSL_DECLARE_FLAG(std::string, ctrl_configPath);
@@ -42,20 +45,51 @@ struct PipelineModel;
 
 struct GPUPortion;
 struct GPUHandle;
+struct NodeHandle;
+
+struct GPUPortionList {
+    GPUPortion *head = nullptr;
+    std::vector<GPUPortion *> list;
+};
 
 struct GPULane {
     GPUHandle *gpuHandle;
+    NodeHandle *node;
     std::uint16_t laneNum;
     std::uint64_t dutyCycle = 0;
+
+    GPUPortionList portionList;
+
+    GPULane() = default;
+    GPULane(GPUHandle *gpuHandle, NodeHandle *node, std::uint16_t laneNum);
+
+    bool removePortion(GPUPortion *portion);
 };
 
 struct GPUPortion {
     std::uint64_t start = 0;
-    std::uint64_t end = 9999999999999999;
+    std::uint64_t end = MAX_PORTION_SIZE;
     ContainerHandle *container = nullptr;
     GPULane * lane = nullptr;
+    // The next portion in the device's global sorted list
     GPUPortion* next = nullptr;
+    // The prev portion in the device's global sorted list
     GPUPortion* prev = nullptr;
+    // The next portion in the lane, used to quickly recover the lane's original structure
+    // When a container is removed and its portion is freed
+    GPUPortion* nextInLane = nullptr;
+    // The prev portion in the lane, used to quickly recover the lane's original structure
+    // When a container is removed and its portion is freed
+    GPUPortion* prevInLane = nullptr;
+    std::uint64_t getLength() const { return end - start; }
+
+    GPUPortion() = default;
+    // ~GPUPortion();
+    GPUPortion(GPULane *lane) : lane(lane) {}
+    GPUPortion(std::uint64_t start, std::uint64_t end, ContainerHandle *container, GPULane *lane)
+        : start(start), end(end), container(container), lane(lane) {}
+
+    bool assignContainer(ContainerHandle *container);
 };
 
 struct GPUHandle {
@@ -67,20 +101,17 @@ struct GPUHandle {
     std::uint16_t numLanes;
 
     std::map<std::string, ContainerHandle *> containers = {};
-    std::vector<GPUPortion *> freeGPUPortions;
+    // TODO: HANDLE FREE PORTIONS WITHIN THE GPU
+    // std::vector<GPUPortion *> freeGPUPortions;
+    NodeHandle *node;
 
     GPUHandle() = default;
 
-    GPUHandle(const std::string &type, const std::string &hostName, std::uint16_t number, MemUsageType memLimit, std::uint16_t numLanes)
-        : type(type), hostName(hostName), number(number), memLimit(memLimit), numLanes(numLanes) {}
+    GPUHandle(const std::string &type, const std::string &hostName, std::uint16_t number, MemUsageType memLimit, std::uint16_t numLanes, NodeHandle *node)
+        : type(type), hostName(hostName), number(number), memLimit(memLimit), numLanes(numLanes), node(node) {}
 
     bool addContainer(ContainerHandle *container);
     bool removeContainer(ContainerHandle *container);
-};
-
-struct GPUPortionList {
-    GPUPortion *head = nullptr;
-    std::vector<GPUPortion *> list;
 };
 
 // Structure that whole information about the pipeline used for scheduling
@@ -90,7 +121,7 @@ struct TaskHandle;
 struct NodeHandle {
     std::string name;
     std::string ip;
-    std::shared_ptr<ControlCommunication::Stub> stub;
+    std::shared_ptr<ControlCommands::Stub> stub;
     CompletionQueue *cq;
     SystemDeviceType type;
     int next_free_port;
@@ -117,7 +148,7 @@ struct NodeHandle {
 
     NodeHandle(const std::string& name,
                const std::string& ip,
-               std::shared_ptr<ControlCommunication::Stub> stub,
+               std::shared_ptr<ControlCommands::Stub> stub,
                grpc::CompletionQueue* cq,
                SystemDeviceType type,
                int next_free_port,
@@ -169,7 +200,7 @@ struct ContainerHandle {
     ModelType model;
     bool mergable;
     std::vector<int> dimensions;
-    uint64_t inference_deadline;
+    uint64_t pipelineSLO;
 
     float arrival_rate;
 
@@ -215,8 +246,6 @@ struct ContainerHandle {
     uint64_t endTime;
     //
     uint64_t localDutyCycle = 0;
-    //
-    uint64_t batchingDeadline;
     // 
     ClockType cycleStartTime;
     // GPU Handle
@@ -238,7 +267,7 @@ struct ContainerHandle {
                 ModelType model,
                 bool mergable,
                 const std::vector<int>& dimensions = {},
-                uint64_t inference_deadline = 0,
+                uint64_t pipelineSLO = 0,
                 float arrival_rate = 0.0f,
                 const int batch_size = 0,
                 const int recv_port = 0,
@@ -256,7 +285,7 @@ struct ContainerHandle {
       model(model),
       mergable(mergable),
       dimensions(dimensions),
-      inference_deadline(inference_deadline),
+      pipelineSLO(pipelineSLO),
       arrival_rate(arrival_rate),
       batch_size(batch_size),
       recv_port(recv_port),
@@ -281,7 +310,7 @@ struct ContainerHandle {
         model = other.model;
         mergable = other.mergable;
         dimensions = other.dimensions;
-        inference_deadline = other.inference_deadline;
+        pipelineSLO = other.pipelineSLO;
         arrival_rate = other.arrival_rate;
         batch_size = other.batch_size;
         recv_port = other.recv_port;
@@ -305,7 +334,6 @@ struct ContainerHandle {
         startTime = other.startTime;
         endTime = other.endTime;
         localDutyCycle = other.localDutyCycle;
-        batchingDeadline = other.batchingDeadline;
         gpuHandle = other.gpuHandle;
         executionPortion = other.executionPortion;
         pipelineModel = other.pipelineModel;
@@ -324,7 +352,7 @@ struct ContainerHandle {
             model = other.model;
             mergable = other.mergable;
             dimensions = other.dimensions;
-            inference_deadline = other.inference_deadline;
+            pipelineSLO = other.pipelineSLO;
             arrival_rate = other.arrival_rate;
             batch_size = other.batch_size;
             recv_port = other.recv_port;
@@ -348,7 +376,6 @@ struct ContainerHandle {
             startTime = other.startTime;
             endTime = other.endTime;
             localDutyCycle = other.localDutyCycle;
-            batchingDeadline = other.batchingDeadline;
             gpuHandle = other.gpuHandle;
             executionPortion = other.executionPortion;
             pipelineModel = other.pipelineModel;
@@ -398,8 +425,6 @@ struct PipelineModel {
     uint64_t estimatedPerQueryCost = 0;
     // The estimated latency of the model
     uint64_t estimatedStart2HereCost = 0;
-    // Batching deadline
-    uint64_t batchingDeadline = 9999999999;
     uint64_t startTime = 0;
     uint64_t endTime = 0;
     uint64_t localDutyCycle = 0;
@@ -422,6 +447,11 @@ struct PipelineModel {
     std::string datasourceName;
 
     uint64_t timeBudgetLeft = 9999999999;
+
+    // The time when the last scaling or scheduling operation was performed
+    ClockType lastScaleTime = std::chrono::system_clock::now();
+    //
+    int8_t numInstancesScaledLastTime = 0;
 
     mutable std::mutex pipelineModelMutex;
 
@@ -497,7 +527,6 @@ struct PipelineModel {
         startTime = other.startTime;
         endTime = other.endTime;
         localDutyCycle = other.localDutyCycle;
-        batchingDeadline = other.batchingDeadline;
         deviceTypeName = other.deviceTypeName;
         merged = other.merged;
         toBeRun = other.toBeRun;
@@ -542,7 +571,6 @@ struct PipelineModel {
             startTime = other.startTime;
             endTime = other.endTime;
             localDutyCycle = other.localDutyCycle;
-            batchingDeadline = other.batchingDeadline;
             deviceTypeName = other.deviceTypeName;
             merged = other.merged;
             toBeRun = other.toBeRun;
@@ -858,6 +886,8 @@ public:
 
     void Scheduling();
 
+    void Rescaling();
+
     void Init() {
         for (auto &t: initialTasks) {
             if (!t.added) {
@@ -895,6 +925,10 @@ public:
 
     void ApplyScheduling();
 
+    void ScaleUp(PipelineModel *model, uint8_t numIncReps);
+
+    void ScaleDown(PipelineModel *model, uint8_t numDecReps);
+
     [[nodiscard]] bool isRunning() const { return running; };
 
     void Stop() { running = false; };
@@ -921,7 +955,7 @@ private:
 
     void estimateModelTiming(PipelineModel *currModel, const uint64_t start2HereDutyCycle);
 
-    void getInitialBatchSizes(TaskHandle *task, uint64_t slo);
+    void crossDeviceWorkloadDistributor(TaskHandle *task, uint64_t slo);
     void shiftModelToEdge(PipelineModelListType &pipeline, PipelineModel *currModel, uint64_t slo, const std::string& edgeDevice);
 
     bool mergeArrivalProfiles(ModelArrivalProfile &mergedProfile, const ModelArrivalProfile &toBeMergedProfile, const std::string &device, const std::string &upstreamDevice);
@@ -936,9 +970,9 @@ private:
     TaskHandle* mergePipelines(const std::string& taskName);
     void mergePipelines();
 
-    bool containerTemporalScheduling(ContainerHandle *container);
-    bool modelTemporalScheduling(PipelineModel *pipelineModel, unsigned int replica_id);
-    void temporalScheduling();
+    bool containerColocationTemporalScheduling(ContainerHandle *container);
+    bool modelColocationTemporalScheduling(PipelineModel *pipelineModel, unsigned int replica_id);
+    void colocationTemporalScheduling();
 
     void basicGPUScheduling(std::vector<ContainerHandle *> new_containers);
 
@@ -955,9 +989,23 @@ private:
 
     void queryInDeviceNetworkEntries(NodeHandle *node);
 
+    struct TimingControl {
+        uint64_t schedulingIntervalSec;
+        uint64_t rescalingIntervalSec;
+        uint64_t networkCheckIntervalSec;
+        uint64_t scaleUpIntervalThresholdSec;
+        uint64_t scaleDownIntervalThresholdSec;
+
+        ClockType nextSchedulingTime = std::chrono::system_clock::time_point::min();
+        ClockType currSchedulingTime = std::chrono::system_clock::time_point::min();
+        ClockType nextRescalingTime = std::chrono::system_clock::time_point::max();
+    };
+
+    TimingControl ctrl_controlTimings;
+
     class RequestHandler {
     public:
-        RequestHandler(ControlCommunication::AsyncService *service, ServerCompletionQueue *cq, Controller *c)
+        RequestHandler(ControlMessages::AsyncService *service, ServerCompletionQueue *cq, Controller *c)
                 : service(service), cq(cq), status(CREATE), controller(c) {}
 
         virtual ~RequestHandler() = default;
@@ -968,7 +1016,7 @@ private:
         enum CallStatus {
             CREATE, PROCESS, FINISH
         };
-        ControlCommunication::AsyncService *service;
+        ControlMessages::AsyncService *service;
         ServerCompletionQueue *cq;
         ServerContext ctx;
         CallStatus status;
@@ -977,7 +1025,7 @@ private:
 
     class DeviseAdvertisementHandler : public RequestHandler {
     public:
-        DeviseAdvertisementHandler(ControlCommunication::AsyncService *service, ServerCompletionQueue *cq,
+        DeviseAdvertisementHandler(ControlMessages::AsyncService *service, ServerCompletionQueue *cq,
                                    Controller *c)
                 : RequestHandler(service, cq, c), responder(&ctx) {
             Proceed();
@@ -995,7 +1043,7 @@ private:
 
     class DummyDataRequestHandler : public RequestHandler {
     public:
-        DummyDataRequestHandler(ControlCommunication::AsyncService *service, ServerCompletionQueue *cq,
+        DummyDataRequestHandler(ControlMessages::AsyncService *service, ServerCompletionQueue *cq,
                                    Controller *c)
                 : RequestHandler(service, cq, c), responder(&ctx) {
             Proceed();
@@ -1013,7 +1061,8 @@ private:
 
     void MoveContainer(ContainerHandle *container, NodeHandle *new_device);
 
-    static void AdjustUpstream(int port, ContainerHandle *msvc, NodeHandle *new_device, const std::string &dwnstr);
+    static void AdjustUpstream(int port, ContainerHandle *upstr, NodeHandle *new_device,
+                               const std::string &dwnstr, AdjustUpstreamMode mode = AdjustUpstreamMode::Overwrite);
 
     static void SyncDatasource(ContainerHandle *prev, ContainerHandle *curr);
 
@@ -1059,7 +1108,7 @@ private:
 
     std::map<std::string, NetworkEntryType> network_check_buffer;
 
-    ControlCommunication::AsyncService service;
+    ControlMessages::AsyncService service;
     std::unique_ptr<grpc::Server> server;
     std::unique_ptr<ServerCompletionQueue> cq;
 
@@ -1088,7 +1137,9 @@ private:
     uint16_t ctrl_numGPULanes = NUM_LANES_PER_GPU * NUM_GPUS, ctrl_numGPUPortions;
 
     void insertFreeGPUPortion(GPUPortionList &portionList, GPUPortion *freePortion);
+    bool removeFreeGPUPortion(GPUPortionList &portionList, GPUPortion *freePortion);
     std::pair<GPUPortion *, GPUPortion *> insertUsedGPUPortion(GPUPortionList &portionList, ContainerHandle *container, GPUPortion *toBeDividedFreePortion);
+    bool reclaimGPUPortion(GPUPortion *toBeReclaimedPortion);
     GPUPortion* findFreePortionForInsertion(GPUPortionList &portionList, ContainerHandle *container);
     void estimatePipelineTiming();
     void estimateTimeBudgetLeft(PipelineModel *currModel);

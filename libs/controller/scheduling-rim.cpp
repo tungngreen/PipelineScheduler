@@ -31,7 +31,9 @@ void Controller::queryingProfiles(TaskHandle *task) {
                 task->tk_source,
                 ctrl_containerLib[containerName].taskName,
                 ctrl_containerLib[containerName].modelName,
-                ctrl_systemFPS
+                // TODO: Change back once we have profilings in every fps
+                //ctrl_systemFPS
+                15
             );
         }
         for (const auto deviceName : model->possibleDevices) {
@@ -46,7 +48,9 @@ void Controller::queryingProfiles(TaskHandle *task) {
                 deviceName,
                 deviceTypeName,
                 ctrl_containerLib[containerName].modelName,
-                ctrl_systemFPS
+                // TODO: Change back once we have profilings in every fps
+                //ctrl_systemFPS
+                15
             );
 
 
@@ -164,7 +168,9 @@ void Controller::Scheduling() {
 
         ctrl_scheduledPipelines = ctrl_unscheduledPipelines;
         ApplyScheduling();
-        std::this_thread::sleep_for(std::chrono::seconds(ctrl_schedulingIntervalSec));
+        schedulingSW.stop();
+        ctrl_nextSchedulingTime = std::chrono::system_clock::now() + std::chrono::seconds(ctrl_schedulingIntervalSec);
+        std::this_thread::sleep_for(TimePrecisionType((ctrl_schedulingIntervalSec + 1) * 1000000 - schedulingSW.elapsed_microseconds()));
         // break;
     }
 }
@@ -227,3 +233,6 @@ uint64_t Controller::calculateQueuingLatency(const float &arrival_rate, const fl
     float averageQueueLength = rho * rho / (1 - rho);
     return (uint64_t) (averageQueueLength / arrival_rate * 1000000);
 }
+
+
+void Controller::colocationTemporalScheduling() {} // Dummy Method for Compiler

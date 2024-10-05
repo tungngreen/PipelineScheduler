@@ -1,8 +1,7 @@
 {
     "interface": "eth0",
     "bandwidth_limits": [
-      {"time": 0, "mbps": 100},
-      {"time": 2, "mbps": 50}
+      {"time": 0, "mbps": 25}
     ]
   }
   

@@ -106,7 +106,6 @@ json loadRunArgs(int argc, char **argv) {
     }
 
     for (uint16_t i = 0; i < containerConfigs["cont_pipeline"].size(); i++) {
-        containerConfigs.at("cont_pipeline")[i]["msvc_contSLO"] = containerConfigs["cont_SLO"];
         containerConfigs.at("cont_pipeline")[i]["msvc_contStartTime"] = containerConfigs["cont_startTime"];
         containerConfigs.at("cont_pipeline")[i]["msvc_contEndTime"] = containerConfigs["cont_endTime"];
         containerConfigs.at("cont_pipeline")[i]["msvc_localDutyCycle"] = containerConfigs["cont_localDutyCycle"];
@@ -476,7 +475,9 @@ ContainerAgent::ContainerAgent(const json& configs) {
                              "p95_out_queueing_duration_us BIGINT NOT NULL, "
                              "p95_transfer_duration_us BIGINT NOT NULL, "
                              "p95_queueing_duration_us BIGINT NOT NULL, "
-                             "p95_total_package_size_b INTEGER NOT NULL)";
+                             "p95_total_package_size_b INTEGER NOT NULL, "
+                             "late_requests INTEGER NOT NULL, "
+                             "queue_drops INTEGER NOT NULL)";
 
             pushSQL(*cont_metricsServerConn, sql_statement);
 
@@ -634,7 +635,10 @@ void ContainerAgent::ReportStart() {
     Status status;
     std::unique_ptr<ClientAsyncResponseReader<ProcessData>> rpc(
             stub->AsyncReportMsvcStart(&context, request, sender_cq));
-    finishGrpc(rpc, reply, status, sender_cq);
+    rpc->Finish(&reply, &status, (void *)1);
+    void *got_tag;
+    bool ok = false;
+    if (sender_cq != nullptr) GPR_ASSERT(sender_cq->Next(&got_tag, &ok));
     pid = reply.pid();
     spdlog::get("container_agent")->info("Container Agent started with pid: {0:d}", pid);
     if (cont_taskName != "dsrc" && cont_taskName != "sink" && cont_RUNMODE == RUNMODE::PROFILING) {
@@ -677,6 +681,9 @@ std::vector<float> getThrptsInPeriods(const std::vector<ClockType> &timestamps, 
     uint8_t periodIndex = 0;
     // Iterate through each period
     for (int i = timestamps.size() - 1; i >= 0; i--) {
+        if (timestamps[i] > now) { // TODO: This is a hack to avoid the case where the timestamp is in the future because of lokal Timing Updates of the device. This needs a better solution in the future
+            continue;
+        }
         // Calculate the lower bound time point for the current period
         uint64_t timeDif = std::chrono::duration_cast<TimePrecisionType>(now - timestamps[i]).count();
 
@@ -686,6 +693,7 @@ std::vector<float> getThrptsInPeriods(const std::vector<ClockType> &timestamps, 
         }
         counts[periodIndex]++;
     }
+
     while (periodIndex < periodMillisec.size() - 1) {
         periodIndex++;
         counts[periodIndex] = counts[periodIndex - 1];
@@ -700,8 +708,11 @@ std::vector<float> getThrptsInPeriods(const std::vector<ClockType> &timestamps, 
 
 
 void ContainerAgent::collectRuntimeMetrics() {
-    unsigned int tmp_lateCount, lateCount = 0, queueDrops = 0;
+    unsigned int tmp_lateCount, lateCount = 0, queueDrops = 0, oldReqCount;
     double avgRequestRate, avgExecutedBatchSize, pre_queueDrops = 0, inf_queueDrops = 0;
+    ArrivalRecordType arrivalRecords;
+    ProcessRecordType processRecords;
+    BatchInferRecordType batchInferRecords;
     std::string sql;
 
     // If we are not running in profiling mode, container_agent should not collect hardware metrics
@@ -725,7 +736,7 @@ void ContainerAgent::collectRuntimeMetrics() {
         cont_nextRLDecisionTime = timeNow + std::chrono::milliseconds(cont_rlIntervalMillisec);
     }
 
-    if (cont_msvcsList[0]->msvc_type == MicroserviceType::DataReader) {
+    if (cont_msvcsList[0]->msvc_type == MicroserviceType::DataReader && cont_msvcsList.size() < 3) {
         while (run) {
             if (cont_msvcsList[0]->STOP_THREADS) {
                 run = false;
@@ -762,7 +773,7 @@ void ContainerAgent::collectRuntimeMetrics() {
             }
         }
 
-        if (timePointCastMillisecond(startTime) >= timePointCastMillisecond(cont_metricsServerConfigs.nextArrivalRateScrapeTime)) {;
+        if (timePointCastMillisecond(startTime) >= timePointCastMillisecond(cont_metricsServerConfigs.nextArrivalRateScrapeTime)) {
             perSecondArrivalRecords.addRecord(cont_msvcsList[0]->getPerSecondArrivalRecord());
             // secondIndex = (secondIndex + 1) % maxNumSeconds;
             metricsStopwatch.stop();
@@ -845,7 +856,7 @@ void ContainerAgent::collectRuntimeMetrics() {
             auto pushMetricsLatencyMillisec = (uint64_t) std::ceil(pushMetricsStopWatch.elapsed_microseconds() / 1000.f);
             spdlog::get("container_agent")->trace("{0:s} pushed ALL METRICS to the database. Latency {1:d}ms. Next push in {2:d}ms",
                                                  cont_name,
-                                                 pushMetricsLatencyMillisec, 
+                                                 pushMetricsLatencyMillisec,
                                                  cont_metricsServerConfigs.metricsReportIntervalMillisec - pushMetricsLatencyMillisec);
 
             queueDrops = 0;
@@ -897,7 +908,7 @@ void ContainerAgent::updateArrivalRecords(RunningArrivalRecord &perSecondArrival
         perSecondArrivalRecords.aggregateArrivalRecord(cont_metricsServerConfigs.queryArrivalPeriodMillisec);
         std::vector<float> requestRates = perSecondArrivalRecords.getArrivalRatesInPeriods();
         std::vector<float> coeffVars = perSecondArrivalRecords.getCoeffVarsInPeriods();
-        sql += absl::StrFormat("p95_out_queueing_duration_us, p95_transfer_duration_us, p95_queueing_duration_us, p95_total_package_size_b) "
+        sql += absl::StrFormat("p95_out_queueing_duration_us, p95_transfer_duration_us, p95_queueing_duration_us, p95_total_package_size_b, late_requests, queue_drops) "
                                "VALUES ('%s', '%s', '%s', '%s', '%s'",
                                timePointToEpochString(std::chrono::system_clock::now()),
                                stream,
@@ -905,14 +916,15 @@ void ContainerAgent::updateArrivalRecords(RunningArrivalRecord &perSecondArrival
                                senderHostAbbr,
                                abbreviate(cont_hostDevice));
         for (unsigned int i = 0; i < requestRates.size(); i++) {
-            sql += ", " + std::to_string(requestRates[i]);
-            sql += ", " + std::to_string(coeffVars[i]);
+            sql += ", " + std::to_string(std::isnan(requestRates[i]) ? 0 : requestRates[i]);
+            sql += ", " + std::to_string(std::isnan(coeffVars[i]) ? 0 : coeffVars[i]);
         }
-        sql += absl::StrFormat(", %ld, %ld, %ld, %d);",
+        sql += absl::StrFormat(", %ld, %ld, %ld, %d, %d, %d);",
                                percentilesRecord[95].outQueueingDuration,
                                percentilesRecord[95].transferDuration,
                                percentilesRecord[95].queueingDuration,
-                               percentilesRecord[95].totalPkgSize);
+                               percentilesRecord[95].totalPkgSize,
+                               lateCount,queueDrops);
 
         pushSQL(*cont_metricsServerConn, sql.c_str());
 
@@ -1017,7 +1029,119 @@ void ContainerAgent::updateProcessRecords() {
     spdlog::get("container_agent")->trace("{0:s} pushed BATCH INFER METRICS to the database", cont_name);
 }
 
+/*
+ pushMetricsStopWatch.stop();
+            auto pushMetricsLatencyMillisec = (uint64_t) std::ceil(pushMetricsStopWatch.elapsed_microseconds() / 1000.f);
+            spdlog::get("container_agent")->trace("{0:s} pushed BATCH INFER METRICS to the database", cont_name);
+            spdlog::get("container_agent")->trace("{0:s} pushed ALL METRICS to the database. Latency {1:d}ms. Next push in {2:d}ms",
+                                                 cont_name,
+                                                 pushMetricsLatencyMillisec,
+                                                 cont_metricsServerConfigs.metricsReportIntervalMillisec - pushMetricsLatencyMillisec);
+            cont_metricsServerConfigs.nextMetricsReportTime += std::chrono::milliseconds(
+                    cont_metricsServerConfigs.metricsReportIntervalMillisec - pushMetricsLatencyMillisec);
+        }
+        metricsStopwatch.stop();
+        auto reportLatencyMillisec = (uint64_t) std::ceil(metricsStopwatch.elapsed_microseconds() / 1000.f);
+        ClockType nextTime;
+        nextTime = std::min(cont_metricsServerConfigs.nextMetricsReportTime,
+                            cont_metricsServerConfigs.nextArrivalRateScrapeTime);
+        if (reportHwMetrics && hwMetricsScraped) {
+            nextTime = std::min(nextTime,
+                                cont_metricsServerConfigs.nextHwMetricsScrapeTime);
+        }
+        if (cont_msvcsList[0]->msvc_type == MicroserviceType::DataReader && cont_msvcsList[0]->STOP_THREADS) {
+            run = false;
+        }
+        timeDiff = std::chrono::duration_cast<std::chrono::milliseconds>(nextTime - std::chrono::high_resolution_clock::now()).count();
+        std::chrono::milliseconds sleepPeriod(timeDiff - (reportLatencyMillisec) + 2);
+        spdlog::get("container_agent")->trace("{0:s} Container Agent's Metric Reporter sleeps for {1:d} milliseconds.", cont_name, sleepPeriod.count());
+        std::this_thread::sleep_for(sleepPeriod);
+    }
+    for (auto msvc: cont_msvcsList) {
+        msvc->stopThread();
+    }
+}
+
+void ContainerAgent::updateProfileTable() {
+    std::string profileTableName = abbreviate("prof__" + cont_inferModel + "__" + cont_hostDeviceType);
+    std::string procTableName = profileTableName + "_proc";
+    std::string hwTableName = profileTableName + "_hw";
+
+    BatchInferProfileListType batchInferProfile;
+
+    pqxx::nontransaction curl(*cont_metricsServerConn);
+    std::string query = absl::StrFormat(
+        "SELECT "
+        "   infer_batch_size, "
+        "   percentile_disc(0.95) WITHIN GROUP (ORDER BY infer_duration) AS p95_infer_duration "
+        "FROM %s "
+        "GROUP BY infer_batch_size", procTableName
+    );
+    pqxx::result res = curl.exec(query);
+    for (const auto& row : res) {
+        BatchSizeType batchSize = row[0].as<BatchSizeType>();
+        batchInferProfile[batchSize].p95inferLat = (uint64_t)(row[1].as<uint64_t>() / batchSize);
+    }
+
+    query = absl::StrFormat(
+        "SELECT "
+        "   batch_size, "
+        "   MAX(cpu_usage) AS cpu_usage, "
+        "   MAX(mem_usage) AS mem_usage, "
+        "   MAX(rss_mem_usage) AS rss_mem_usage, "
+        "   MAX(gpu_usage) AS gpu_usage, "
+        "   MAX(gpu_mem_usage) AS gpu_mem_usage "
+        "FROM %s "
+        "GROUP BY batch_size", hwTableName
+    );
+    res =  curl.exec(query);
+    for (const auto& row : res) {
+        BatchSizeType batchSize = row[0].as<BatchSizeType>();
+        batchInferProfile[batchSize].cpuUtil = row[1].as<CpuUtilType>();
+        batchInferProfile[batchSize].memUsage = row[2].as<MemUsageType>();
+        batchInferProfile[batchSize].rssMemUsage = row[3].as<MemUsageType>();
+        batchInferProfile[batchSize].gpuUtil = row[4].as<GpuUtilType>();
+        batchInferProfile[batchSize].gpuMemUsage = row[5].as<GpuMemUsageType>();
+    }
+
+    // Delete old profile entries
+    if (tableExists(*cont_metricsServerConn, cont_metricsServerConfigs.schema, profileTableName)) {
+        query = "DROP TABLE " + profileTableName + ";";
+        pushSQL(*cont_metricsServerConn, query);
+    }
+    query = absl::StrFormat(
+        "CREATE TABLE %s ("
+        "   infer_batch_size INT PRIMARY KEY, "
+        "   p95_infer_duration BIGINT NOT NULL, "
+        "   cpu_usage INT2 NOT NULL, "
+        "   mem_usage INT4 NOT NULL, "
+        "   rss_mem_usage INT4 NOT NULL, "
+        "   gpu_usage INT2 NOT NULL, "
+        "   gpu_mem_usage INT4 NOT NULL"
+        ");", profileTableName
+    );
+    pushSQL(*cont_metricsServerConn, query);
+
+    // Insert new profile entries
+    query = absl::StrFormat(
+        "INSERT INTO %s (infer_batch_size, p95_infer_duration, cpu_usage, mem_usage, rss_mem_usage, gpu_usage, gpu_mem_usage) "
+        "VALUES ", profileTableName
+    );
+    for (const auto& [batchSize, profile] : batchInferProfile) {
+        query += absl::StrFormat(
+            "(%d,%d,%d,%ld,%ld, %d,%ld),",
+            batchSize, profile.p95inferLat, (int) profile.cpuUtil,
+            profile.memUsage, profile.rssMemUsage, profile.gpuUtil, profile.gpuMemUsage
+        );
+    }
+
+    pushSQL(*cont_metricsServerConn, query.substr(0, query.size() - 1) + ";");
+}
+ *
+ */
+
 void ContainerAgent::HandleRecvRpcs() {
+    new KeepAliveRequestHandler(&service, server_cq.get());
     new StopRequestHandler(&service, server_cq.get(), &run);
     new UpdateSenderRequestHandler(&service, server_cq.get(), &cont_msvcsList);
     new UpdateBatchSizeRequestHandler(&service, server_cq.get(), &cont_msvcsList);
@@ -1032,6 +1156,20 @@ void ContainerAgent::HandleRecvRpcs() {
         }
         GPR_ASSERT(ok);
         static_cast<RequestHandler *>(tag)->Proceed();
+    }
+}
+
+void ContainerAgent::KeepAliveRequestHandler::Proceed() {
+    if (status == CREATE) {
+        status = PROCESS;
+        service->RequestKeepAlive(&ctx, &request, &responder, cq, cq, this);
+    } else if (status == PROCESS) {
+        new KeepAliveRequestHandler(service, cq);
+        status = FINISH;
+        responder.Finish(reply, Status::OK, this);
+    } else {
+        GPR_ASSERT(status == FINISH);
+        delete this;
     }
 }
 
@@ -1064,17 +1202,36 @@ void ContainerAgent::UpdateSenderRequestHandler::Proceed() {
         }
         json config;
         std::vector<ThreadSafeFixSizedDoubleQueue *> inqueue;
+        std::string link = absl::StrFormat("%s:%d", request.ip(), request.port());
         for (auto msvc: *msvcs) {
             if (msvc->dnstreamMicroserviceList[0].name == request.name()) {
                 config = msvc->msvc_configs;
-                config["msvc_dnstreamMicroservices"][0]["nb_link"][0] = absl::StrFormat("%s:%d", request.ip(),
-                                                                                        request.port());
+                auto nb_links = config["msvc_dnstreamMicroservices"][0]["nb_link"];
+                if (request.mode() == AdjustUpstreamMode::Overwrite) {
+                    config["msvc_dnstreamMicroservices"][0]["nb_link"][0] = link;
+                    spdlog::get("container_agent")->trace("Overwrote link {0:s} to {1:s}", link, msvc->msvc_name);
+                } else if (request.mode() == AdjustUpstreamMode::Add) {
+                    // ensure the link is not already in the list
+                    if (std::find(nb_links.begin(),nb_links.end(), link) == nb_links.end()) {
+                        config["msvc_dnstreamMicroservices"][0]["nb_link"].push_back(link);
+                        spdlog::get("container_agent")->trace("Added link {0:s} to {1:s}", link, msvc->msvc_name);
+                    }
+                } else if (request.mode() == AdjustUpstreamMode::Remove) {
+                    if (std::find(nb_links.begin(),nb_links.end(), link) != nb_links.end()) {
+                        nb_links.erase(std::remove(nb_links.begin(), nb_links.end(), link), nb_links.end());
+                        config["msvc_dnstreamMicroservices"][0]["nb_link"] = nb_links;
+                        spdlog::get("container_agent")->trace("Removed link {0:s} from {1:s}", link, msvc->msvc_name);
+                    }
+                }
                 inqueue = msvc->GetInQueue();
                 msvc->stopThread();
                 msvcs->erase(std::remove(msvcs->begin(), msvcs->end(), msvc), msvcs->end());
                 break;
             }
         }
+
+        Microservice* new_sender = new RemoteCPUSender(config);
+        new_sender->SetInQueue(inqueue);
 //        if (request.ip() == "localhost") {
 //            // change postprocessing to keep the data on gpu
 //
@@ -1084,16 +1241,11 @@ void ContainerAgent::UpdateSenderRequestHandler::Proceed() {
         // change postprocessing to offload data from gpu
 
         // start new serialized sender
-        msvcs->push_back(new RemoteCPUSender(config));
+        msvcs->push_back(new_sender);
 //        }
-        // align the data queue from postprocessor to new sender
-        msvcs->back()->SetInQueue(inqueue);
         //start the new sender
         msvcs->back()->dispatchThread();
         for (auto msvc: *msvcs) {
-            if (msvc->dnstreamMicroserviceList[0].name == request.name()) {
-                continue;
-            }
             msvc->unpauseThread();
         }
 
@@ -1156,7 +1308,6 @@ void ContainerAgent::UpdateTimeKeepingRequestHandler::Proceed() {
         service->RequestUpdateTimeKeeping(&ctx, &request, &responder, cq, cq, this);
     } else if (status == PROCESS) {
         new UpdateTimeKeepingRequestHandler(service, cq, container_agent);
-        container_agent->cont_msvcsList[1]->msvc_contSLO = request.cont_slo();
         container_agent->cont_msvcsList[1]->msvc_pipelineSLO = request.slo();
         container_agent->cont_msvcsList[1]->msvc_timeBudgetLeft = request.time_budget();
         container_agent->cont_msvcsList[1]->msvc_contStartTime = request.start_time();
@@ -1183,7 +1334,10 @@ void ContainerAgent::transferFrameID(std::string url) {
     request.set_value(cont_msvcsList[0]->msvc_currFrameID);
     std::unique_ptr<ClientAsyncResponseReader<EmptyMessage>> rpc(
             dsrc_stub->AsyncSyncDatasources(&context, request, dsrc_cq));
-    finishGrpc(rpc, reply, status, dsrc_cq);
+    rpc->Finish(&reply, &status, (void *)1);
+    void *got_tag;
+    bool ok = false;
+    if (dsrc_cq != nullptr) GPR_ASSERT(dsrc_cq->Next(&got_tag, &ok));
     run = false;
     for (auto msvc: cont_msvcsList) {
         msvc->stopThread();

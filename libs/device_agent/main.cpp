@@ -11,7 +11,6 @@ int main(int argc, char **argv) {
     while (agent->isRunning()) {
         agent->collectRuntimeMetrics();
     }
-    scriptThread.join();
     delete agent;
     return 0;
 }

@@ -1,0 +1,12 @@
+{
+    "interface": "eth0",
+    "bandwidth_limits": [
+      {"time": 0, "mbps": 50},
+      {"time": 360, "mbps": 25},
+      {"time": 660, "mbps": 10},
+      {"time": 960, "mbps": 35},
+      {"time": 1260, "mbps": 20},
+      {"time": 1560, "mbps": 30}
+    ]
+  }
+  

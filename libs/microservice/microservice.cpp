@@ -16,7 +16,7 @@ void msvcconfigs::from_json(const json &j, msvcconfigs::BaseMicroserviceConfigs 
     j.at("msvc_name").get_to(val.msvc_name);
     j.at("msvc_type").get_to(val.msvc_type);
     j.at("msvc_appLvlConfigs").get_to(val.msvc_appLvlConfigs);
-    j.at("msvc_svcLevelObjLatency").get_to(val.msvc_svcLevelObjLatency);
+    j.at("msvc_pipelineSLO").get_to(val.msvc_pipelineSLO);
     j.at("msvc_idealBatchSize").get_to(val.msvc_idealBatchSize);
     j.at("msvc_maxQueueSize").get_to(val.msvc_maxQueueSize);
     j.at("msvc_dataShape").get_to(val.msvc_dataShape);
@@ -39,7 +39,7 @@ void msvcconfigs::to_json(json &j, const msvcconfigs::NeighborMicroserviceConfig
 void msvcconfigs::to_json(json &j, const msvcconfigs::BaseMicroserviceConfigs &val) {
     j["msvc_name"] = val.msvc_name;
     j["msvc_type"] = val.msvc_type;
-    j["msvc_svcLevelObjLatency"] = val.msvc_svcLevelObjLatency;
+    j["msvc_pipelineSLO"] = val.msvc_pipelineSLO;
     j["msvc_idealBatchSize"] = val.msvc_idealBatchSize;
     j["msvc_dataShape"] = val.msvc_dataShape;
     j["msvc_maxQueueSize"] = val.msvc_maxQueueSize;
@@ -62,9 +62,9 @@ void Microservice::loadConfigs(const json &jsonConfigs, bool isConstructing) {
     msvc_DROP_MODE = jsonConfigs.at("msvc_dropMode");
     msvc_timeBudgetLeft = jsonConfigs.at("msvc_timeBudgetLeft");
     msvc_pipelineSLO = jsonConfigs.at("msvc_pipelineSLO");
-    msvc_contSLO = jsonConfigs.at("msvc_contSLO");
     msvc_contStartTime = jsonConfigs.at("msvc_contStartTime");
     msvc_contEndTime = jsonConfigs.at("msvc_contEndTime");
+    msvc_contSLO = msvc_contEndTime - msvc_contStartTime;
     msvc_localDutyCycle = jsonConfigs.at("msvc_localDutyCycle");
     msvc_cycleStartTime = ClockType(TimePrecisionType(jsonConfigs.at("msvc_cycleStartTime")));
     msvc_idealBatchSize = configs.msvc_idealBatchSize;

@@ -10,6 +10,68 @@ const int DATA_BASE_PORT = 55001;
 const int CONTROLLER_BASE_PORT = 60001;
 const int DEVICE_CONTROL_PORT = 60002;
 
+// ======================================================================================================================================== //
+// ======================================================================================================================================== //
+// ======================================================================================================================================== //
+
+GPULane::GPULane(GPUHandle *gpu, NodeHandle *device, uint16_t laneNum) : laneNum(laneNum), gpuHandle(gpu), node(device) {
+    dutyCycle = 0;
+    portionList.head = nullptr;
+    portionList.list = {};
+}
+
+bool GPUPortion::assignContainer(ContainerHandle *container) {
+    if (this->container != nullptr) {
+        spdlog::get("console")->error("Portion already assigned to container {0:s}", this->container->name);
+        return false;
+    }
+    container->executionPortion = this;
+    this->container = container;
+    start = container->startTime;
+    end = container->endTime;
+
+    spdlog::get("container_agent")->info("Portion assigned to container {0:s}", container->name);
+    return true;
+}
+
+// GPUPortion::~GPUPortion() {
+//     if (container != nullptr) {
+//         throw std::runtime_error("Portion cannot be destroyed while it is still assigned to a container %s" + container->name);
+//     }
+//     lane->removePortion(this);
+//     // TODO: remove from the list of free portions
+//     spdlog::get("container_agent")->info("Portion is destroyed.");
+// }
+
+bool GPULane::removePortion(GPUPortion *portion) {
+    if (portion->lane != this) {
+        throw std::runtime_error("Lane %d cannot remove portion %s, which does not belong to it." + portion->container->name + std::to_string(laneNum));
+        return false;
+    }
+    if (portion->prevInLane != nullptr) {
+        portion->prevInLane->nextInLane = portion->nextInLane;
+        
+    }
+    if (portion->nextInLane != nullptr) {
+        portion->nextInLane->prevInLane = portion->prevInLane;
+    }
+
+    if (portion == portionList.head) {
+        portionList.head = portion->nextInLane;
+    }
+    portion->prevInLane = nullptr;
+    portion->nextInLane = nullptr;
+
+    auto it = std::find(portionList.list.begin(), portionList.list.end(), portion);
+    portionList.list.erase(it);
+    return true;
+}
+
+// ======================================================================================================================================== //
+// ======================================================================================================================================== //
+// ======================================================================================================================================== //
+
+
 // ============================================================ Configurations ============================================================ //
 // ======================================================================================================================================== //
 // ======================================================================================================================================== //
@@ -85,7 +147,10 @@ void Controller::readConfigFile(const std::string &path) {
     ctrl_initialBatchSizes["yolov5"] = j["yolov5_batch_size"];
     ctrl_initialBatchSizes["edge"] = j["edge_batch_size"];
     ctrl_initialBatchSizes["server"] = j["server_batch_size"];
-    ctrl_schedulingIntervalSec = j["scheduling_interval_sec"];
+    ctrl_controlTimings.schedulingIntervalSec = j["scheduling_interval_sec"];
+    ctrl_controlTimings.rescalingIntervalSec = j["rescaling_interval_sec"];
+    ctrl_controlTimings.scaleUpIntervalThresholdSec = j["scale_up_interval_threshold_sec"];
+    ctrl_controlTimings.scaleDownIntervalThresholdSec = j["scale_down_interval_threshold_sec"];
     initialTasks = j["initial_pipelines"];
 }
 
@@ -215,8 +280,7 @@ Controller::Controller(int argc, char **argv) {
 
     // append one device for sink of type server
     NodeHandle *sink_node = new NodeHandle("sink", ctrl_sinkNodeIP,
-                      ControlCommunication::NewStub(
-                              grpc::CreateChannel(
+                                           ControlCommands::NewStub(grpc::CreateChannel(
                                       absl::StrFormat("%s:%d", ctrl_sinkNodeIP, DEVICE_CONTROL_PORT + ctrl_port_offset), grpc::InsecureChannelCredentials())),
                       new CompletionQueue(), SystemDeviceType::Server,
                       DATA_BASE_PORT + ctrl_port_offset, {});
@@ -231,10 +295,17 @@ Controller::~Controller() {
     }
 
     for (auto &device: devices.getList()) {
-        device->cq->Shutdown();
+        EmptyMessage request;
+        EmptyMessage reply;
+        ClientContext context;
+        Status status;
+        std::unique_ptr<ClientAsyncResponseReader<EmptyMessage>> rpc(
+                device->stub->AsyncShutdown(&context, request, device->cq));
+        rpc->Finish(&reply, &status, (void *)1);
         void *got_tag;
         bool ok = false;
-        while (device->cq->Next(&got_tag, &ok));
+        if (device->cq != nullptr) GPR_ASSERT(device->cq->Next(&got_tag, &ok));
+        device->cq->Shutdown();
     }
     server->Shutdown();
     cq->Shutdown();
@@ -296,12 +367,12 @@ void Controller::initialiseGPU(NodeHandle *node, int numGPUs, std::vector<int> m
     if (node->type == SystemDeviceType::Server) {
         for (uint8_t gpuIndex = 0; gpuIndex < numGPUs; gpuIndex++) {
             std::string gpuName = "gpu" + std::to_string(gpuIndex);
-            GPUHandle *gpuNode = new GPUHandle{"3090", "server", gpuIndex, memLimits[gpuIndex] - 2000, NUM_LANES_PER_GPU};
+            GPUHandle *gpuNode = new GPUHandle{"3090", "server", gpuIndex, memLimits[gpuIndex] - 2000, NUM_LANES_PER_GPU, node};
             node->gpuHandles.emplace_back(gpuNode);
         }
     } else {
         //MemUsageType memSize = node->type == SystemDeviceType::AGXXavier ? 30000 : 5000;
-        GPUHandle *gpuNode = new GPUHandle{node->name, node->name, 0, memLimits[0] - 1500, 1};
+        GPUHandle *gpuNode = new GPUHandle{node->name, node->name, 0, memLimits[0] - 1500, 1, node};
         node->gpuHandles.emplace_back(gpuNode);
     }
 }
@@ -472,9 +543,37 @@ void Controller::ApplyScheduling() {
     if (ctrl_systemName != "ppp") {
         basicGPUScheduling(new_containers);
     } else {
-        temporalScheduling();
+        colocationTemporalScheduling();
     }
 
+    // // Testing gpu portion reclaiming
+    // uint8_t numReclaims = 0, numSinks = 0;
+
+    // for (auto container: new_containers) {
+    //     if (container->model == Sink) {
+    //         numSinks++;
+    //     }
+    // }
+
+    // std::mt19937 gen(3000);
+
+    // std::uniform_int_distribution<> dis(1, 100);
+    // while (numReclaims < new_containers.size() - numSinks) {
+        
+    //     for (auto container : new_containers) {
+    //         if (container->model == Sink || container->executionPortion == nullptr) {
+    //             continue;
+    //         }
+    //         int random = dis(gen);
+    //         if (random <= 33) {
+    //             std::cout << "Reclaiming GPU Portion for container: " << container->name << std::endl;
+    //             reclaimGPUPortion(container->executionPortion);
+    //             container->executionPortion = nullptr;
+    //             numReclaims++;
+    //         }
+    //     }
+    // }
+    // // done testing
 
     for (auto pipe: ctrl_scheduledPipelines.getList()) {
         for (auto &model: pipe->tk_pipelineModels) {
@@ -542,7 +641,7 @@ ContainerHandle *Controller::TranslateToContainer(PipelineModel *model, NodeHand
                                           ModelTypeReverseList[modelName],
                                           CheckMergable(modelName),
                                           {0},
-                                          model->batchingDeadline,
+                                          model->task->tk_slo,
                                           0.0,
                                           model->batchSize,
                                           device->next_free_port++,
@@ -563,8 +662,6 @@ ContainerHandle *Controller::TranslateToContainer(PipelineModel *model, NodeHand
 
     // container->timeBudgetLeft for lazy dropping
     container->timeBudgetLeft = container->pipelineModel->timeBudgetLeft;
-    // container->batchingDeadline for lazy dynamic batching
-    container->batchingDeadline = container->pipelineModel->batchingDeadline;
     // container start time
     container->startTime = container->pipelineModel->startTime;
     // container end time
@@ -598,13 +695,11 @@ ContainerHandle *Controller::TranslateToContainer(PipelineModel *model, NodeHand
 void Controller::AdjustTiming(ContainerHandle *container) {
     // container->timeBudgetLeft for lazy dropping
     container->timeBudgetLeft = container->pipelineModel->timeBudgetLeft;
-    // container->batchingDeadline for lazy dynamic batching
-    container->batchingDeadline = container->pipelineModel->batchingDeadline;
     // container->start_time
     container->startTime = container->pipelineModel->startTime;
     // container->end_time
     container->endTime = container->pipelineModel->endTime;
-    // container SLO
+    // duty cycle of the lane where the container is assigned
     container->localDutyCycle = container->pipelineModel->localDutyCycle;
     // `container->task->tk_slo` for the total SLO of the pipeline
     container->cycleStartTime = ctrl_currSchedulingTime;
@@ -614,8 +709,7 @@ void Controller::AdjustTiming(ContainerHandle *container) {
     EmptyMessage reply;
     Status status;
     request.set_name(container->name);
-    request.set_slo(container->inference_deadline);
-    request.set_cont_slo(container->batchingDeadline);
+    request.set_slo(container->pipelineSLO);
     request.set_time_budget(container->timeBudgetLeft);
     request.set_start_time(container->startTime);
     request.set_end_time(container->endTime);
@@ -624,7 +718,10 @@ void Controller::AdjustTiming(ContainerHandle *container) {
     std::unique_ptr<ClientAsyncResponseReader<EmptyMessage>> rpc(
             container->device_agent->stub->AsyncUpdateTimeKeeping(&context, request,
                                                                container->device_agent->cq));
-    finishGrpc(rpc, reply, status, container->device_agent->cq);
+    rpc->Finish(&reply, &status, (void *)1);
+    void *got_tag;
+    bool ok = false;
+    if (container->device_agent->cq != nullptr) GPR_ASSERT(container->device_agent->cq->Next(&got_tag, &ok));
     if (!status.ok()) {
         spdlog::get("container_agent")->error("Failed to update TimeKeeping for container: {0:s}", container->name);
         return;
@@ -666,7 +763,6 @@ void Controller::StartContainer(ContainerHandle *container, bool easy_allocation
             start_config["container"]["cont_dropMode"] = 1;
         }
         start_config["container"]["cont_pipelineSLO"] = container->task->tk_slo;
-        start_config["container"]["cont_SLO"] = container->batchingDeadline;
         start_config["container"]["cont_timeBudgetLeft"] = container->timeBudgetLeft;
         start_config["container"]["cont_startTime"] = container->startTime;
         start_config["container"]["cont_endTime"] = container->endTime;
@@ -694,7 +790,7 @@ void Controller::StartContainer(ContainerHandle *container, bool easy_allocation
         // adjust pipeline configs
         for (auto &j: base_config) {
             j["msvc_idealBatchSize"] = container->batch_size;
-            j["msvc_svcLevelObjLatency"] = container->inference_deadline;
+            j["msvc_pipelineSLO"] = container->pipelineSLO;
         }
         if (model == ModelType::DataSource) {
             base_config[0]["msvc_dataShape"] = {container->dimensions};
@@ -742,9 +838,11 @@ void Controller::StartContainer(ContainerHandle *container, bool easy_allocation
             sender["msvc_name"] = "sender" + std::to_string(i++);
             sender["msvc_dnstreamMicroservices"][0]["nb_name"] = dwnstr->name;
             sender["msvc_dnstreamMicroservices"][0]["nb_link"] = {};
-            for (auto *replica: dwnstr->manifestations) {
-                sender["msvc_dnstreamMicroservices"][0]["nb_link"].push_back(
-                        absl::StrFormat("%s:%d", replica->device_agent->ip, replica->recv_port));
+            for (auto *replica: container->downstreams) {
+                if (replica->pipelineModel->name == dwnstr->name) {
+                    sender["msvc_dnstreamMicroservices"][0]["nb_link"].push_back(
+                            absl::StrFormat("%s:%d", replica->device_agent->ip, replica->recv_port));
+                }
             }
             post_down["nb_name"] = sender["msvc_name"];
             if (container->device_agent != dwnstr->deviceAgent) {
@@ -777,6 +875,9 @@ void Controller::StartContainer(ContainerHandle *container, bool easy_allocation
     if (container->model == DataSource || container->model == Sink) {
         request.set_device(-1);
     } else if (container->device_agent->name == "server") {
+        if (container->gpuHandle == nullptr) {
+            container->gpuHandle = container->device_agent->gpuHandles[3];
+        }
         request.set_device(container->gpuHandle->number);
     } else {
         request.set_device(0);
@@ -787,7 +888,10 @@ void Controller::StartContainer(ContainerHandle *container, bool easy_allocation
     std::unique_ptr<ClientAsyncResponseReader<EmptyMessage>> rpc(
             container->device_agent->stub->AsyncStartContainer(&context, request,
                                                                       container->device_agent->cq));
-    finishGrpc(rpc, reply, status, container->device_agent->cq);
+    rpc->Finish(&reply, &status, (void *)1);
+    void *got_tag;
+    bool ok = false;
+    if (container->device_agent->cq != nullptr) GPR_ASSERT(container->device_agent->cq->Next(&got_tag, &ok));
     if (!status.ok()) {
         spdlog::get("container_agent")->error("Failed to start container: {0:s}", container->name);
         return;
@@ -830,7 +934,7 @@ void Controller::MoveContainer(ContainerHandle *container, NodeHandle *device) {
             SyncDatasource(upstr, container);
             StopContainer(upstr, old_device);
         } else {
-            AdjustUpstream(container->recv_port, upstr, device, container->name);
+            AdjustUpstream(container->recv_port, upstr, device, container->pipelineModel->name);
         }
     }
     StopContainer(container, old_device);
@@ -839,18 +943,23 @@ void Controller::MoveContainer(ContainerHandle *container, NodeHandle *device) {
 }
 
 void Controller::AdjustUpstream(int port, ContainerHandle *upstr, NodeHandle *new_device,
-                                const std::string &dwnstr) {
+                                const std::string &dwnstr, AdjustUpstreamMode mode) {
     ContainerLink request;
     ClientContext context;
     EmptyMessage reply;
     Status status;
+    request.set_mode(mode);
     request.set_name(upstr->name);
     request.set_downstream_name(dwnstr);
     request.set_ip(new_device->ip);
     request.set_port(port);
+
     std::unique_ptr<ClientAsyncResponseReader<EmptyMessage>> rpc(
             upstr->device_agent->stub->AsyncUpdateDownstream(&context, request, upstr->device_agent->cq));
-    finishGrpc(rpc, reply, status, upstr->device_agent->cq);
+    rpc->Finish(&reply, &status, (void *)1);
+    void *got_tag;
+    bool ok = false;
+    if (upstr->device_agent->cq != nullptr) GPR_ASSERT(upstr->device_agent->cq->Next(&got_tag, &ok));
     spdlog::get("container_agent")->info("Upstream of {0:s} adjusted to container {1:s}", dwnstr, upstr->name);
 }
 
@@ -863,7 +972,10 @@ void Controller::SyncDatasource(ContainerHandle *prev, ContainerHandle *curr) {
     request.set_downstream_name(curr->name);
     std::unique_ptr<ClientAsyncResponseReader<EmptyMessage>> rpc(
             curr->device_agent->stub->AsyncSyncDatasource(&context, request, curr->device_agent->cq));
-    finishGrpc(rpc, reply, status, curr->device_agent->cq);
+    rpc->Finish(&reply, &status, (void *)1);
+    void *got_tag;
+    bool ok = false;
+    if (curr->device_agent->cq != nullptr) GPR_ASSERT(curr->device_agent->cq->Next(&got_tag, &ok));
 }
 
 void Controller::AdjustBatchSize(ContainerHandle *msvc, int new_bs) {
@@ -876,7 +988,10 @@ void Controller::AdjustBatchSize(ContainerHandle *msvc, int new_bs) {
     request.add_value(new_bs);
     std::unique_ptr<ClientAsyncResponseReader<EmptyMessage>> rpc(
             msvc->device_agent->stub->AsyncUpdateBatchSize(&context, request, msvc->device_agent->cq));
-    finishGrpc(rpc, reply, status, msvc->device_agent->cq);
+    rpc->Finish(&reply, &status, (void *)1);
+    void *got_tag;
+    bool ok = false;
+    if (msvc->device_agent->cq != nullptr) GPR_ASSERT(msvc->device_agent->cq->Next(&got_tag, &ok));
     spdlog::get("container_agent")->info("Batch size of {0:s} adjusted to {1:d}", msvc->name, new_bs);
 }
 
@@ -897,7 +1012,10 @@ void Controller::AdjustResolution(ContainerHandle *msvc, std::vector<int> new_re
     request.add_value(new_resolution[2]);
     std::unique_ptr<ClientAsyncResponseReader<EmptyMessage>> rpc(
             msvc->device_agent->stub->AsyncUpdateResolution(&context, request, msvc->device_agent->cq));
-    finishGrpc(rpc, reply, status, msvc->device_agent->cq);
+    rpc->Finish(&reply, &status, (void *)1);
+    void *got_tag;
+    bool ok = false;
+    if (msvc->device_agent->cq != nullptr) GPR_ASSERT(msvc->device_agent->cq->Next(&got_tag, &ok));
 }
 
 void Controller::StopContainer(ContainerHandle *container, NodeHandle *device, bool forced) {
@@ -909,8 +1027,11 @@ void Controller::StopContainer(ContainerHandle *container, NodeHandle *device, b
     request.set_name(container->name);
     request.set_forced(forced);
     std::unique_ptr<ClientAsyncResponseReader<EmptyMessage>> rpc(
-            device->stub->AsyncStopContainer(&context, request, containers.getContainer(container->name)->device_agent->cq));
-    finishGrpc(rpc, reply, status, device->cq);
+            device->stub->AsyncStopContainer(&context, request, container->device_agent->cq));
+    rpc->Finish(&reply, &status, (void *)1);
+    void *got_tag;
+    bool ok = false;
+    if (container->device_agent->cq != nullptr) GPR_ASSERT(container->device_agent->cq->Next(&got_tag, &ok));
     if (container->gpuHandle != nullptr)
         container->gpuHandle->removeContainer(container);
     if (!forced) { //not forced means the container is stopped during scheduling and should be removed
@@ -1030,7 +1151,7 @@ void Controller::DeviseAdvertisementHandler::Proceed() {
         std::string deviceName = request.device_name();
         NodeHandle *node = new NodeHandle{deviceName,
                                      request.ip_address(),
-                                     ControlCommunication::NewStub(
+                                          ControlCommands::NewStub(
                                              grpc::CreateChannel(target_str, grpc::InsecureChannelCredentials())),
                                      new CompletionQueue(),
                                      static_cast<SystemDeviceType>(request.device_type()),
@@ -1237,7 +1358,10 @@ NetworkEntryType Controller::initNetworkCheck(NodeHandle &node, uint32_t minPack
     try {
         std::unique_ptr<ClientAsyncResponseReader<EmptyMessage>> rpc(
                 node.stub->AsyncExecuteNetworkTest(&context, request, node.cq));
-        finishGrpc(rpc, reply, status, node.cq);
+        rpc->Finish(&reply, &status, (void *)1);
+        void *got_tag;
+        bool ok = false;
+        if (node.cq != nullptr) GPR_ASSERT(node.cq->Next(&got_tag, &ok));
         spdlog::get("container_agent")->info("Successfully started network check for device {}.", node.name);
     } catch (const std::exception &e) {
         spdlog::get("container_agent")->error("Error while starting network check for device {}.", node.name);

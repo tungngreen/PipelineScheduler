@@ -37,7 +37,7 @@
                         640
                     ]
                 ],
-                "msvc_svcLevelObjLatency": 999999,
+                "msvc_pipelineSLO": 999999,
                 "msvc_type": 500,
                 "msvc_upstreamMicroservices": [
                     {
@@ -88,7 +88,7 @@
                         0
                     ]
                 ],
-                "msvc_svcLevelObjLatency": 999999,
+                "msvc_pipelineSLO": 999999,
                 "msvc_type": 4000,
                 "msvc_upstreamMicroservices": [
                     {
@@ -117,7 +117,6 @@
         "cont_batchMode": 0,
         "cont_dropMode": 0,
         "cont_pipelineSLO": 100000,
-        "cont_SLO": 30000,
         "cont_timeBudgetLeft": 70000,
         "cont_startTime": 0,
         "cont_endTime": 30000,

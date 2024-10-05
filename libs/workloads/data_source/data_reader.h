@@ -22,6 +22,8 @@ public:
         handler.detach();
     }
 
+    PerSecondArrivalRecord getPerSecondArrivalRecord() override;
+
     virtual void loadConfigs(const json &jsonConfigs, bool isConstructing) override;
 
 private:
@@ -29,6 +31,7 @@ private:
 
     std::string link;
     cv::VideoCapture source;
+    int target_fps;
     int wait_time_ms;
     float skipRatio;
 };

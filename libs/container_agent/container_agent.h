@@ -161,6 +161,19 @@ protected:
         grpc::ServerAsyncResponseWriter<EmptyMessage> responder;
     };
 
+    class KeepAliveRequestHandler : public RequestHandler {
+    public:
+        KeepAliveRequestHandler(InDeviceCommunication::AsyncService *service, ServerCompletionQueue *cq)
+                : RequestHandler(service, cq) {
+            Proceed();
+        }
+
+        void Proceed() final;
+
+    private:
+        EmptyMessage request;
+    };
+
     class StopRequestHandler : public RequestHandler {
     public:
         StopRequestHandler(InDeviceCommunication::AsyncService *service, ServerCompletionQueue *cq,

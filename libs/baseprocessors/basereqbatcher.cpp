@@ -218,8 +218,13 @@ BaseReqBatcherConfigs BaseReqBatcher::loadConfigsFromJson(const json &jsonConfig
 
 void BaseReqBatcher::updateCycleTiming() {
     // The number of cycles since the beginning of  this scheduling round, which is chosen to be the start of the first cycle
-    auto numCyclesSince = std::chrono::duration_cast<TimePrecisionType>(
+    uint64_t numCyclesSince;
+    if (msvc_localDutyCycle == 0) {
+        numCyclesSince = 0;
+    } else {
+        numCyclesSince = std::chrono::duration_cast<TimePrecisionType>(
             std::chrono::high_resolution_clock::now() - msvc_cycleStartTime).count() / msvc_localDutyCycle;
+    }
 
     // The time when the last cycle started
     ClockType lastCycleStartTime = msvc_cycleStartTime + TimePrecisionType((int) numCyclesSince * msvc_localDutyCycle);

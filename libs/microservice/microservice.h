@@ -388,7 +388,7 @@ namespace msvcconfigs {
         // Application level configs
         std::string msvc_appLvlConfigs = "";
         // The acceptable latency for each individual request processed by this microservice, in `microsecond`
-        MsvcSLOType msvc_svcLevelObjLatency;
+        MsvcSLOType msvc_pipelineSLO;
         // 
         QueueLengthType msvc_maxQueueSize;
         // Ideal batch size for this microservice, runtime batch size could be smaller though
@@ -458,6 +458,9 @@ public:
         std::string reqOriginStream,
         std::string originDevice
     ) {
+        for (size_t i = 0; i < timestamps.size() - 1; ++i) {
+            if (timestamps[i] > timestamps[i + 1]) return;
+        }
         std::unique_lock<std::mutex> lock(mutex);
         ArrivalRecord * record = &records[{reqOriginStream, originDevice}];
         auto transferDuration = std::chrono::duration_cast<TimePrecisionType>(timestamps[3] - timestamps[2]).count();
@@ -471,8 +474,18 @@ public:
         }
         record->transferDuration.emplace_back(transferDuration);
         lastTransferDuration = transferDuration;
-        record->outQueueingDuration.emplace_back(std::chrono::duration_cast<TimePrecisionType>(timestamps[2] - timestamps[1]).count());
-        record->queueingDuration.emplace_back(std::chrono::duration_cast<TimePrecisionType>(timestamps[4] - timestamps[3]).count());
+        if (timestamps[2] <= timestamps[1]) {
+            record->outQueueingDuration.emplace_back(0);
+        } else {
+            record->outQueueingDuration.emplace_back(
+                    std::chrono::duration_cast<TimePrecisionType>(timestamps[2] - timestamps[1]).count());
+        }
+        if (timestamps[4] <= timestamps[3]) {
+            record->queueingDuration.emplace_back(0);
+        } else {
+            record->queueingDuration.emplace_back(
+                    std::chrono::duration_cast<TimePrecisionType>(timestamps[4] - timestamps[3]).count());
+        }
         record->arrivalTime.emplace_back(timestamps[2]);
         record->totalPkgSize.emplace_back(totalPkgSize); //Byte
         record->reqSize.emplace_back(requestSize); //Byte
@@ -530,6 +543,9 @@ public:
         uint32_t reqNumber,
         std::string reqOrigin = "stream"
     ) {
+        for (size_t i = 0; i < timestamps.size() - 1; ++i) {
+            if (timestamps[i] >= timestamps[i + 1]) return;
+        }
         std::unique_lock<std::mutex> lock(mutex);
         processRecords[{reqOrigin, inferBatchSize}].prepDuration.emplace_back(std::chrono::duration_cast<TimePrecisionType>(timestamps[6] - timestamps[5]).count());
         processRecords[{reqOrigin, inferBatchSize}].batchDuration.emplace_back(std::chrono::duration_cast<TimePrecisionType>(timestamps[7] - timestamps[6]).count());
@@ -984,7 +1000,8 @@ protected:
     }
 
     inline std::string getSenderHost(const std::string &path) {
-        std::string temp = splitString(path, "[").back();
+        auto parts = splitString(path, "[");
+        std::string temp = (parts.size() > 1)? *(++parts.rbegin()) : parts.front();
         temp = splitString(temp, "]").front();
         temp = splitString(temp, "|")[0];
         return temp;

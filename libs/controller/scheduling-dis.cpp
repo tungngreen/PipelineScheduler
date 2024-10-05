@@ -39,7 +39,9 @@ void Controller::queryingProfiles(TaskHandle *task)
                 task->tk_source,
                 ctrl_containerLib[containerName].taskName,
                 ctrl_containerLib[containerName].modelName,
-                ctrl_systemFPS);
+                // TODO: Change back once we have profilings in every fps
+                //ctrl_systemFPS
+                15);
         }
 
         for (const auto &pair : possibleDevicePairList)
@@ -63,7 +65,9 @@ void Controller::queryingProfiles(TaskHandle *task)
                 pair.second,
                 receiverDeviceType,
                 entry,
-                ctrl_systemFPS);
+                // TODO: Change back once we have profilings in every fps
+                //ctrl_systemFPS
+                15);
             model->arrivalProfiles.d2dNetworkProfile[std::make_pair(pair.first, pair.second)] = test;
         }
 
@@ -80,7 +84,9 @@ void Controller::queryingProfiles(TaskHandle *task)
                 deviceName,
                 deviceTypeName,
                 ctrl_containerLib[containerName].modelName,
-                ctrl_systemFPS);
+                // TODO: Change back once we have profilings in every fps
+                //ctrl_systemFPS
+                15);
             model->processProfiles[deviceTypeName] = profile;
         }
     }
@@ -530,3 +536,5 @@ void Dis::DecideAndMoveContainer(Devices &nodes, Tasks &pipelines, Partitioner *
         }
     }
 }
+
+void Controller::colocationTemporalScheduling() {} // Dummy Method for Compiler

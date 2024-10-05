@@ -79,8 +79,6 @@ target_include_directories(device_agent
 
 target_link_libraries(device_agent
         PUBLIC
-        control_grpc_proto
-        device_grpc_proto
         absl::flags
         absl::flags_parse
         ${CMAKE_THREAD_LIBS_INIT}

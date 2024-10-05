@@ -30,6 +30,14 @@ DataReader::DataReader(const json &jsonConfigs) : Microservice(jsonConfigs) {
     spdlog::get("container_agent")->info("{0:s} is created.", __func__);
 };
 
+PerSecondArrivalRecord DataReader::getPerSecondArrivalRecord() {
+    PerSecondArrivalRecord perSecondArrivalRecord;
+    perSecondArrivalRecord.numRequests = target_fps;
+    perSecondArrivalRecord.interArrivalMean = 1.0 / target_fps;
+    perSecondArrivalRecord.interArrivalVariance = 0.0;
+    return perSecondArrivalRecord;
+}
+
 void DataReader::loadConfigs(const json &jsonConfigs, bool isConstructing) {
     if (!isConstructing) {
         Microservice::loadConfigs(jsonConfigs);
@@ -38,8 +46,9 @@ void DataReader::loadConfigs(const json &jsonConfigs, bool isConstructing) {
     link = jsonConfigs.at("msvc_upstreamMicroservices")[0].at("nb_link")[0];
     source = cv::VideoCapture(link);
     msvc_currFrameID = 0;
-    wait_time_ms = 1000 / jsonConfigs.at("msvc_idealBatchSize").get<int>();
-    skipRatio = 30.f / jsonConfigs.at("msvc_idealBatchSize").get<int>();
+    target_fps = jsonConfigs.at("msvc_idealBatchSize").get<int>();
+    wait_time_ms = 1000 / target_fps;
+    skipRatio = 30.f / target_fps;
     link = link.substr(link.find_last_of('/') + 1);
     msvc_OutQueue[0]->setActiveQueueIndex(msvc_activeOutQueueIndex[0]);
 };

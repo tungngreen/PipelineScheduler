@@ -3,12 +3,15 @@
     "system_fps": 15,
     "systemName": "ppp",
     "runtime": 30,
-    "port_offset": 4000,
+    "port_offset": 0,
     "sink_ip": "143.248.55.76",
     "yolov5_batch_size": 2,
     "edge_batch_size": 4,
     "server_batch_size": 8,
-    "scheduling_interval_sec": 10,
+    "scheduling_interval_sec": 360,
+    "rescaling_interval_sec": 30,
+    "scale_up_interval_threshold_sec": 150,
+    "scale_down_interval_threshold_sec": 240,
     "initial_pipelines": [
         {
             "pipeline_name": "people1",

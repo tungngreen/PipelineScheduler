@@ -8,6 +8,7 @@ package indevicecommunication;
 
 service InDeviceCommunication {
   rpc ReportMsvcStart(ProcessData) returns (ProcessData) {}
+  rpc KeepAlive(google.protobuf.Empty) returns (google.protobuf.Empty) {}
   rpc UpdateSender(Connection) returns (google.protobuf.Empty) {}
   rpc UpdateBatchSize(Int32) returns (google.protobuf.Empty) {}
   rpc UpdateResolution(Dimensions) returns (google.protobuf.Empty) {}
@@ -22,14 +23,14 @@ message Signal {
 }
 
 message Connection {
-  string name = 1;
-  string ip = 2;
-  int32 port = 3;
+  int32 mode = 1;
+  string name = 2;
+  string ip = 3;
+  int32 port = 4;
 }
 
 message TimeKeeping {
   int32 slo = 1;
-  int32 cont_slo = 2;
   uint64 time_budget = 3;
   uint64 start_time = 4;
   uint64 end_time = 5;
