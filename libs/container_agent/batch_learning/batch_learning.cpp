@@ -9,7 +9,7 @@ PPO::PPO(std::string& cont_name, ActorCritic ac, uint max_batch, uint update_ste
 
     std::random_device rd;
     re = std::mt19937(rd());
-    opt = new torch::optim::Adam(ac->parameters(), 1e-3);
+    opt = new torch::optim::Adam(ac->parameters());
     avg_reward = 0.0;
 }
 
@@ -27,6 +27,7 @@ VT PPO::returns() {
 
 void PPO::update(double beta, double clip_param) {
     spdlog::info("Updating reinforcement learning batch size model!");
+    ac->train();
     Stopwatch sw;
     sw.start();
     values.push_back(std::get<1>(ac->forward(states[counter-1])));

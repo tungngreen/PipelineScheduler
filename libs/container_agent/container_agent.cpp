@@ -749,7 +749,6 @@ void ContainerAgent::collectRuntimeMetrics() {
     uint16_t maxNumSeconds = cont_metricsServerConfigs.queryArrivalPeriodMillisec.back() / 1000;
     // Initiate a fixed-size vector to store the arrival records for each second
     RunningArrivalRecord perSecondArrivalRecords(maxNumSeconds);
-    srand(1337);
     while (run) {
         bool hwMetricsScraped = false;
         auto metricsStopwatch = Stopwatch();
@@ -789,8 +788,8 @@ void ContainerAgent::collectRuntimeMetrics() {
             lateCount += tmp_lateCount;
             avgRequestRate = perSecondArrivalRecords.getAvgArrivalRate() - tmp_lateCount;
             if (isnan(avgRequestRate)) {
-                cont_ppo->rewardCallback((double)(rand() % 15) / 15.0,
-                                         (double)(rand() % 15) / 15.0,
+                cont_ppo->rewardCallback(0,
+                                         0,
                                          cont_msvcsList[1]->msvc_idealBatchSize);
                 avgRequestRate = 0;
             } else {
@@ -802,8 +801,7 @@ void ContainerAgent::collectRuntimeMetrics() {
                                          (pre_queueDrops + inf_queueDrops) / avgRequestRate,
                                          cont_msvcsList[1]->msvc_idealBatchSize / avgExecutedBatchSize);
             }
-            // TODO: Replace with variable values for max queuesizes and system fps
-            cont_ppo->setState(cont_msvcsList[1]->msvc_idealBatchSize, (double)(rand() % 15) / 15.0, (double)(rand() % 10) / 100.0, (double)(rand() % 10) / 100.0);
+            cont_ppo->setState(cont_msvcsList[1]->msvc_idealBatchSize, avgRequestRate, pre_queueDrops, inf_queueDrops);
             int newBS = cont_ppo->runStep();
             for (auto msvc : cont_msvcsList) {
                 // The batch size of the data reader (aka FPS) should be updated by `UpdateBatchSizeRequestHandler`
@@ -820,7 +818,7 @@ void ContainerAgent::collectRuntimeMetrics() {
                 timePointCastMillisecond(cont_metricsServerConfigs.nextMetricsReportTime)) {
             Stopwatch pushMetricsStopWatch;
             pushMetricsStopWatch.start();
-            lateCount = cont_msvcsList[0]->GetDroppedReqCount();
+            lateCount += cont_msvcsList[0]->GetDroppedReqCount();
             for (auto msvc: cont_msvcsList) {
                 queueDrops += msvc->GetQueueDrops();
             }
@@ -850,7 +848,7 @@ void ContainerAgent::collectRuntimeMetrics() {
                 }
             }
 
-            updateArrivalRecords(perSecondArrivalRecords);
+            updateArrivalRecords(perSecondArrivalRecords, lateCount, queueDrops);
             updateProcessRecords();
             pushMetricsStopWatch.stop();
             auto pushMetricsLatencyMillisec = (uint64_t) std::ceil(pushMetricsStopWatch.elapsed_microseconds() / 1000.f);
@@ -885,7 +883,7 @@ void ContainerAgent::collectRuntimeMetrics() {
     }
 }
 
-void ContainerAgent::updateArrivalRecords(RunningArrivalRecord &perSecondArrivalRecords) {
+void ContainerAgent::updateArrivalRecords(RunningArrivalRecord &perSecondArrivalRecords, unsigned int lateCount, unsigned int queueDrops) {
     std::string sql;
     ArrivalRecordType arrivalRecords = cont_msvcsList[3]->getArrivalRecords();
     // Keys value here is std::pair<std::string, std::string> for stream and sender_host

@@ -135,7 +135,7 @@ protected:
 
     void collectRuntimeMetrics();
 
-    void updateArrivalRecords(RunningArrivalRecord &perSecondArrivalRecords);
+    void updateArrivalRecords(RunningArrivalRecord &perSecondArrivalRecords, unsigned int lateCount, unsigned int queueDrops);
 
     void updateProcessRecords();
 
