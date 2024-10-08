@@ -22,7 +22,7 @@ struct ActorCriticImpl : public torch::nn::Module{
     ActorCriticImpl(int64_t n_in, int64_t n_out, double std = 2e-2) :
             a_lin1_(torch::nn::Linear(n_in, 16)), a_lin2_(torch::nn::Linear(16, n_out)),
 //            a_lin3_(torch::nn::Linear(16, n_out)),
-            mu_(torch::full(n_out, 0.)), log_std_(torch::full(n_out, std)),
+            mu_(torch::full(n_out, 0.)),
             c_lin1_(torch::nn::Linear(n_in, 16)), c_lin2_(torch::nn::Linear(16, n_out)),
 //            c_lin3_(torch::nn::Linear(16, n_out)),
             c_val_(torch::nn::Linear(n_out, 1)) {
@@ -30,7 +30,7 @@ struct ActorCriticImpl : public torch::nn::Module{
         register_module("a_lin1", a_lin1_);
         register_module("a_lin2", a_lin2_);
 //        register_module("a_lin3", a_lin3_);
-        register_parameter("log_std", log_std_);
+        log_std_ = register_parameter("log_std", torch::full({n_out}, std::log(1e-2)));  // Smaller initial log_std
         register_module("c_lin1", c_lin1_);
         register_module("c_lin2", c_lin2_);
 //        register_module("c_lin3", c_lin3_);
@@ -49,9 +49,13 @@ struct ActorCriticImpl : public torch::nn::Module{
 //        val = torch::tanh(c_lin3_->forward(val));
         val = c_val_->forward(val);
 
+        // Apply clamping to prevent extreme values.
+        mu_ = torch::clamp(mu_, -1.0, 1.0);  // Clamp actor output between -1 and 1
+        val = torch::clamp(val, -10.0, 10.0);  // Clamp critic value to [-10, 10]
+
         torch::NoGradGuard no_grad;
         std::cout << "mu: " << mu_ << " std: " << log_std_.exp().expand_as(mu_) << std::endl;
-        torch::Tensor action = at::normal(mu_, log_std_.exp().expand_as(mu_));
+        torch::Tensor action = at::normal(mu_, torch::clamp(log_std_.exp().expand_as(mu_), 1e-3, 1.0));
         return std::make_tuple(action, val);
     }
 
@@ -67,8 +71,8 @@ struct ActorCriticImpl : public torch::nn::Module{
     }
 
     torch::Tensor log_prob(torch::Tensor action) { // Logarithmic probability of taken action, given the current distribution.
-        torch::Tensor var = (log_std_+log_std_).exp();
-        return -((action - mu_)*(action - mu_))/(2*var) - log_std_ - log(sqrt(2*M_PI));
+        torch::Tensor var = (log_std_ * 2).exp();
+        return -((action - mu_).pow(2) / (2 * var)) - log_std_ - log(sqrt(2 * M_PI));
     }
 };
 TORCH_MODULE(ActorCritic);

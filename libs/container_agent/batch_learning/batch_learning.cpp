@@ -9,7 +9,7 @@ PPO::PPO(std::string& cont_name, ActorCritic ac, uint max_batch, uint update_ste
 
     std::random_device rd;
     re = std::mt19937(rd());
-    opt = new torch::optim::Adam(ac->parameters());
+    opt = new torch::optim::Adam(ac->parameters(), torch::optim::AdamOptions(1e-4));  // Reduce the learning rate
     avg_reward = 0.0;
 }
 
@@ -92,6 +92,7 @@ void PPO::rewardCallback(double throughput, double drops, double oversize_penalt
 }
 
 void PPO::setState(double curr_batch, double arrival, double pre_queue_size, double inf_queue_size) {
+    spdlog::info("Setting state: {}, {}, {}, {}", curr_batch, arrival, pre_queue_size, inf_queue_size);
     states.push_back(torch::tensor({{curr_batch / max_batch, arrival, pre_queue_size, inf_queue_size}}, torch::kF64));
 }
 
