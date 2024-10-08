@@ -8,105 +8,51 @@
 #ifndef PIPEPLUSPLUS_BATCH_LEARNING_H
 #define PIPEPLUSPLUS_BATCH_LEARNING_H
 
-// Vector of tensors.
-using VT = std::vector<torch::Tensor>;
-
 // Network model for Proximal Policy Optimization
-struct ActorCriticImpl : public torch::nn::Module{
-    // Actor.
-    torch::nn::Linear a_lin1_, a_lin2_;
-    torch::Tensor mu_, log_std_;
-    // Critic.
-    torch::nn::Linear c_lin1_, c_lin2_, c_val_;
-
-    ActorCriticImpl(int64_t n_in, int64_t n_out, double std = 2e-2) :
-            a_lin1_(torch::nn::Linear(n_in, 16)), a_lin2_(torch::nn::Linear(16, n_out)),
-//            a_lin3_(torch::nn::Linear(16, n_out)),
-            mu_(torch::full(n_out, 0.)),
-            c_lin1_(torch::nn::Linear(n_in, 16)), c_lin2_(torch::nn::Linear(16, n_out)),
-//            c_lin3_(torch::nn::Linear(16, n_out)),
-            c_val_(torch::nn::Linear(n_out, 1)) {
-        // Register the modules.
-        register_module("a_lin1", a_lin1_);
-        register_module("a_lin2", a_lin2_);
-//        register_module("a_lin3", a_lin3_);
-        log_std_ = register_parameter("log_std", torch::full({n_out}, std::log(1e-2)));  // Smaller initial log_std
-        register_module("c_lin1", c_lin1_);
-        register_module("c_lin2", c_lin2_);
-//        register_module("c_lin3", c_lin3_);
-        register_module("c_val", c_val_);
+struct ActorCriticNet : torch::nn::Module {
+    ActorCriticNet(int state_size, int action_size) {
+        fc1 = register_module("fc1", torch::nn::Linear(state_size, 64));
+        policy_head = register_module("policy_head", torch::nn::Linear(64, action_size));
+        value_head = register_module("value_head", torch::nn::Linear(64, 1));
     }
 
-    // Forward pass.
-    std::tuple<torch::Tensor, torch::Tensor> forward(torch::Tensor x) {
-        // Actor.
-        mu_ = torch::relu(a_lin1_->forward(x));
-        mu_ = torch::tanh(a_lin2_->forward(mu_));
-//        mu_ = torch::tanh(a_lin3_->forward(mu_));
-        // Critic.
-        torch::Tensor val = torch::relu(c_lin1_->forward(x));
-        val = torch::tanh(c_lin2_->forward(val));
-//        val = torch::tanh(c_lin3_->forward(val));
-        val = c_val_->forward(val);
-
-        // Apply clamping to prevent extreme values.
-        mu_ = torch::clamp(mu_, -1.0, 1.0);  // Clamp actor output between -1 and 1
-        val = torch::clamp(val, -10.0, 10.0);  // Clamp critic value to [-10, 10]
-
-        torch::NoGradGuard no_grad;
-        std::cout << "mu: " << mu_ << " std: " << log_std_.exp().expand_as(mu_) << std::endl;
-        torch::Tensor action = at::normal(mu_, torch::clamp(log_std_.exp().expand_as(mu_), 1e-3, 1.0));
-        return std::make_tuple(action, val);
+    std::pair<torch::Tensor, torch::Tensor> forward(torch::Tensor state) {
+        auto x = torch::relu(fc1->forward(state));
+        auto policy_logits = policy_head->forward(x);
+        auto policy = torch::softmax(policy_logits, -1); // Softmax to obtain action probabilities
+        auto value = value_head->forward(x);             // State value
+        return {policy, value};
     }
 
-    void normal(double mu, double std) {
-        torch::NoGradGuard no_grad;
-        for (auto& p: this->parameters()) {
-            p.normal_(mu,std);
-        }
-    }
-
-    torch::Tensor entropy() { // Differential entropy of normal distribution. For reference https://pytorch.org/docs/stable/_modules/torch/distributions/normal.html#Normal
-        return 0.5 + 0.5*log(2*M_PI) + log_std_;
-    }
-
-    torch::Tensor log_prob(torch::Tensor action) { // Logarithmic probability of taken action, given the current distribution.
-        torch::Tensor var = (log_std_ * 2).exp();
-        return -((action - mu_).pow(2) / (2 * var)) - log_std_ - log(sqrt(2 * M_PI));
-    }
+    // Layers
+    torch::nn::Linear fc1{nullptr}, policy_head{nullptr}, value_head{nullptr};
 };
-TORCH_MODULE(ActorCritic);
-
 
 // Proximal policy optimization, https://arxiv.org/abs/1707.06347
-class PPO {
+class PPOAgent {
 public:
-    PPO(std::string& cont_name, ActorCritic ac, uint max_batch, uint update_steps = 256, uint mini_batch_size = 64,
-        uint epochs = 4, double lambda = 0.95, double gamma = 0.99);
+    PPOAgent(std::string& cont_name, uint max_batch, uint update_steps = 256, double lambda = 0.95, double gamma = 0.99,
+             const std::string& model_save = "");
 
-    ~PPO() {
-        torch::save(ac, path + "/latest_model.pt");
+    ~PPOAgent() {
+        torch::save(actor_critic_net, path + "/latest_model.pt");
         out.close();
     }
     int runStep();
     void rewardCallback(double throughput, double drops, double oversize_penalty);
     void setState(double curr_batch, double arrival, double pre_queue_size, double inf_queue_size);
 
-    static ActorCritic initActorCritic(int64_t n_in, int64_t n_out, double std = 2e-2, const std::string& model_save = "") {
-        ActorCritic ac = ActorCritic(n_in, n_out, std);
-        ac->to(torch::kF64);
-        ac->normal(0., std);
-        if (!model_save.empty()) torch::load(ac, model_save);
-        return ac;
-    }
-
 private:
-    VT returns(); // Generalized advantage estimate, https://arxiv.org/abs/1506.02438
-    void update(double beta = 1e-3, double clip_param = 0.2);
+    void update();
+    int selectAction(torch::Tensor state);
+    torch::Tensor compute_cumu_rewards(double last_value = 0.0);
+    torch::Tensor compute_gae(double last_value = 0.0);
 
-    ActorCritic ac;
-    torch::optim::Adam* opt;
-    VT states, actions, rewards, log_probabilities, values;
+    std::shared_ptr<ActorCriticNet> actor_critic_net;
+    std::unique_ptr<torch::optim::Optimizer> optimizer;
+    std::vector<torch::Tensor> states, log_probs, values;
+    std::vector<int> actions;
+    std::vector<double> rewards;
 
     std::mt19937 re;
     std::ofstream out;
@@ -115,10 +61,9 @@ private:
 
     uint counter = 0;
     uint update_steps;
-    uint mini_batch_size;
-    uint epochs;
     double lambda;
     double gamma;
+    double clip_epsilon;
     double avg_reward;
 };
 

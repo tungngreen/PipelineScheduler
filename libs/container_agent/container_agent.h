@@ -309,7 +309,7 @@ protected:
     std::vector<spdlog::sink_ptr> cont_loggerSinks = {};
     std::shared_ptr<spdlog::logger> cont_logger;    
 
-    PPO *cont_ppo;
+    PPOAgent *cont_ppo;
     uint64_t cont_rlIntervalMillisec = 1000;
     ClockType cont_nextRLDecisionTime = std::chrono::system_clock::now();
 };

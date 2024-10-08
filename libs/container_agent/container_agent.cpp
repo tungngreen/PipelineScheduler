@@ -622,7 +622,7 @@ ContainerAgent::ContainerAgent(const json& configs) {
     run = true;
     reportHwMetrics = false;
     profiler = nullptr;
-    cont_ppo = new PPO(cont_name, PPO::initActorCritic(4,1), configs["profiling"]["profile_maxBatch"], 64, 32, 2);
+    cont_ppo = new PPOAgent(cont_name, configs["profiling"]["profile_maxBatch"], 64);
     std::thread receiver(&ContainerAgent::HandleRecvRpcs, this);
     receiver.detach();
 }
@@ -787,19 +787,17 @@ void ContainerAgent::collectRuntimeMetrics() {
             tmp_lateCount = cont_msvcsList[0]->GetDroppedReqCount();
             lateCount += tmp_lateCount;
             avgRequestRate = perSecondArrivalRecords.getAvgArrivalRate() - tmp_lateCount;
-            if (isnan(avgRequestRate)) {
-                cont_ppo->rewardCallback(0,
-                                         0,
-                                         cont_msvcsList[1]->msvc_idealBatchSize);
+            if (avgRequestRate == 0 || std::isnan(avgRequestRate)) {
+                cont_ppo->rewardCallback(0.0, 0.0, (double) cont_msvcsList[1]->msvc_idealBatchSize / 10.0);
                 avgRequestRate = 0;
             } else {
                 pre_queueDrops = cont_msvcsList[0]->GetQueueDrops();
                 inf_queueDrops = cont_msvcsList[1]->GetQueueDrops();
                 queueDrops += pre_queueDrops + inf_queueDrops;
                 avgExecutedBatchSize = cont_msvcsList[1]->GetAvgExecutedBatchSize() + 0.1;
-                cont_ppo->rewardCallback(cont_msvcsList[3]->GetMiniBatchCount() / avgRequestRate,
-                                         (pre_queueDrops + inf_queueDrops) / avgRequestRate,
-                                         cont_msvcsList[1]->msvc_idealBatchSize / avgExecutedBatchSize);
+                cont_ppo->rewardCallback((double) cont_msvcsList[3]->GetMiniBatchCount() / avgRequestRate,
+                                         (double) (pre_queueDrops + inf_queueDrops) / avgRequestRate,
+                                         (double) cont_msvcsList[1]->msvc_idealBatchSize / avgExecutedBatchSize);
             }
             cont_ppo->setState(cont_msvcsList[1]->msvc_idealBatchSize, avgRequestRate, pre_queueDrops, inf_queueDrops);
             int newBS = cont_ppo->runStep();
