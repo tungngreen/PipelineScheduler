@@ -57,8 +57,8 @@ void PPOAgent::update() {
     values.clear();
 }
 
-void PPOAgent::rewardCallback(double throughput, double drops, double oversize_penalty) {
-    rewards.push_back(throughput - drops + (1 - oversize_penalty) + 1e-8); // Add a small epsilon to avoid zero rewards
+void PPOAgent::rewardCallback(double throughput, double drops, double latency_penalty, double oversize_penalty) {
+    rewards.push_back(throughput - drops - latency_penalty + (1 - oversize_penalty));
 }
 
 void PPOAgent::setState(double curr_batch, double arrival, double pre_queue_size, double inf_queue_size) {

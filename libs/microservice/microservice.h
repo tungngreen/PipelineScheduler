@@ -705,6 +705,20 @@ public:
         return val;
     };
 
+    void addToLatencyEWMA(double latency) {
+        if (msvc_totalLatencyEWMA == 0) {
+            msvc_totalLatencyEWMA = latency;
+        } else if (msvc_totalLatencyEWMA < latency) {
+            msvc_totalLatencyEWMA = (msvc_totalLatencyEWMA * 0.2) + (latency * 0.8);
+        } else {
+            msvc_totalLatencyEWMA = (msvc_totalLatencyEWMA * 0.8) + (latency * 0.2);
+        }
+    }
+
+    double getLatencyEWMA() {
+        return msvc_totalLatencyEWMA.exchange(0.0);
+    }
+
     virtual PerSecondArrivalRecord getPerSecondArrivalRecord() {
         return {};
     }
@@ -864,6 +878,7 @@ protected:
     std::atomic<unsigned int> msvc_totalReqCount = 0;
     std::atomic<unsigned int> msvc_avgBatchSize = 0;
     std::atomic<unsigned int> msvc_miniBatchCount = 0;
+    std::atomic<double> msvc_totalLatencyEWMA = 0.0;
 
     //
     NumMscvType nummsvc_upstreamMicroservices = 0;

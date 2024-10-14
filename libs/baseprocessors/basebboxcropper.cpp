@@ -527,8 +527,9 @@ void BaseBBoxCropper::cropping() {
                         originStream,
                         getSenderHost(currReq.req_travelPath[i])
                 );
+                addToLatencyEWMA(
+                        std::chrono::duration_cast<TimePrecisionType>(currReq_recvTime - currReq_genTime).count());
             }
-
 
             singleImageBBoxList.clear();
         }

@@ -708,8 +708,8 @@ std::vector<float> getThrptsInPeriods(const std::vector<ClockType> &timestamps, 
 
 
 void ContainerAgent::collectRuntimeMetrics() {
-    unsigned int tmp_lateCount, lateCount = 0, queueDrops = 0, oldReqCount;
-    double avgRequestRate, avgExecutedBatchSize, pre_queueDrops = 0, inf_queueDrops = 0;
+    unsigned int tmp_lateCount, lateCount = 0, queueDrops = 0, pre_queueDrops = 0, inf_queueDrops = 0, oldReqCount;
+    double avgRequestRate, avgExecutedBatchSize, avgLatency = 0;
     ArrivalRecordType arrivalRecords;
     ProcessRecordType processRecords;
     BatchInferRecordType batchInferRecords;
@@ -787,8 +787,9 @@ void ContainerAgent::collectRuntimeMetrics() {
             tmp_lateCount = cont_msvcsList[0]->GetDroppedReqCount();
             lateCount += tmp_lateCount;
             avgRequestRate = perSecondArrivalRecords.getAvgArrivalRate() - tmp_lateCount;
+
             if (avgRequestRate == 0 || std::isnan(avgRequestRate)) {
-                cont_ppo->rewardCallback(0.0, 0.0, (double) cont_msvcsList[1]->msvc_idealBatchSize / 10.0);
+                cont_ppo->rewardCallback(0.0, 0.0, 0.0, (double) cont_msvcsList[1]->msvc_idealBatchSize / 10.0);
                 avgRequestRate = 0;
             } else {
                 pre_queueDrops = cont_msvcsList[0]->GetQueueDrops();
@@ -797,10 +798,12 @@ void ContainerAgent::collectRuntimeMetrics() {
                 avgExecutedBatchSize = cont_msvcsList[1]->GetAvgExecutedBatchSize() + 0.1;
                 cont_ppo->rewardCallback((double) cont_msvcsList[3]->GetMiniBatchCount() / avgRequestRate,
                                          (double) (pre_queueDrops + inf_queueDrops) / avgRequestRate,
+                                         cont_msvcsList[3]->getLatencyEWMA() / avgRequestRate,
                                          (double) cont_msvcsList[1]->msvc_idealBatchSize / avgExecutedBatchSize);
             }
             cont_ppo->setState(cont_msvcsList[1]->msvc_idealBatchSize, avgRequestRate, pre_queueDrops, inf_queueDrops);
             int newBS = cont_ppo->runStep();
+
             for (auto msvc : cont_msvcsList) {
                 // The batch size of the data reader (aka FPS) should be updated by `UpdateBatchSizeRequestHandler`
                 if (msvc->msvc_type == msvcconfigs::MicroserviceType::DataReader) {

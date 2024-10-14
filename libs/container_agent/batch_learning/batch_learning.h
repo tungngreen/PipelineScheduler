@@ -39,7 +39,7 @@ public:
         out.close();
     }
     int runStep();
-    void rewardCallback(double throughput, double drops, double oversize_penalty);
+    void rewardCallback(double throughput, double drops, double latency_penalty, double oversize_penalty);
     void setState(double curr_batch, double arrival, double pre_queue_size, double inf_queue_size);
 
 private:

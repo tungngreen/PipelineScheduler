@@ -288,9 +288,11 @@ void BaseBBoxCropperVerifier::cropping() {
                         originStream,
                         getSenderHost(currReq.req_travelPath[i])
                 );
+                addToLatencyEWMA(
+                        std::chrono::duration_cast<TimePrecisionType>(currReq_recvTime - currReq_genTime).count());
             }
 
-            // Clearing out data of the vector
+            addToLatencyEWMA(std::chrono::duration_cast<TimePrecisionType>(currReq_recvTime - currReq_genTime).count());
             outReqData.clear();
             singleImageBBoxList.clear();
         }
