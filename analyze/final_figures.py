@@ -239,7 +239,7 @@ def create_figures(args, dirs):
     if 'long' in figs:
         fig, axs = plt.subplots(1, 1, figsize=(8, 3), gridspec_kw={'height_ratios': [1], 'width_ratios': [1]})
         ax1 = axs
-        ax2 = ax1.twinx()
+        # ax2 = ax1.twinx()
         cars = []
         people = []
         # if the csvs do not exist, create them
@@ -265,7 +265,7 @@ def create_figures(args, dirs):
             df = df.groupby('aligned_timestamp').agg({'throughput': 'mean'}).reset_index()
             df = bucket_and_average(df, ['throughput'], num_buckets=780)
             ax1.plot(df['aligned_timestamp'], df['throughput'], label=lables[j], color=colors[j], linewidth=3)
-        ax1.plot(0, 0, label='Memory Usage', color='black', linestyle='--', linewidth=2)
+        # ax1.plot(0, 0, label='Memory Usage', color='black', linestyle='--', linewidth=2)
         if not os.path.exists(os.path.join(args.directory, 'long', 'missed.csv')):
             missed = bucket_and_average(arrival_query('long_ppp'), ['queue_drops', 'late_requests'], num_buckets=780)
             missed.to_csv(os.path.join(args.directory, 'long', 'missed.csv'), index=False)
@@ -273,18 +273,18 @@ def create_figures(args, dirs):
             missed = pd.read_csv(os.path.join(args.directory, 'long', 'missed.csv'))
         ax1.plot(missed['aligned_timestamp'], missed['queue_drops'], label='Dropped in Queues', color=colors[2], linewidth=2)
         ax1.plot(missed['aligned_timestamp'], missed['late_requests'], label='Late Requests', color=colors[5], linewidth=2)
-        ax1.set_title('Throughput, Missed Requests and GPU Memory over 13h', size=12)
+        ax1.set_title('Throughput and Missed Requests over 13h', size=12)
         ax1.set_xlabel('Minutes Passed since Start (min)', size=12)
         ax1.set_xlim([0, 780])
         ax1.set_ylabel('Throughput / Missed (objects / s)', size=12)
         ax1.legend(loc='lower left', fontsize=12)
-        if not os.path.exists(os.path.join(args.directory, 'long', 'memory.csv')):
-            memory = full_memory('long_ppp', 780)
-            memory.to_csv(os.path.join(args.directory, 'long', 'memory.csv'), index=False)
-        else:
-            memory = pd.read_csv(os.path.join(args.directory, 'long', 'memory.csv'))
-        ax2.plot(memory['bucket'], memory['total_gpu_mem'], label='Memory Usage', color='black', linestyle='--', linewidth=3)
-        ax2.set_ylabel('Memory Usage (GB)', size=12)
+        # if not os.path.exists(os.path.join(args.directory, 'long', 'memory.csv')):
+        #     memory = full_memory('long_ppp', 780)
+        #     memory.to_csv(os.path.join(args.directory, 'long', 'memory.csv'), index=False)
+        # else:
+        #     memory = pd.read_csv(os.path.join(args.directory, 'long', 'memory.csv'))
+        # ax2.plot(memory['bucket'], memory['total_gpu_mem'] / 1024, label='Memory Usage', color='black', linestyle='--', linewidth=3)
+        # ax2.set_ylabel('Memory Usage (GB)', size=12)
         plt.tight_layout()
         plt.savefig('long_runtime.svg')
 
