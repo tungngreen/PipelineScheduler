@@ -1,22 +1,26 @@
 #include "batch_learning.h"
 
-PPOAgent::PPOAgent(std::string& cont_name, uint max_batch, uint update_steps, double lambda, double gamma,
-                   const std::string& model_save) : max_batch(max_batch), update_steps(update_steps), lambda(lambda), gamma(gamma) {
+PPOAgent::PPOAgent(std::string& cont_name, uint state_size, uint max_batch, uint resolution_size,
+                   uint update_steps, double lambda, double gamma, const std::string& model_save)
+                   : max_batch(max_batch), update_steps(update_steps), lambda(lambda), gamma(gamma) {
     path = "../models/batch_learning/" + cont_name;
     std::filesystem::create_directories(std::filesystem::path(path));
     out.open(path + "/latest_log.csv");
 
     std::random_device rd;
     re = std::mt19937(rd());
-    actor_critic_net = std::make_shared<ActorCriticNet>(4, max_batch);
-    actor_critic_net->to(torch::kF64);
-    if (!model_save.empty()) torch::load(actor_critic_net, model_save);
+    model = std::make_shared<MultiPolicyNetwork>(state_size, resolution_size, max_batch, 2);
+    model->to(torch::kF64);
+    if (!model_save.empty()) torch::load(model, model_save);
 
-    optimizer = std::make_unique<torch::optim::Adam>(actor_critic_net->parameters(), torch::optim::AdamOptions(1e-3));
+    optimizer = std::make_unique<torch::optim::Adam>(model->parameters(), torch::optim::AdamOptions(1e-3));
 
     avg_reward = 0.0;
+    penalty_weight = 0.1;
     states = {};
-    actions = {};
+    resolution_actions = {};
+    batching_actions = {};
+    scaling_actions = {};
     rewards = {};
     log_probs = {};
     values = {};
@@ -27,10 +31,14 @@ void PPOAgent::update() {
     Stopwatch sw;
     sw.start();
 
-
-    auto [policy, v] = actor_critic_net->forward(torch::stack(states));
-    auto a = torch::tensor(actions).view({-1, 1, 1});
-    auto new_log_probs = torch::log(policy.gather(-1, a).squeeze(-1));
+    auto [policy1, policy2, policy3, v] = model->forward(torch::stack(states));
+    auto action1_probs = torch::softmax(policy1, -1);
+    auto action1_log_probs = torch::log(action1_probs.gather(-1, torch::tensor(resolution_actions).view({-1, 1, 1})).squeeze(-1));
+    auto action2_probs = torch::softmax(policy2, -1);
+    auto action2_log_probs = torch::log(action2_probs.gather(-1, torch::tensor(batching_actions).view({-1, 1, 1})).squeeze(-1));
+    auto action3_probs = torch::softmax(policy3, -1);
+    auto action3_log_probs = torch::log(action3_probs.gather(-1, torch::tensor(batching_actions).view({-1, 1, 1})).squeeze(-1));
+    auto new_log_probs = action1_log_probs + action2_log_probs + action3_log_probs;
 
     auto ratio = torch::exp(new_log_probs - torch::stack(log_probs));
     auto clipped_ratio = torch::clamp(ratio, 1 - clip_epsilon, 1 + clip_epsilon);
@@ -38,7 +46,9 @@ void PPOAgent::update() {
 
     auto policy_loss = -torch::min(ratio * advantages, clipped_ratio * advantages).to(torch::kF64).mean();
     auto value_loss = torch::mse_loss(v, compute_cumu_rewards()).to(torch::kF64);
-    auto loss = policy_loss + 0.5 * value_loss;
+    auto policy1_penalty = penalty_weight * torch::mean(torch::clamp(torch::tensor(resolution_actions), 0, 1)).to(torch::kF64);
+    auto policy3_penalty = penalty_weight * torch::mean(torch::clamp(torch::tensor(scaling_actions), 0, 1)).to(torch::kF64);
+    auto loss = policy_loss + 0.5 * value_loss + policy1_penalty + policy3_penalty;
 
     // Backpropagation
     optimizer->zero_grad();
@@ -51,29 +61,35 @@ void PPOAgent::update() {
     counter = 0;
     avg_reward = 0.0;
     states.clear();
-    actions.clear();
+    resolution_actions.clear();
+    batching_actions.clear();
+    scaling_actions.clear();
     rewards.clear();
     log_probs.clear();
     values.clear();
 }
 
 void PPOAgent::rewardCallback(double throughput, double drops, double latency_penalty, double oversize_penalty) {
-    rewards.push_back(throughput - drops - latency_penalty + (1 - oversize_penalty));
+    rewards.push_back(2 * throughput - drops - latency_penalty + (1 - oversize_penalty));
 }
 
 void PPOAgent::setState(double curr_batch, double arrival, double pre_queue_size, double inf_queue_size) {
     states.push_back(torch::tensor({{curr_batch / max_batch, arrival, pre_queue_size, inf_queue_size}}, torch::kF64));
 }
 
-int PPOAgent::selectAction(torch::Tensor state) {
-    auto [policy, value] = actor_critic_net->forward(state);
+std::tuple<int, int, int> PPOAgent::selectAction(torch::Tensor state) {
+    auto [policy1, policy2, policy3, value] = model->forward(state);
 
-    torch::Tensor action_dist = torch::multinomial(policy, 1);  // Sample from policy (discrete distribution)
-    int action = action_dist.item<int>();  // Convert tensor to int action
+    torch::Tensor action_dist = torch::multinomial(policy1, 1);  // Sample from policy (discrete distribution)
+    int resolution = action_dist.item<int>();  // Convert tensor to int action
+    action_dist = torch::multinomial(policy2, 1);  // Sample from policy (discrete distribution)
+    int batching = action_dist.item<int>();  // Convert tensor to int action
+    action_dist = torch::multinomial(policy3, 1);  // Sample from policy (discrete distribution)
+    int scaling = action_dist.item<int>();  // Convert tensor to int action
 
-    log_probs.push_back(torch::log(policy.squeeze(0)[action]));
+    log_probs.push_back(torch::log(policy1.squeeze(0)[resolution] + torch::log(policy2.squeeze(0)[batching]) + torch::log(policy3.squeeze(0)[scaling])));
     values.push_back(value);
-    return action;
+    return std::make_tuple(resolution, batching, scaling);
 }
 
 torch::Tensor PPOAgent::compute_cumu_rewards(double last_value) {
@@ -99,22 +115,22 @@ torch::Tensor PPOAgent::compute_gae(double last_value) {
     return torch::tensor(advantages).to(torch::kF64);
 }
 
-int PPOAgent::runStep() {
+std::tuple<int, int, int> PPOAgent::runStep() {
     Stopwatch sw;
     sw.start();
-    int action = selectAction(states.back());
+    std::tuple<int, int, int> action = selectAction(states.back());
     avg_reward += rewards[counter] / update_steps;
 
     counter++;
-    actions.push_back(action);
+    resolution_actions.push_back(std::get<0>(action));
+    batching_actions.push_back(std::get<1>(action));
+    scaling_actions.push_back(std::get<2>(action));
     sw.stop();
-    out << sw.elapsed_microseconds() << "," << counter << "," << avg_reward << "," << action << std::endl;
+    out << sw.elapsed_microseconds() << "," << counter << "," << avg_reward << "," << std::get<0>(action) << "," << std::get<1>(action) << "," << std::get<2>(action) << std::endl;
 
     if (counter%update_steps == 0) {
         std::thread t(&PPOAgent::update, this);
         t.detach();
-    } else {
     }
-
-    return action + 1;
+    return std::make_tuple(std::get<0>(action) + 1, std::get<1>(action) + 1, std::get<2>(action) + 1);
 }

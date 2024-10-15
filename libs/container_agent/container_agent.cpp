@@ -622,7 +622,7 @@ ContainerAgent::ContainerAgent(const json& configs) {
     run = true;
     reportHwMetrics = false;
     profiler = nullptr;
-    cont_ppo = new PPOAgent(cont_name, configs["profiling"]["profile_maxBatch"], 64);
+    cont_ppo = new PPOAgent(cont_name, 4, configs["profiling"]["profile_maxBatch"], 4, 64);
     std::thread receiver(&ContainerAgent::HandleRecvRpcs, this);
     receiver.detach();
 }
@@ -802,7 +802,7 @@ void ContainerAgent::collectRuntimeMetrics() {
                                          (double) cont_msvcsList[1]->msvc_idealBatchSize / avgExecutedBatchSize);
             }
             cont_ppo->setState(cont_msvcsList[1]->msvc_idealBatchSize, avgRequestRate, pre_queueDrops, inf_queueDrops);
-            int newBS = cont_ppo->runStep();
+            auto [targetRes, newBS, scaling] = cont_ppo->runStep();
 
             for (auto msvc : cont_msvcsList) {
                 // The batch size of the data reader (aka FPS) should be updated by `UpdateBatchSizeRequestHandler`
