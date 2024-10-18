@@ -385,8 +385,6 @@ namespace msvcconfigs {
         std::string msvc_name;
         // Type of microservice data receiver, data processor, or data sender
         MicroserviceType msvc_type;
-        // Application level configs
-        std::string msvc_appLvlConfigs = "";
         // The acceptable latency for each individual request processed by this microservice, in `microsecond`
         MsvcSLOType msvc_pipelineSLO;
         // 
@@ -505,6 +503,53 @@ public:
         return temp;
     }
 
+    /**
+     * @brief Get records into a combined record from multiple microservices
+     * 
+     * @param overallRecords 
+     */
+    void getRecords(ArrivalRecordType &overallRecords) {
+        std::unique_lock<std::mutex> lock(mutex);
+        for (auto &record: records) {
+            if (overallRecords.find(record.first) == overallRecords.end()) {
+                overallRecords[record.first] = record.second;
+            } else {
+                overallRecords[record.first].transferDuration.insert(
+                    overallRecords[record.first].transferDuration.end(),
+                    record.second.transferDuration.begin(),
+                    record.second.transferDuration.end()
+                );
+                overallRecords[record.first].outQueueingDuration.insert(
+                    overallRecords[record.first].outQueueingDuration.end(),
+                    record.second.outQueueingDuration.begin(),
+                    record.second.outQueueingDuration.end()
+                );
+                overallRecords[record.first].queueingDuration.insert(
+                    overallRecords[record.first].queueingDuration.end(),
+                    record.second.queueingDuration.begin(),
+                    record.second.queueingDuration.end()
+                );
+                overallRecords[record.first].arrivalTime.insert(
+                    overallRecords[record.first].arrivalTime.end(),
+                    record.second.arrivalTime.begin(),
+                    record.second.arrivalTime.end()
+                );
+                overallRecords[record.first].totalPkgSize.insert(
+                    overallRecords[record.first].totalPkgSize.end(),
+                    record.second.totalPkgSize.begin(),
+                    record.second.totalPkgSize.end()
+                );
+                overallRecords[record.first].reqSize.insert(
+                    overallRecords[record.first].reqSize.end(),
+                    record.second.reqSize.begin(),
+                    record.second.reqSize.end()
+                );
+            }
+        }
+        records.clear();
+        currNumEntries = 0;
+    }
+
     void setKeepLength(uint64_t keepLength) {
         std::unique_lock<std::mutex> lock(mutex);
         this->keepLength = std::chrono::milliseconds(keepLength);
@@ -576,6 +621,74 @@ public:
         return temp;
     }
 
+    /**
+     * @brief Get records into a combined record from multiple microservices
+     * 
+     * @param overallRecords 
+     */
+    void getRecords(ProcessRecordType &overallRecords) {
+        std::unique_lock<std::mutex> lock(mutex);
+        for (auto &record: processRecords) {
+            if (overallRecords.find(record.first) == overallRecords.end()) {
+                overallRecords[record.first] = record.second;
+            } else {
+                overallRecords[record.first].prepDuration.insert(
+                    overallRecords[record.first].prepDuration.end(),
+                    record.second.prepDuration.begin(),
+                    record.second.prepDuration.end()
+                );
+                overallRecords[record.first].batchDuration.insert(
+                    overallRecords[record.first].batchDuration.end(),
+                    record.second.batchDuration.begin(),
+                    record.second.batchDuration.end()
+                );
+                overallRecords[record.first].inferQueueingDuration.insert(
+                    overallRecords[record.first].inferQueueingDuration.end(),
+                    record.second.inferQueueingDuration.begin(),
+                    record.second.inferQueueingDuration.end()
+                );
+                overallRecords[record.first].inferDuration.insert(
+                    overallRecords[record.first].inferDuration.end(),
+                    record.second.inferDuration.begin(),
+                    record.second.inferDuration.end()
+                );
+                overallRecords[record.first].postDuration.insert(
+                    overallRecords[record.first].postDuration.end(),
+                    record.second.postDuration.begin(),
+                    record.second.postDuration.end()
+                );
+                overallRecords[record.first].inferBatchSize.insert(
+                    overallRecords[record.first].inferBatchSize.end(),
+                    record.second.inferBatchSize.begin(),
+                    record.second.inferBatchSize.end()
+                );
+                overallRecords[record.first].postEndTime.insert(
+                    overallRecords[record.first].postEndTime.end(),
+                    record.second.postEndTime.begin(),
+                    record.second.postEndTime.end()
+                );
+                overallRecords[record.first].inputSize.insert(
+                    overallRecords[record.first].inputSize.end(),
+                    record.second.inputSize.begin(),
+                    record.second.inputSize.end()
+                );
+                overallRecords[record.first].outputSize.insert(
+                    overallRecords[record.first].outputSize.end(),
+                    record.second.outputSize.begin(),
+                    record.second.outputSize.end()
+                );
+                overallRecords[record.first].encodedOutputSize.insert(
+                    overallRecords[record.first].encodedOutputSize.end(),
+                    record.second.encodedOutputSize.begin(),
+                    record.second.encodedOutputSize.end()
+                );
+            }
+        }
+
+        processRecords.clear();
+        currNumEntries = 0;
+    }
+
     BatchInferRecordType getBatchInferRecords() {
         std::unique_lock<std::mutex> lock(mutex);
         BatchInferRecordType temp;
@@ -586,6 +699,24 @@ public:
         batchInferRecords.clear();
         currNumEntries = 0;
         return temp;
+    }
+
+    void getBatchInferRecords(BatchInferRecordType &overallRecords) {
+        std::unique_lock<std::mutex> lock(mutex);
+        for (auto &record: batchInferRecords) {
+            if (overallRecords.find(record.first) == overallRecords.end()) {
+                overallRecords[record.first] = record.second;
+            } else {
+                overallRecords[record.first].inferDuration.insert(
+                    overallRecords[record.first].inferDuration.end(),
+                    record.second.inferDuration.begin(),
+                    record.second.inferDuration.end()
+                );
+            }
+        }
+
+        batchInferRecords.clear();
+        currNumEntries = 0;
     }
 
     void setKeepLength(uint64_t keepLength) {
@@ -621,6 +752,8 @@ friend class ContainerAgent;
 public:
     // Constructor that loads a struct args
     explicit Microservice(const json &jsonConfigs);
+
+    explicit Microservice(const Microservice &other);
 
     virtual ~Microservice() = default;
 
@@ -768,18 +901,6 @@ public:
 
     virtual void loadConfigs(const json &jsonConfigs, bool isConstructing = false);
 
-    virtual ArrivalRecordType getArrivalRecords() {
-        return {};
-    }
-
-    virtual ProcessRecordType getProcessRecords() {
-        return {};
-    }
-
-    virtual BatchInferRecordType getBatchInferRecords() {
-        return {};
-    }
-
     virtual void updateCycleTiming() {};
 
     bool RELOADING = true;
@@ -791,6 +912,8 @@ public:
     virtual std::string getModelName() {return "model";}
 
 protected:
+    mutable std::mutex msvc_overallMutex;
+
     AllocationMode msvc_allocationMode = AllocationMode::Conservative;
 
     std::vector<ThreadSafeFixSizedDoubleQueue *> msvc_InQueue, msvc_OutQueue;
@@ -814,9 +937,6 @@ protected:
     BATCH_MODE msvc_BATCH_MODE = BATCH_MODE::FIXED;
     // In case `msvc_DROP_MODE` is `LAZY`, this is the time budget left for the current frame
     uint64_t msvc_timeBudgetLeft = 99999999; 
-
-    //Path to specific Application configurations for this microservice
-    std::string msvc_appLvlConfigs = "";
 
     // GPU index, -1 means CPU
     int8_t msvc_deviceIndex = -1;

@@ -349,6 +349,27 @@ BaseReqBatcher::BaseReqBatcher(const json &jsonConfigs) : Microservice(jsonConfi
     spdlog::get("container_agent")->info("{0:s} is created.", msvc_name);
 }
 
+BaseReqBatcher::BaseReqBatcher(const BaseReqBatcher &other) : Microservice(other) {
+    std::lock(msvc_overallMutex, other.msvc_overallMutex);
+    std::lock_guard<std::mutex> lock1(msvc_overallMutex, std::adopt_lock);
+    std::lock_guard<std::mutex> lock2(other.msvc_overallMutex, std::adopt_lock);
+
+    msvc_imgType = other.msvc_imgType;
+    msvc_colorCvtType = other.msvc_colorCvtType;
+    msvc_resizeInterpolType = other.msvc_resizeInterpolType;
+    msvc_imgNormScale = other.msvc_imgNormScale;
+    msvc_subVals = other.msvc_subVals;
+    msvc_divVals = other.msvc_divVals;
+    msvc_batchInferProfileList = other.msvc_batchInferProfileList;
+    oldestReqTime = other.oldestReqTime;
+    msvc_toReloadConfigs = other.msvc_toReloadConfigs;
+}
+
+
+/**
+ * @brief 
+ * 
+ */
 void BaseReqBatcher::batchRequests() {
     // The time where the last request was generated.
     ClockType lastReq_genTime;

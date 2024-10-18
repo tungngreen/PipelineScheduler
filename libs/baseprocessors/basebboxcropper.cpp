@@ -154,10 +154,10 @@ inline std::vector<uint8_t> crop(
         // Crop from the corresponding image
         if ((y2 - y1) <= 0 || (x2 - x1) <= 0) {
             numInvalidDets++;
-            std::cout << "Invalid detection" << std::endl;
+            // std::cout << "Invalid detection" << std::endl;
             continue;
         }
-        std::cout << "Valid detection" << std::endl;
+        // std::cout << "Valid detection" << std::endl;
         imageIndexList.emplace_back(chosenImgIdx);
         cv::cuda::GpuMat croppedBBox = images[chosenImgIdx](
             cv::Range(y1, y2), 

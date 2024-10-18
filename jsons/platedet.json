@@ -10,6 +10,7 @@
         "cont_pipeline": [
             {
                 "msvc_name": "receiver",
+                "msvc_numInstances": 1,
                 "msvc_idealBatchSize": 1,
                 "msvc_appLvlConfigs": "../jsons/yolov5_receiver.json",
                 "msvc_dnstreamMicroservices": [
@@ -62,6 +63,7 @@
             },
             {
                 "msvc_name": "preprocessor",
+                "msvc_numInstances": 1,
                 "msvc_concat": 1,
                 "msvc_idealBatchSize": 1,
                 "msvc_appLvlConfigs": "../jsons/yolov5_preproc.json",
@@ -90,7 +92,7 @@
                     ]
                 ],
                 "msvc_pipelineSLO": 999999,
-                "msvc_type": 1,
+                "msvc_type": 1000,
                 "msvc_upstreamMicroservices": [
                     {
                         "nb_classOfInterest": -2,
@@ -127,6 +129,7 @@
             },
             {
                 "msvc_name": "inference",
+                "msvc_numInstances": 1,
                 "msvc_idealBatchSize": 1,
                 "msvc_appLvlConfigs": "../jsons/yolov5_trt.json",
                 "msvc_dnstreamMicroservices": [
@@ -162,7 +165,7 @@
                     ]
                 ],
                 "msvc_pipelineSLO": 999999,
-                "msvc_type": 2,
+                "msvc_type": 2000,
                 "msvc_upstreamMicroservices": [
                     {
                         "nb_classOfInterest": -2,
@@ -205,6 +208,7 @@
             },
             {
                 "msvc_name": "postprocessor",
+                "msvc_numInstances": 1,
                 "msvc_idealBatchSize": 1,
                 "msvc_appLvlConfigs": "",
                 "msvc_dnstreamMicroservices": [
@@ -240,7 +244,7 @@
                     ]
                 ],
                 "msvc_pipelineSLO": 999999,
-                "msvc_type": 3,
+                "msvc_type": 3004,
                 "msvc_upstreamMicroservices": [
                     {
                         "nb_classOfInterest": -2,
@@ -289,7 +293,7 @@
                     ]
                 ],
                 "msvc_pipelineSLO": 999999,
-                "msvc_type": 4,
+                "msvc_type": 4002,
                 "msvc_upstreamMicroservices": [
                     {
                         "nb_classOfInterest": -2,

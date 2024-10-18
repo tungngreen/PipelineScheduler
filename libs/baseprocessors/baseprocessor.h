@@ -134,6 +134,8 @@ public:
     BaseReqBatcher(const json &jsonConfigs);
     ~BaseReqBatcher() = default;
 
+    BaseReqBatcher(const BaseReqBatcher &other);
+
     virtual void batchRequests();
     virtual void batchRequestsProfiling();
     inline void executeBatch(BatchTimeType &genTime, RequestSLOType &slo, RequestPathType &path,
@@ -262,6 +264,15 @@ public:
     };
     ~BasePostprocessor() = default;
 
+    BasePostprocessor(const BasePostprocessor &other) : Microservice(other) {
+        std::lock(msvc_overallMutex, other.msvc_overallMutex);
+        std::lock_guard<std::mutex> lockThis(msvc_overallMutex, std::adopt_lock);
+        std::lock_guard<std::mutex> lockOther(other.msvc_overallMutex, std::adopt_lock);
+
+        msvc_inferenceShape = other.msvc_inferenceShape;
+        msvc_concat = other.msvc_concat;
+    };
+
     virtual void loadConfigs(const json &jsonConfigs, bool isConstructing = false) override {
         if (!isConstructing) {
             Microservice::loadConfigs(jsonConfigs, isConstructing);
@@ -271,16 +282,28 @@ public:
 
         msvc_concat.numImgs = jsonConfigs["msvc_concat"];
     };
-    virtual ProcessRecordType getProcessRecords() override {
+    virtual ProcessRecordType getProcessRecords()  {
         return msvc_processRecords.getRecords();
     }
 
-    virtual BatchInferRecordType getBatchInferRecords() override {
+    virtual void getProcessRecords(ProcessRecordType &overallRecords) {
+        msvc_processRecords.getRecords(overallRecords);
+    }
+
+    virtual BatchInferRecordType getBatchInferRecords() {
         return msvc_processRecords.getBatchInferRecords();
     }
 
-    virtual ArrivalRecordType getArrivalRecords() override {
+    virtual void getBatchInferRecords(BatchInferRecordType &overallRecords) {
+        msvc_processRecords.getBatchInferRecords(overallRecords);
+    }
+
+    virtual ArrivalRecordType getArrivalRecords() {
         return msvc_arrivalRecords.getRecords();
+    }
+
+    virtual void getArrivalRecords(ArrivalRecordType &overallRecords) {
+        msvc_arrivalRecords.getRecords(overallRecords);
     }
 
     virtual void addToPath(RequestPathType &path, uint64_t reqNum) {
@@ -333,6 +356,8 @@ public:
     BaseBBoxCropper(const json &jsonConfigs);
     ~BaseBBoxCropper() = default;
 
+    BaseBBoxCropper(const BaseBBoxCropper &other) : BasePostprocessor(other) {};
+
     void cropping();
 
     void generateRandomBBox(
@@ -364,6 +389,8 @@ class BaseBBoxCropperAugmentation : public BasePostprocessor {
 public:
     BaseBBoxCropperAugmentation(const json &jsonConfigs);
     ~BaseBBoxCropperAugmentation() = default;
+
+    BaseBBoxCropperAugmentation(const BaseBBoxCropperAugmentation &other) : BasePostprocessor(other) {};
 
     void cropping();
 
@@ -422,7 +449,15 @@ public:
     BaseClassifier(const json &jsonConfigs);
     ~BaseClassifier() = default;
 
-    virtual void classify() ;
+    BaseClassifier(const BaseClassifier &other) : BasePostprocessor(other) {
+        std::lock(msvc_overallMutex, other.msvc_overallMutex);
+        std::lock_guard<std::mutex> lockThis(msvc_overallMutex, std::adopt_lock);
+        std::lock_guard<std::mutex> lockOther(other.msvc_overallMutex, std::adopt_lock);
+
+        msvc_numClasses = other.msvc_numClasses;
+    };
+
+    virtual void classify();
 
     virtual void dispatchThread() override {
         if (msvc_RUNMODE == RUNMODE::EMPTY_PROFILING) {
@@ -442,7 +477,6 @@ public:
     virtual void loadConfigs(const json &jsonConfigs, bool isConstructing = false) override;
 
 protected:
-    RequestShapeType msvc_inferenceShape;
     uint16_t msvc_numClasses;
 };
 
@@ -450,6 +484,8 @@ class BaseSoftmaxClassifier : public BaseClassifier {
 public:
     BaseSoftmaxClassifier(const json &jsonConfigs);
     ~BaseSoftmaxClassifier() = default;
+
+    BaseSoftmaxClassifier(const BaseSoftmaxClassifier &other) : BaseClassifier(other) {};
 
     virtual void classify() override;
     virtual void classifyProfiling() override;
@@ -459,6 +495,8 @@ class BaseKPointExtractor : public BasePostprocessor {
 public:
     BaseKPointExtractor(const json &jsonConfigs);
     ~BaseKPointExtractor() = default;
+
+    BaseKPointExtractor(const BaseKPointExtractor &other) : BasePostprocessor(other) {};
 
     virtual void extractor();
 

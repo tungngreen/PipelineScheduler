@@ -28,6 +28,7 @@ endif(CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
 set(
         HEADER_FILES 
         baseprocessor.h
+        data_reader.h
 )
 
 # All source files and private header files go here.
@@ -43,6 +44,7 @@ set(
         basesoftmaxclassifier.cpp
         basekpointextractor.cpp
         basesink.cpp
+        data_reader.cpp
 )
 
 # Here we define the library.
