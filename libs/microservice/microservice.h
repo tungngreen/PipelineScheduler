@@ -892,6 +892,8 @@ protected:
 
     RequestShapeType msvc_inferenceShape;
 
+    ConcatConfigs msvc_concat;
+
     // Ideal batch size for this microservice, runtime batch size could be smaller though
     BatchSizeType msvc_idealBatchSize;
 

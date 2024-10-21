@@ -213,7 +213,7 @@ void BaseClassifier::classify() {
                         getSenderHost(currReq.req_travelPath[i])
                 );
                 addToLatencyEWMA(
-                        std::chrono::duration_cast<TimePrecisionType>(currReq_recvTime - currReq_genTime).count());
+                        std::chrono::duration_cast<TimePrecisionType>(currReq_recvTime - currReq.req_origGenTime[i][3]).count());
             }
         }
 

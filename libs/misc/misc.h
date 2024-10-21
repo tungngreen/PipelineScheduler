@@ -56,6 +56,18 @@ const uint8_t NUM_LANES_PER_GPU = 3;
 const uint8_t NUM_GPUS = 4;
 const uint64_t MINIMUM_PORTION_SIZE = 1000; // microseconds = 1 millisecond
 
+
+struct ConcatDims {
+    int32_t x1, y1, width, height;
+};
+
+struct ConcatConfigs {
+    uint8_t numImgs = 1;
+    uint8_t currIndex = 0;
+
+    std::vector<ConcatDims> concatDims;
+};
+
 struct BatchInferProfile {
     uint64_t p95inferLat = 0;
     uint64_t p95prepLat = 0;
@@ -370,6 +382,7 @@ struct SummarizedHardwareMetrics {
 };
 
 typedef std::chrono::microseconds TimePrecisionType;
+const int TIME_PRECISION_TO_SEC = 1e6;
 
 const std::unordered_set<uint16_t> GRAYSCALE_CONVERSION_CODES = {6, 7, 10, 11};
 

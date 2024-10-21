@@ -109,25 +109,11 @@ struct BaseClassifierConfigs : BaseMicroserviceConfigs {
     uint16_t msvc_numClasses;
 };
 
-struct ConcatDims {
-    int32_t x1, y1, width, height;
-};
-
-struct ConcatConfigs {
-    uint8_t numImgs = 1;
-    uint8_t currIndex = 0;
-
-    std::vector<ConcatDims> concatDims;
-};
-
-
 void concatConfigsGenerator(
     const RequestShapeType &inferenceShapes,
     ConcatConfigs &concat,
     const uint8_t padding = 0
 );
-
-
 
 class BaseReqBatcher : public Microservice {
 public:
@@ -184,7 +170,6 @@ protected:
     ClockType msvc_nextMustBatchTime;
     uint64_t timeout = 100000; //microseconds
 
-    ConcatConfigs msvc_concat;
     cv::cuda::GpuMat msvc_concatBuffer;
 };
 
@@ -325,8 +310,6 @@ protected:
     };
 
     RequestShapeType msvc_inferenceShape;
-
-    ConcatConfigs msvc_concat;
 };
 
 class BaseBBoxCropper : public BasePostprocessor {

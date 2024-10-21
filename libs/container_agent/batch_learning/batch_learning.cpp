@@ -73,8 +73,9 @@ void PPOAgent::rewardCallback(double throughput, double drops, double latency_pe
     rewards.push_back(2 * throughput - drops - latency_penalty + (1 - oversize_penalty));
 }
 
-void PPOAgent::setState(double curr_batch, double arrival, double pre_queue_size, double inf_queue_size) {
-    states.push_back(torch::tensor({{curr_batch / max_batch, arrival, pre_queue_size, inf_queue_size}}, torch::kF64));
+void PPOAgent::setState(double curr_batch, double curr_resolution_choice, double arrival, double pre_queue_size, double inf_queue_size) {
+    states.push_back(torch::tensor({{curr_batch / max_batch, curr_resolution_choice, arrival, pre_queue_size,
+                                     inf_queue_size}}, torch::kF64));
 }
 
 std::tuple<int, int, int> PPOAgent::selectAction(torch::Tensor state) {

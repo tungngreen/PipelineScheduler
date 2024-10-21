@@ -639,7 +639,7 @@ ContainerAgent::ContainerAgent(const json& configs) {
     run = true;
     reportHwMetrics = false;
     profiler = nullptr;
-    cont_ppo = new PPOAgent(cont_name, 4, configs["profiling"]["profile_maxBatch"], 4, 64);
+    cont_ppo = new PPOAgent(cont_name, 5, configs["profiling"]["profile_maxBatch"], 4, 64);
     std::thread receiver(&ContainerAgent::HandleRecvRpcs, this);
     receiver.detach();
 }
@@ -815,10 +815,10 @@ void ContainerAgent::collectRuntimeMetrics() {
                 avgExecutedBatchSize = cont_msvcsList[1]->GetAvgExecutedBatchSize() + 0.1;
                 cont_ppo->rewardCallback((double) cont_msvcsList[3]->GetMiniBatchCount() / avgRequestRate,
                                          (double) (pre_queueDrops + inf_queueDrops) / avgRequestRate,
-                                         cont_msvcsList[3]->getLatencyEWMA() / avgRequestRate,
+                                         cont_msvcsList[3]->getLatencyEWMA() / TIME_PRECISION_TO_SEC,
                                          (double) cont_msvcsList[1]->msvc_idealBatchSize / avgExecutedBatchSize);
             }
-            cont_ppo->setState(cont_msvcsList[1]->msvc_idealBatchSize, avgRequestRate, pre_queueDrops, inf_queueDrops);
+            cont_ppo->setState(cont_msvcsList[1]->msvc_idealBatchSize, cont_msvcsList[1]->msvc_concat.numImgs, avgRequestRate, pre_queueDrops, inf_queueDrops);
             auto [targetRes, newBS, scaling] = cont_ppo->runStep();
 
             for (auto msvc : cont_msvcsList) {
