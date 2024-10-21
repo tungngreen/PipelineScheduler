@@ -32,6 +32,130 @@ void addProfileConfigs(json &msvcConfigs, const json &profileConfigs) {
     msvcConfigs["profile_minBatch"] = profileConfigs.at("profile_minBatch");
 }
 
+/**
+ * @brief 
+ * 
+ * @param containerConfigs 
+ * @param profilingConfigs 
+ * @return json 
+ */
+void manageJsonConfigs(json &configs) {
+    json *containerConfigs = &configs["container"];
+    json *profilingConfigs = &configs["profiling"];
+    std::string name = containerConfigs->at("cont_name");
+
+    BatchSizeType minBatch = profilingConfigs->at("profile_minBatch");
+    std::string templateModelPath = profilingConfigs->at("profile_templateModelPath");
+
+    /**
+     * @brief     If this is profiling, set configurations to the first batch size that should be profiled
+     * This includes
+     * 1. Setting its name based on the template model path
+     * 2. Setting the batch size to the smallest profile batch size
+     * 
+     */
+    uint16_t runmode = containerConfigs->at("cont_RUNMODE");
+    std::string logPath = containerConfigs->at("cont_logPath").get<std::string>();
+    if (runmode == 2) {
+        name = removeSubstring(templateModelPath, ".engine");
+        name = replaceSubstring(name, "[batch]", std::to_string(minBatch));
+        name = splitString(name, "/").back();
+        logPath = "../model_profiles";
+    }
+
+    logPath += "/" + containerConfigs->at("cont_experimentName").get<std::string>();
+    std::filesystem::create_directory(
+        std::filesystem::path(logPath)
+    );
+
+    logPath += "/" + containerConfigs->at("cont_systemName").get<std::string>();
+    std::filesystem::create_directory(
+        std::filesystem::path(logPath)
+    );
+
+    logPath += "/" + containerConfigs->at("cont_pipeName").get<std::string>() + "_" + name;
+    std::filesystem::create_directory(
+        std::filesystem::path(logPath)
+    );
+
+    std::ifstream metricsServerCfgsFile = std::ifstream(containerConfigs->at("cont_metricServerConfigs"));
+    json metricsServerConfigs = json::parse(metricsServerCfgsFile);
+
+    (*containerConfigs)["cont_metricsServerConfigs"] = metricsServerConfigs;
+    if (containerConfigs->at("cont_taskName") != "dsrc") {
+        (*containerConfigs)["cont_inferModelName"] = splitString(containerConfigs->at("cont_pipeline")[2]["path"], "/").back();
+        containerConfigs->at("cont_inferModelName") = splitString(containerConfigs->at("cont_inferModelName"), ".").front();
+        // The maximum batch size supported by the model (for TensorRT)
+        std::vector<std::string> modelOptions = splitString(containerConfigs->at("cont_inferModelName"), "_");
+        BatchSizeType maxModelBatchSize = std::stoull(modelOptions[modelOptions.size() - 2]);
+        if (static_cast<RUNMODE>(runmode) == RUNMODE::PROFILING) {
+            (*containerConfigs)["cont_maxBatchSize"] = std::min((BatchSizeType)profilingConfigs->at("profile_maxBatch"), maxModelBatchSize);
+        } else if (static_cast<RUNMODE>(runmode) == RUNMODE::DEPLOYMENT) {
+            (*containerConfigs)["cont_maxBatchSize"] = maxModelBatchSize;
+        }
+
+        containerConfigs->at("cont_pipeline")[3]["msvc_concat"] = containerConfigs->at("cont_pipeline")[1]["msvc_concat"];
+
+        if (containerConfigs->at("cont_pipeline")[3]["msvc_concat"] > 1) {
+            
+        }
+    }
+
+    for (uint16_t i = 0; i < containerConfigs->at("cont_pipeline").size(); i++) {
+        containerConfigs->at("cont_pipeline")[i]["msvc_contStartTime"] = containerConfigs->at("cont_startTime");
+        containerConfigs->at("cont_pipeline")[i]["msvc_contEndTime"] = containerConfigs->at("cont_endTime");
+        containerConfigs->at("cont_pipeline")[i]["msvc_localDutyCycle"] = containerConfigs->at("cont_localDutyCycle");
+        containerConfigs->at("cont_pipeline")[i]["msvc_cycleStartTime"] = containerConfigs->at("cont_cycleStartTime");
+        containerConfigs->at("cont_pipeline")[i]["msvc_batchMode"] = containerConfigs->at("cont_batchMode");
+        containerConfigs->at("cont_pipeline")[i]["msvc_dropMode"] = containerConfigs->at("cont_dropMode");
+        containerConfigs->at("cont_pipeline")[i]["msvc_timeBudgetLeft"] = containerConfigs->at("cont_timeBudgetLeft");
+        containerConfigs->at("cont_pipeline")[i]["msvc_pipelineSLO"] = containerConfigs->at("cont_pipelineSLO");
+        containerConfigs->at("cont_pipeline")[i]["msvc_experimentName"] = containerConfigs->at("cont_experimentName");
+        containerConfigs->at("cont_pipeline")[i]["msvc_systemName"] = containerConfigs->at("cont_systemName");
+        containerConfigs->at("cont_pipeline")[i]["msvc_contName"] = name;
+        containerConfigs->at("cont_pipeline")[i]["msvc_pipelineName"] = containerConfigs->at("cont_pipeName");
+        containerConfigs->at("cont_pipeline")[i]["msvc_taskName"] = containerConfigs->at("cont_taskName");
+        containerConfigs->at("cont_pipeline")[i]["msvc_hostDevice"] = containerConfigs->at("cont_hostDevice");
+        containerConfigs->at("cont_pipeline")[i]["msvc_deviceIndex"] = containerConfigs->at("cont_device");
+        containerConfigs->at("cont_pipeline")[i]["msvc_containerLogPath"] = containerConfigs->at("cont_logPath").get<std::string>() + "/" + name;
+        containerConfigs->at("cont_pipeline")[i]["msvc_RUNMODE"] = runmode;
+        containerConfigs->at(
+                "cont_pipeline")[i]["cont_metricsScrapeIntervalMillisec"] = metricsServerConfigs["metricsServer_metricsReportIntervalMillisec"];
+        containerConfigs->at("cont_pipeline")[i]["msvc_numWarmUpBatches"] = containerConfigs->at("cont_numWarmUpBatches");
+        if (containerConfigs->at("cont_taskName") != "dsrc") {
+            containerConfigs->at("cont_pipeline")[i]["msvc_maxBatchSize"] = containerConfigs->at("cont_maxBatchSize");
+            containerConfigs->at("cont_pipeline")[i]["msvc_allocationMode"] = containerConfigs->at("cont_allocationMode");
+        }
+
+        /**
+         * @brief     If this is profiling, set configurations to the first batch size that should be profiled
+         * This includes
+         * 1. Setting its profile dir whose name is based on the template model path
+         * 2. Setting the batch size to the smallest profile batch size
+         * 
+         */
+        if (runmode == 1 && containerConfigs->at("cont_taskName") != "dsrc" && containerConfigs->at("cont_taskName") != "datasource") {
+            addProfileConfigs(containerConfigs->at("cont_pipeline")[i], *profilingConfigs);
+            
+        } else if (runmode == 2) {
+            containerConfigs->at("cont_pipeline")[i].at("msvc_idealBatchSize") = minBatch;
+            if (i == 0) {
+                addProfileConfigs(containerConfigs->at("cont_pipeline")[i], *profilingConfigs);
+            } else if (i == 2) {
+                // Set the path to the engine
+                containerConfigs->at("cont_pipeline")[i].at("path") = replaceSubstring(templateModelPath, "[batch]",
+                                                                                      std::to_string(minBatch));
+            }
+        }
+
+        if (i == 1) {
+            containerConfigs->at("cont_pipeline")[i]["msvc_modelProfile"] = containerConfigs->at("cont_modelProfile");
+        }
+    };
+
+    std::cout << configs.dump(4) << std::endl;
+}
+
 json loadRunArgs(int argc, char **argv) {
     absl::ParseCommandLine(argc, argv);
 
@@ -43,129 +167,23 @@ json loadRunArgs(int argc, char **argv) {
 
     RUNMODE runmode = static_cast<RUNMODE>(profiling_mode);
 
-    std::tuple<json, json> configs = msvcconfigs::loadJson();
-    json containerConfigs = std::get<0>(configs);
-    std::string name = containerConfigs["cont_name"];
-    json profilingConfigs = std::get<1>(configs);
+    json configs = msvcconfigs::loadJson();
 
-    BatchSizeType minBatch = profilingConfigs.at("profile_minBatch");
-    std::string templateModelPath = profilingConfigs.at("profile_templateModelPath");
+    // TODO: Add most of the configurations to the json file instead of the command line
+    configs.at("container")["cont_device"] = device;
+    configs.at("container")["cont_logLevel"] = logLevel;
+    configs.at("container")["cont_logPath"] = logPath;
+    configs.at("container")["cont_RUNMODE"] = runmode;
+    configs.at("container")["cont_loggingMode"] = loggingMode;
+    configs.at("container")["cont_port"] = absl::GetFlag(FLAGS_port);
 
-    /**
-     * @brief     If this is profiling, set configurations to the first batch size that should be profiled
-     * This includes
-     * 1. Setting its name based on the template model path
-     * 2. Setting the batch size to the smallest profile batch size
-     * 
-     */
-    if (profiling_mode == 2) {
-
-        name = removeSubstring(templateModelPath, ".engine");
-        name = replaceSubstring(name, "[batch]", std::to_string(minBatch));
-        name = splitString(name, "/").back();
-        logPath = "../model_profiles";
-    }
-
-    logPath += "/" + containerConfigs["cont_experimentName"].get<std::string>();
-    std::filesystem::create_directory(
-        std::filesystem::path(logPath)
-    );
-
-    logPath += "/" + containerConfigs["cont_systemName"].get<std::string>();
-    std::filesystem::create_directory(
-        std::filesystem::path(logPath)
-    );
-
-    logPath += "/" + containerConfigs["cont_pipeName"].get<std::string>() + "_" + name;
-    std::filesystem::create_directory(
-        std::filesystem::path(logPath)
-    );
-
-    containerConfigs["cont_device"] = device;
-    containerConfigs["cont_logLevel"] = logLevel;
-    containerConfigs["cont_loggingMode"] = loggingMode;
-    containerConfigs["cont_logPath"] = logPath;
-    containerConfigs["cont_RUNMODE"] = runmode;
-    containerConfigs["cont_port"] = absl::GetFlag(FLAGS_port);
-
-    std::ifstream metricsServerCfgsFile = std::ifstream(containerConfigs.at("cont_metricServerConfigs"));
-    json metricsServerConfigs = json::parse(metricsServerCfgsFile);
-
-    containerConfigs["cont_metricsServerConfigs"] = metricsServerConfigs;
-    if (containerConfigs["cont_taskName"] != "dsrc") {
-        containerConfigs["cont_inferModelName"] = splitString(containerConfigs.at("cont_pipeline")[2]["path"], "/").back();
-        containerConfigs["cont_inferModelName"] = splitString(containerConfigs["cont_inferModelName"], ".").front();
-        // The maximum batch size supported by the model (for TensorRT)
-        std::vector<std::string> modelOptions = splitString(containerConfigs["cont_inferModelName"], "_");
-        BatchSizeType maxModelBatchSize = std::stoull(modelOptions[modelOptions.size() - 2]);
-        if (static_cast<RUNMODE>(runmode) == RUNMODE::PROFILING) {
-            containerConfigs["cont_maxBatchSize"] = std::min((BatchSizeType)profilingConfigs["profile_maxBatch"], maxModelBatchSize);
-        } else if (static_cast<RUNMODE>(runmode) == RUNMODE::DEPLOYMENT) {
-            containerConfigs["cont_maxBatchSize"] = maxModelBatchSize;
-        }
-    }
-
-    for (uint16_t i = 0; i < containerConfigs["cont_pipeline"].size(); i++) {
-        containerConfigs.at("cont_pipeline")[i]["msvc_contStartTime"] = containerConfigs["cont_startTime"];
-        containerConfigs.at("cont_pipeline")[i]["msvc_contEndTime"] = containerConfigs["cont_endTime"];
-        containerConfigs.at("cont_pipeline")[i]["msvc_localDutyCycle"] = containerConfigs["cont_localDutyCycle"];
-        containerConfigs.at("cont_pipeline")[i]["msvc_cycleStartTime"] = containerConfigs["cont_cycleStartTime"];
-        containerConfigs.at("cont_pipeline")[i]["msvc_batchMode"] = containerConfigs["cont_batchMode"];
-        containerConfigs.at("cont_pipeline")[i]["msvc_dropMode"] = containerConfigs["cont_dropMode"];
-        containerConfigs.at("cont_pipeline")[i]["msvc_timeBudgetLeft"] = containerConfigs["cont_timeBudgetLeft"];
-        containerConfigs.at("cont_pipeline")[i]["msvc_pipelineSLO"] = containerConfigs["cont_pipelineSLO"];
-        containerConfigs.at("cont_pipeline")[i]["msvc_experimentName"] = containerConfigs["cont_experimentName"];
-        containerConfigs.at("cont_pipeline")[i]["msvc_systemName"] = containerConfigs["cont_systemName"];
-        containerConfigs.at("cont_pipeline")[i]["msvc_contName"] = name;
-        containerConfigs.at("cont_pipeline")[i]["msvc_pipelineName"] = containerConfigs["cont_pipeName"];
-        containerConfigs.at("cont_pipeline")[i]["msvc_taskName"] = containerConfigs["cont_taskName"];
-        containerConfigs.at("cont_pipeline")[i]["msvc_hostDevice"] = containerConfigs["cont_hostDevice"];
-        containerConfigs.at("cont_pipeline")[i]["msvc_deviceIndex"] = device;
-        containerConfigs.at("cont_pipeline")[i]["msvc_containerLogPath"] = containerConfigs["cont_logPath"].get<std::string>() + "/" + name;
-        containerConfigs.at("cont_pipeline")[i]["msvc_RUNMODE"] = runmode;
-        containerConfigs.at(
-                "cont_pipeline")[i]["cont_metricsScrapeIntervalMillisec"] = metricsServerConfigs["metricsServer_metricsReportIntervalMillisec"];
-        containerConfigs.at("cont_pipeline")[i]["msvc_numWarmUpBatches"] = containerConfigs.at("cont_numWarmUpBatches");
-        if (containerConfigs["cont_taskName"] != "dsrc") {
-            containerConfigs.at("cont_pipeline")[i]["msvc_maxBatchSize"] = containerConfigs.at("cont_maxBatchSize");
-            containerConfigs.at("cont_pipeline")[i]["msvc_allocationMode"] = containerConfigs.at("cont_allocationMode");
-        }
-
-        /**
-         * @brief     If this is profiling, set configurations to the first batch size that should be profiled
-         * This includes
-         * 1. Setting its profile dir whose name is based on the template model path
-         * 2. Setting the batch size to the smallest profile batch size
-         * 
-         */
-        if (profiling_mode == 1 && containerConfigs["cont_taskName"] != "dsrc" && containerConfigs["cont_taskName"] != "datasource") {
-            addProfileConfigs(containerConfigs.at("cont_pipeline")[i], profilingConfigs);
-            
-        } else if (profiling_mode == 2) {
-            containerConfigs.at("cont_pipeline")[i].at("msvc_idealBatchSize") = minBatch;
-            if (i == 0) {
-                addProfileConfigs(containerConfigs.at("cont_pipeline")[i], profilingConfigs);
-            } else if (i == 2) {
-                // Set the path to the engine
-                containerConfigs.at("cont_pipeline")[i].at("path") = replaceSubstring(templateModelPath, "[batch]",
-                                                                                      std::to_string(minBatch));
-            }
-        }
-
-        if (i == 1) {
-            containerConfigs.at("cont_pipeline")[i]["msvc_modelProfile"] = containerConfigs.at("cont_modelProfile");
-        }
-    }
-
-    json finalConfigs;
-    finalConfigs["container"] = containerConfigs;
-    finalConfigs["profiling"] = profilingConfigs;
-
-    if (containerConfigs["cont_taskName"] != "dsrc") {
+    if (configs.at("container")["cont_taskName"] != "dsrc") {
         checkCudaErrorCode(cudaSetDevice(device), __func__);
     }
 
-    return finalConfigs;
+    manageJsonConfigs(configs);
+
+    return configs;
 };
 
 std::vector<BaseMicroserviceConfigs> msvcconfigs::LoadFromJson() {
@@ -191,23 +209,22 @@ std::vector<BaseMicroserviceConfigs> msvcconfigs::LoadFromJson() {
     }
 }
 
-std::tuple<json, json> msvcconfigs::loadJson() {
+json msvcconfigs::loadJson() {
     json containerConfigs, profilingConfigs;
     if (!absl::GetFlag(FLAGS_json).has_value()) {
         spdlog::trace("{0:s} attempts to load Json Configs from file.", __func__);
         if (absl::GetFlag(FLAGS_json_path).has_value()) {
             std::ifstream file(absl::GetFlag(FLAGS_json_path).value());
             auto json_file = json::parse(file);
-            containerConfigs = json_file.at("container");
-            try {
-                profilingConfigs = json_file.at("profiling");
-            } catch (json::out_of_range &e) {
-                spdlog::trace("{0:s} No profiling configurations found.", __func__);
-            } catch (json::parse_error &e) {
-                spdlog::error("{0:s} Error parsing json file.", __func__);
-            }
+            // try {
+            //     profilingConfigs = json_file.at("profiling");
+            // } catch (json::out_of_range &e) {
+            //     spdlog::trace("{0:s} No profiling configurations found.", __func__);
+            // } catch (json::parse_error &e) {
+            //     spdlog::error("{0:s} Error parsing json file.", __func__);
+            // }
             spdlog::trace("{0:s} finished loading Json Configs from file.", __func__);
-            return std::make_tuple(containerConfigs, profilingConfigs);
+            return json_file;
         } else {
             spdlog::error("No Configurations found. Please provide configuration either as json or file.");
             exit(1);
@@ -220,13 +237,13 @@ std::tuple<json, json> msvcconfigs::loadJson() {
         } else {
             auto json_file = json::parse(absl::GetFlag(FLAGS_json).value());
             containerConfigs = json_file.at("container");
-            try {
-                profilingConfigs = json_file.at("profiling");
-            } catch (json::out_of_range &e) {
-                spdlog::trace("{0:s} No profiling configurations found.", __func__);
-            }
+            // try {
+            //     profilingConfigs = json_file.at("profiling");
+            // } catch (json::out_of_range &e) {
+            //     spdlog::trace("{0:s} No profiling configurations found.", __func__);
+            // }
             spdlog::trace("{0:s} finished loading Json Configs from command line.", __func__);
-            return std::make_tuple(containerConfigs, profilingConfigs);
+            return json_file;
         }
     }
 }

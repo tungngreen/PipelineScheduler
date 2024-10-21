@@ -156,6 +156,33 @@ inline cv::cuda::GpuMat resizePadRightBottom(
     return out;
 }
 
+inline bool resizeIntoFrame(
+        const cv::cuda::GpuMat &input,
+        cv::cuda::GpuMat &frame,
+        const uint16_t left,
+        const uint16_t top,
+        const uint16_t height,
+        const uint16_t width,
+        cv::cuda::Stream &stream,
+        uint8_t IMG_TYPE,
+        uint8_t COLOR_CVT_TYPE,
+        uint8_t RESIZE_INTERPOL_TYPE
+) {
+    spdlog::get("container_agent")->trace("Going into {0:s}", __func__);
+
+    float r = std::min(width / (input.cols * 1.0), height / (input.rows * 1.0));
+    int unpad_w = r * input.cols;
+    int unpad_h = r * input.rows;
+    cv::cuda::GpuMat resized(unpad_h, unpad_w, input.type());
+    cv::cuda::resize(input, resized, resized.size(), 0, 0, RESIZE_INTERPOL_TYPE, stream);
+
+    resized.copyTo(frame(cv::Rect(left, top, resized.cols, resized.rows)), stream);
+    stream.waitForCompletion();
+    spdlog::get("container_agent")->trace("Finished {0:s}", __func__);
+
+    return true;
+}
+
 /**
  * @brief Get number at index from a string of comma separated numbers
  * 
@@ -294,6 +321,8 @@ void BaseReqBatcher::loadConfigs(const json &jsonConfigs, bool isConstructing) {
         exit(1);
     }
 
+    msvc_concat.numImgs = jsonConfigs["msvc_concat"];
+
     msvc_imgType = configs.msvc_imgType;
     msvc_colorCvtType = configs.msvc_colorCvtType;
     msvc_resizeInterpolType = configs.msvc_resizeInterpolType;
@@ -376,6 +405,8 @@ void BaseReqBatcher::batchRequests() {
                     msvc_toReloadConfigs = false;
                 }
 
+                concatConfigsGenerator(msvc_outReqShape.at(0), msvc_concat, 2);
+
                 if (msvc_logFile.is_open()) {
                     msvc_logFile.close();
                 }
@@ -429,7 +460,7 @@ void BaseReqBatcher::batchRequests() {
         //     executeBatch(outBatch_genTime, outBatch_slo, outBatch_path, bufferData, prevData);
         // }
 
-        if (msvc_onBufferBatchSize == 0) {
+        if (msvc_numsOnBufferReqs == 0) {
             oldestReqTime = startTime;
             // We update the oldest request time and the must batch time for this request
             // We try to account for its inference and postprocessing time
@@ -454,7 +485,7 @@ void BaseReqBatcher::batchRequests() {
         spdlog::get("container_agent")->trace("{0:s} popped a request of batch size {1:d}. In queue size is {2:d}.",
                                               msvc_name, currReq_batchSize, msvc_InQueue.at(0)->size());
 
-        msvc_onBufferBatchSize++;
+        msvc_numsOnBufferReqs++;
         // Resize the incoming request image the padd with the grey color
         // The resize image will be copied into a reserved buffer
 
@@ -468,47 +499,61 @@ void BaseReqBatcher::batchRequests() {
                 *preProcStream
         );
 
-        // Only resize if the output shape is not the same as the input shape
-        if (msvc_outReqShape.at(0)[0][1] != 0 && msvc_outReqShape.at(0)[0][2] != 0) {
-            if (data.data.rows != (msvc_outReqShape.at(0))[0][1] ||
-                data.data.cols != (msvc_outReqShape.at(0))[0][2]) {
-                data.data = resizePadRightBottom(
-                        data.data,
-                        (msvc_outReqShape.at(0))[0][1],
-                        (msvc_outReqShape.at(0))[0][2],
-                        {128, 128, 128},
-                        *preProcStream,
-                        msvc_imgType,
-                        msvc_colorCvtType,
-                        msvc_resizeInterpolType
-                );
-                spdlog::get("container_agent")->trace("{0:s} resized a frame of [{1:d}, {2:d}] -> [{3:d}, {4:d}]",
-                                        msvc_name,
-                                        currReq.req_data[0].data.rows,
-                                        currReq.req_data[0].data.cols,
-                                        (this->msvc_outReqShape.at(0))[0][1],
-                                        (this->msvc_outReqShape.at(0))[0][2]
-        );
-            }
+        if (msvc_concat.currIndex == 0) {
+            // Create a new frame to hold the concatenated images
+            msvc_concatBuffer = cv::cuda::GpuMat(
+                (msvc_outReqShape.at(0))[0][1],
+                (msvc_outReqShape.at(0))[0][2],
+                msvc_imgType, cv::Scalar(128, 128, 128)
+            );
         }
 
-        // data.data = cvtHWCToCHW(data.data, *preProcStream, msvc_imgType);
+        bool success = resizeIntoFrame(
+            data.data,
+            msvc_concatBuffer,
+            msvc_concat.concatDims[msvc_concat.currIndex].x1,
+            msvc_concat.concatDims[msvc_concat.currIndex].y1,
+            msvc_concat.concatDims[msvc_concat.currIndex].height,
+            msvc_concat.concatDims[msvc_concat.currIndex].width,
+            *preProcStream,
+            msvc_imgType,
+            msvc_colorCvtType,
+            msvc_resizeInterpolType
+        );
 
-        // data.data = normalize(data.data, *preProcStream, msvc_subVals, msvc_divVals, msvc_imgNormScale);
+        if (!success) {
+            spdlog::get("container_agent")->error("{0:s} failed to resize the image.", msvc_name);
+            continue;
+        } else {
+            spdlog::get("container_agent")->trace("{0:s} resized an image of [{1:d}, {2:d}] -> [{3:d}, {4:d}] and put into frame at index {5:d}.",
+                msvc_name,
+                currReq.req_data[0].data.rows,
+                currReq.req_data[0].data.cols,
+                (this->msvc_outReqShape.at(0))[0][1],
+                (this->msvc_outReqShape.at(0))[0][2],
+                msvc_concat.currIndex
+            );
 
-        data.shape = RequestDataShapeType({(msvc_outReqShape.at(0))[0][1], (msvc_outReqShape.at(0))[0][1],
-                                           (msvc_outReqShape.at(0))[0][2]});
-        bufferData.emplace_back(data);
-        spdlog::get("container_agent")->trace("{0:s} put an image into buffer. Current batch size is {1:d} ", msvc_name,
-                                              msvc_onBufferBatchSize);
+            // Consider this the moment the request preprocessed and is waiting to be batched
+            timeNow = std::chrono::high_resolution_clock::now();
 
-        // Consider this the moment the request preprocessed and is waiting to be batched
-        timeNow = std::chrono::high_resolution_clock::now();
+            // Add the whole time vector of currReq to outReq
+            // outReq_genTime.emplace_back(timeNow);
+            currReq.req_origGenTime[0].emplace_back(timeNow);
+            outBatch_genTime.emplace_back(currReq.req_origGenTime[0]);
+            if (msvc_concat.currIndex == 0) {
+                msvc_onBufferReadyBatchSize++;
+                data.data = msvc_concatBuffer;
+                data.shape = RequestDataShapeType({(msvc_outReqShape.at(0))[0][0], (msvc_outReqShape.at(0))[0][1],
+                                                   (msvc_outReqShape.at(0))[0][2]});
+                bufferData.emplace_back(data);
+            }
+            msvc_concat.currIndex = (++msvc_concat.currIndex % msvc_concat.numImgs);
 
-        // Add the whole time vector of currReq to outReq
-        // outReq_genTime.emplace_back(timeNow);
-        currReq.req_origGenTime[0].emplace_back(timeNow);
-        outBatch_genTime.emplace_back(currReq.req_origGenTime[0]);
+            if (msvc_concat.currIndex == 0) {
+                saveGPUAsImg(bufferData.back().data, "concatBuffer.jpg");
+            }
+        }
 
         /**
          * @brief ONLY IN PROFILING MODE
@@ -553,18 +598,21 @@ inline void BaseReqBatcher::executeBatch(BatchTimeType &genTime, RequestSLOType 
             genTime,
             slo,
             path,
-            msvc_onBufferBatchSize,
+            msvc_onBufferReadyBatchSize,
             bufferData,
             prevData
     };
 
     msvc_miniBatchCount++;
+    msvc_batchCount++;
 
     spdlog::get("container_agent")->trace("{0:s} emplaced a request of batch size {1:d} ", msvc_name,
-                                            msvc_onBufferBatchSize);
+                                            msvc_onBufferReadyBatchSize);
     msvc_OutQueue[0]->emplace(outReq);
-    msvc_avgBatchSize += (msvc_onBufferBatchSize - msvc_avgBatchSize) / msvc_miniBatchCount;
-    msvc_onBufferBatchSize = 0;
+    msvc_avgBatchSize += (msvc_onBufferReadyBatchSize - msvc_avgBatchSize) / msvc_miniBatchCount;
+    msvc_concat.currIndex = 0;
+    msvc_onBufferReadyBatchSize = 0;
+    msvc_numsOnBufferReqs = 0;
     genTime.clear();
     path.clear();
     slo.clear();
@@ -737,7 +785,7 @@ void BaseReqBatcher::batchRequestsProfiling() {
                 {3, (msvc_outReqShape.at(0))[0][1], (msvc_outReqShape.at(0))[0][2]});
         bufferData.emplace_back(data);
         spdlog::get("container_agent")->trace("{0:s} put an image into buffer. Current batch size is {1:d} ", msvc_name,
-                                              msvc_onBufferBatchSize);
+                                              msvc_onBufferReadyBatchSize);
 
 
         /**
@@ -760,7 +808,7 @@ void BaseReqBatcher::batchRequestsProfiling() {
         // Only used during profiling time.
         msvc_idealBatchSize = getNumberAtIndex(currReq.req_travelPath[0], 1);
 
-        msvc_onBufferBatchSize++;
+        msvc_onBufferReadyBatchSize++;
 
         // First we need to decide if this is an appropriate time to batch the buffered data or if we can wait a little more.
         // Waiting more means there is a higher chance the earliest request in the buffer will be late eventually.
@@ -777,14 +825,14 @@ void BaseReqBatcher::batchRequestsProfiling() {
                     outBatch_genTime,
                     outBatch_slo,
                     outReq_path,
-                    msvc_onBufferBatchSize,
+                    msvc_onBufferReadyBatchSize,
                     bufferData,
                     prevData
             };
             spdlog::get("container_agent")->trace("{0:s} emplaced a request of batch size {1:d} ", msvc_name,
-                                                  msvc_onBufferBatchSize);
+                                                  msvc_onBufferReadyBatchSize);
             msvc_OutQueue[0]->emplace(outReq);
-            msvc_onBufferBatchSize = 0;
+            msvc_onBufferReadyBatchSize = 0;
             outBatch_genTime.clear();
             outReq_path.clear();
             outBatch_slo.clear();
@@ -813,7 +861,7 @@ inline bool BaseReqBatcher::isTimeToBatch() {
     timeout = 100000;
     if ((msvc_RUNMODE == RUNMODE::PROFILING || 
          msvc_BATCH_MODE == BATCH_MODE::FIXED) && 
-        msvc_onBufferBatchSize >= msvc_idealBatchSize) {
+        msvc_numsOnBufferReqs >= msvc_idealBatchSize * msvc_concat.numImgs) {
         return true;
     }
 
@@ -822,10 +870,10 @@ inline bool BaseReqBatcher::isTimeToBatch() {
         return false;
     }
     //First of all, whenever the batch is full, then it's time to batch
-    if (msvc_onBufferBatchSize == 0) {
+    if (msvc_onBufferReadyBatchSize == 0) {
         return false;
     // If the batch is empty, then it doesn't really matter if it's time to batch or not
-    } else if (msvc_onBufferBatchSize >= msvc_idealBatchSize) {
+    } else if (msvc_numsOnBufferReqs >= msvc_idealBatchSize * msvc_concat.numImgs) {
         spdlog::get("container_agent")->trace("{0:s} got the ideal batch.", msvc_name);
         updateCycleTiming();
         return true;
@@ -860,9 +908,9 @@ inline bool BaseReqBatcher::isTimeToBatch() {
     // If this preprocessing doesnt happen (as the next request doesn't come as expectd), then the batcher will just batch
     // the next time as this timer is expired
     uint64_t timeOutByLastReq = msvc_contSLO - lastReqWaitTime - 
-                            (msvc_batchInferProfileList.at(msvc_onBufferBatchSize).p95inferLat +
-                            msvc_batchInferProfileList.at(msvc_onBufferBatchSize).p95postLat) * msvc_onBufferBatchSize * 1.2 -
-                            msvc_batchInferProfileList.at(msvc_onBufferBatchSize).p95prepLat * 1.2;
+                            (msvc_batchInferProfileList.at(msvc_onBufferReadyBatchSize).p95inferLat +
+                            msvc_batchInferProfileList.at(msvc_onBufferReadyBatchSize).p95postLat) * msvc_onBufferReadyBatchSize * 1.2 -
+                            msvc_batchInferProfileList.at(msvc_onBufferReadyBatchSize).p95prepLat * 1.2;
     timeOutByLastReq = std::max((uint64_t) 0, timeOutByLastReq);
     msvc_nextMustBatchTime = timeNow + TimePrecisionType(timeOutByLastReq);
     // Ideal batch size is calculated based on the profiles so its always confined to the cycle,

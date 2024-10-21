@@ -93,8 +93,10 @@ void DataReader::Process() {
         if (std::fmod(frameCount, skipRatio) < 1) {
             readFrames++;
             msvc_currFrameID = (int) source.get(cv::CAP_PROP_POS_FRAMES);
-            frame = resizePadRightBottom(frame, msvc_dataShape[0][1], msvc_dataShape[0][2],
-                                         {128, 128, 128}, cv::INTER_AREA);
+            if (msvc_dataShape[0][1] != -1 && msvc_dataShape[0][2] != -1) {
+                frame = resizePadRightBottom(frame, msvc_dataShape[0][1], msvc_dataShape[0][2],
+                                             {128, 128, 128}, cv::INTER_AREA);
+            }
             RequestMemSizeType frameMemSize = frame.channels() * frame.rows * frame.cols * CV_ELEM_SIZE1(frame.type());
             for (auto q: msvc_OutQueue) {
                 Request<LocalCPUReqDataType> req;

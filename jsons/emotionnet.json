@@ -62,6 +62,7 @@
             },
             {
                 "msvc_name": "preprocessor",
+                "msvc_concat": 1,
                 "msvc_idealBatchSize": 20,
                 "msvc_appLvlConfigs": "../jsons/emotionnet_preproc.json",
                 "msvc_dnstreamMicroservices": [

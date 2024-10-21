@@ -75,23 +75,100 @@ inline void scaleBBox(
  * @param bbox_coorList 
  * @param croppedBBoxes 
  */
-inline void crop(
-    const cv::cuda::GpuMat &image,
+inline std::vector<uint8_t> crop(
+    const std::vector<cv::cuda::GpuMat> &images,
+    const std::vector<ConcatDims> &concatDims,
     int orig_h,
     int orig_w,
     int infer_h,
     int infer_w,
-    int numDetections,
+    uint16_t numDetections,
     const float *bbox_coorList,
     std::vector<cv::cuda::GpuMat> &croppedBBoxes
 ) {
+    std::vector<uint8_t> imageIndexList = {};
     int orig_bboxCoors[4];
+    uint16_t numInvalidDets = 0;
     for (uint16_t i = 0; i < numDetections; ++i) {
-        scaleBBox(orig_h, orig_w, infer_h, infer_w, bbox_coorList + i * 4, orig_bboxCoors);
-        // std::cout << (int)orig_bboxCoors[0] << " " << (int)orig_bboxCoors[1] << " " << (int)orig_bboxCoors[2] << " " << (int)orig_bboxCoors[3] << std::endl;
-        cv::cuda::GpuMat croppedBBox = image(cv::Range((int)orig_bboxCoors[1], (int)orig_bboxCoors[3]), cv::Range((int)orig_bboxCoors[0], (int)orig_bboxCoors[2])).clone();
+        int infer_x1 = bbox_coorList[i * 4];
+        int infer_y1 = bbox_coorList[i * 4 + 1];
+        int infer_x2 = bbox_coorList[i * 4 + 2];
+        int infer_y2 = bbox_coorList[i * 4 + 3];
+
+        // std::cout << "infer " << infer_x1 << " " << infer_y1 << " " << infer_x2 << " " << infer_y2 << std::endl;
+
+        float* adjusted = new float[4];
+
+
+        int max_overlap_area = 0;
+        uint8_t chosenImgIdx = 0;
+
+        for (uint8_t imgIdx = 0; imgIdx < concatDims.size(); ++imgIdx) {
+            const ConcatDims &dims = concatDims[imgIdx];
+            // Image bounding box in concatenated frame
+            int img_x1 = dims.x1;
+            int img_y1 = dims.y1;
+            int img_x2 = dims.x1 + dims.width;
+            int img_y2 = dims.y1 + dims.height;
+
+            // Calculate the intersection rectangle between the inference bbox and the image bbox
+            int intersect_x1 = std::max(infer_x1, img_x1);
+            int intersect_y1 = std::max(infer_y1, img_y1);
+            int intersect_x2 = std::min(infer_x2, img_x2);
+            int intersect_y2 = std::min(infer_y2, img_y2);
+
+            // Calculate the width and height of the intersection rectangle
+            int intersect_width = std::max(0, intersect_x2 - intersect_x1);
+            int intersect_height = std::max(0, intersect_y2 - intersect_y1);
+
+            // Calculate the area of intersection
+            int intersect_area = intersect_width * intersect_height;
+
+            // Keep track of the image with the largest intersection
+            if (intersect_area > max_overlap_area) {
+                max_overlap_area = intersect_area;
+                chosenImgIdx = imgIdx;
+                // Update the index of the best image
+                adjusted[0] = intersect_x1 - img_x1;
+                adjusted[1] = intersect_y1 - img_y1;
+                adjusted[2] = intersect_x2 - img_x1;
+                adjusted[3] = intersect_y2 - img_y1;
+            }
+        }
+
+        // std::cout << "adjusted " << adjusted[0] << " " << adjusted[1] << " " << adjusted[2] << " " << adjusted[3] << std::endl;
+        scaleBBox(orig_h, orig_w, infer_h, infer_w, adjusted, orig_bboxCoors);
+
+        delete [] adjusted;
+
+
+
+        // Original bounding box coordinates (top-left x, y) and (bottom-right x, y)
+        int x1 = orig_bboxCoors[0];
+        int y1 = orig_bboxCoors[1];
+        int x2 = orig_bboxCoors[2];
+        int y2 = orig_bboxCoors[3];
+
+        // std::cout << "orig " << x1 << " " << y1 << " " << x2 << " " << y2 << std::endl;
+
+        // Crop from the corresponding image
+        if ((y2 - y1) <= 0 || (x2 - x1) <= 0) {
+            numInvalidDets++;
+            std::cout << "Invalid detection" << std::endl;
+            continue;
+        }
+        std::cout << "Valid detection" << std::endl;
+        imageIndexList.emplace_back(chosenImgIdx);
+        cv::cuda::GpuMat croppedBBox = images[chosenImgIdx](
+            cv::Range(y1, y2),
+            cv::Range(x1, x2)
+        ).clone();
+
+        // Store the cropped bbox in the output vector
         croppedBBoxes.emplace_back(croppedBBox);
+        // saveGPUAsImg(croppedBBox, "bbox_" + std::to_string(i) + ".jpg");
     }
+    return imageIndexList;
 }
 
 /**
@@ -138,8 +215,6 @@ BaseBBoxCropper::BaseBBoxCropper(const json &jsonConfigs) : BasePostprocessor(js
 void BaseBBoxCropper::cropping() {
     // The time where the last request was generated.
     ClockType lastReq_genTime;
-    // The time where the current incoming request was generated.
-    ClockType currReq_genTime;
     // The time where the current incoming request arrives
     ClockType currReq_recvTime;
     // Path
@@ -227,6 +302,8 @@ void BaseBBoxCropper::cropping() {
                 checkCudaErrorCode(cudaStreamCreate(&postProcStream), __func__);
 
                 msvc_inferenceShape = upstreamMicroserviceList.at(0).expectedShape;
+
+                concatConfigsGenerator(msvc_inferenceShape, msvc_concat, 2);
 
                 infer_h = msvc_inferenceShape[0][1];
                 infer_w = msvc_inferenceShape[0][2];
@@ -321,7 +398,12 @@ void BaseBBoxCropper::cropping() {
         spdlog::get("container_agent")->trace("{0:s} unloaded 4 buffers to CPU {1:d}", msvc_name, currReq_batchSize);
 
         // List of images to be cropped from
-        imageList = currReq.upstreamReq_data; 
+        imageList = currReq.upstreamReq_data;
+
+        std::vector<MemUsageType> totalInMem, totalOutMem(msvc_concat.numImgs, 0), totalEncodedOutMem(msvc_concat.numImgs, 0);
+        std::vector<std::string> origStreams;
+
+
 
         // Doing post processing for the whole batch
         for (BatchSizeType i = 0; i < currReq_batchSize; ++i) {
@@ -329,11 +411,6 @@ void BaseBBoxCropper::cropping() {
 
             // We consider this when the request was received by the postprocessor
             currReq.req_origGenTime[i].emplace_back(std::chrono::high_resolution_clock::now());
-
-            // There could be multiple timestamps in the request, but the first one always represent
-            // the moment this request was generated at the very beginning of the pipeline
-            currReq_genTime = currReq.req_origGenTime[i][0];
-            currReq_path = currReq.req_travelPath[i];
 
             // If there is no object in frame, we don't have to do nothing.
             int numDetsInFrame = (int)num_detections[i];
@@ -348,16 +425,44 @@ void BaseBBoxCropper::cropping() {
             infer_h = currReq.req_data.back().shape[1];
             infer_w = currReq.req_data.back().shape[2];
             // orig_h,w are given in the shape of the image in the image list, which is carried from the batcher
+            // TODO: For now, we assume that all images in the concatenated frame have the same shape
             orig_h = imageList[i].shape[1];
             orig_w = imageList[i].shape[2];
 
-            crop(imageList[i].data, orig_h, orig_w, infer_h, infer_w, numDetsInFrame, nmsed_boxes + i * maxNumDets * 4, singleImageBBoxList);
+            std::vector<cv::cuda::GpuMat> concatImageList;
+            for (uint8_t concatInd = 0; concatInd < msvc_concat.numImgs; concatInd++) {
+                concatImageList.emplace_back(imageList[i * msvc_concat.numImgs + concatInd].data);
+            }
+
+            std::vector<uint8_t> concatIndexList = crop(concatImageList,
+                                                        msvc_concat.concatDims,
+                                                        orig_h,
+                                                        orig_w,
+                                                        infer_h,
+                                                        infer_w,
+                                                        numDetsInFrame,
+                                                        nmsed_boxes + i * maxNumDets * 4,
+                                                        singleImageBBoxList);
+            // actual number of detections after cropping
+            numDetsInFrame = concatIndexList.size();
             spdlog::get("container_agent")->trace("{0:s} cropped {1:d} bboxes in image {2:d}", msvc_name, numDetsInFrame, i);
 
-            uint32_t totalInMem = imageList[i].data.channels() * imageList[i].data.rows * imageList[i].data.cols * CV_ELEM_SIZE1(imageList[i].data.type());
-            uint32_t totalOutMem = 0, totalEncodedOutMem = 0;
-
             std::vector<PerQueueOutRequest> outReqList(msvc_OutQueue.size());
+
+            for (BatchSizeType j = 0; j < msvc_concat.numImgs; ++j) {
+                uint16_t imageIndexInBatch = i * msvc_concat.numImgs + j;
+                totalInMem.emplace_back(imageList[imageIndexInBatch].data.channels() * imageList[imageIndexInBatch].data.rows *
+                                        imageList[imageIndexInBatch].data.cols * CV_ELEM_SIZE1(imageList[imageIndexInBatch].data.type()));
+            }
+
+            // List of the number of detections in each image in the concatenated frame
+            std::vector<uint16_t> numsDetsInImages(msvc_concat.numImgs, 0);
+            //
+            std::vector<uint16_t> indexInImageDetList(numDetsInFrame);
+            for (int j = 0; j < numDetsInFrame; ++j) {
+                indexInImageDetList[j] = numsDetsInImages[concatIndexList[j]];
+                numsDetsInImages[concatIndexList[j]]++;
+            }
 
             // After cropping, we need to find the right queues to put the bounding boxes in
             for (int j = 0; j < numDetsInFrame; ++j) {
@@ -415,10 +520,17 @@ void BaseBBoxCropper::cropping() {
                 // Putting the bounding box into an `outReq` to be sent out
                 bboxShape = {singleImageBBoxList[j].channels(), singleImageBBoxList[j].rows, singleImageBBoxList[j].cols};
 
+                //
+                uint16_t imageIndexInBatch = i * msvc_concat.numImgs + concatIndexList[j];
+
+                // There could be multiple timestamps in the request, but the first one always represent
+                // the moment this request was generated at the very beginning of the pipeline
+                currReq_path = currReq.req_travelPath[imageIndexInBatch];
+
                 for (auto qIndex : queueIndex) {
                     outReqList.at(qIndex).used = true;
                     std::string path = currReq_path;
-                    path += "|" + std::to_string(numDetsInFrame) + "|" + std::to_string(j);
+                    path += "|" + std::to_string(numsDetsInImages[concatIndexList[j]]) + "|" + std::to_string(indexInImageDetList[j]);
                     // Put the correct type of outreq for the downstream, a sender, which expects either LocalGPU or localCPU
                     if (msvc_activeOutQueueIndex.at(qIndex) == 1) { //Local CPU
                         if (msvc_OutQueue.at(qIndex)->getEncoded()) {
@@ -434,8 +546,8 @@ void BaseBBoxCropper::cropping() {
                         }
 
 
-                        outReqList.at(qIndex).cpuReq.req_origGenTime.emplace_back(RequestTimeType{currReq.req_origGenTime[i].front()});
-                        outReqList.at(qIndex).cpuReq.req_e2eSLOLatency.emplace_back(currReq.req_e2eSLOLatency[i]);
+                        outReqList.at(qIndex).cpuReq.req_origGenTime.emplace_back(RequestTimeType{currReq.req_origGenTime[imageIndexInBatch].front()});
+                        outReqList.at(qIndex).cpuReq.req_e2eSLOLatency.emplace_back(currReq.req_e2eSLOLatency[imageIndexInBatch]);
                         outReqList.at(qIndex).cpuReq.req_travelPath.emplace_back(path);
                         outReqList.at(qIndex).cpuReq.req_data.emplace_back(reqDataCPU);
                         outReqList.at(qIndex).cpuReq.req_batchSize = 1;
@@ -451,8 +563,8 @@ void BaseBBoxCropper::cropping() {
                             postProcStream
                         ), __func__);
 
-                        outReqList.at(qIndex).gpuReq.req_origGenTime.emplace_back(RequestTimeType{currReq.req_origGenTime[i].front()});
-                        outReqList.at(qIndex).gpuReq.req_e2eSLOLatency.emplace_back(currReq.req_e2eSLOLatency[i]);
+                        outReqList.at(qIndex).gpuReq.req_origGenTime.emplace_back(RequestTimeType{currReq.req_origGenTime[imageIndexInBatch].front()});
+                        outReqList.at(qIndex).gpuReq.req_e2eSLOLatency.emplace_back(currReq.req_e2eSLOLatency[imageIndexInBatch]);
                         outReqList.at(qIndex).gpuReq.req_travelPath.emplace_back(path);
                         outReqList.at(qIndex).gpuReq.req_data.emplace_back(reqData);
                         outReqList.at(qIndex).gpuReq.req_batchSize = 1;
@@ -462,8 +574,8 @@ void BaseBBoxCropper::cropping() {
                     uint32_t imageMemSize = singleImageBBoxList[j].cols * singleImageBBoxList[j].rows * singleImageBBoxList[j].channels() * CV_ELEM_SIZE1(singleImageBBoxList[j].type());
                     outReqList.at(qIndex).totalSize += imageMemSize;
                     outReqList.at(qIndex).totalEncodedSize += boxEncodedMemSize;
-                    totalOutMem += imageMemSize;
-                    totalEncodedOutMem += boxEncodedMemSize;
+                    totalOutMem[concatIndexList[j]] += imageMemSize;
+                    totalEncodedOutMem[concatIndexList[j]] += boxEncodedMemSize;
                 }
                 queueIndex.clear();
             }
@@ -514,21 +626,24 @@ void BaseBBoxCropper::cropping() {
 
             // If the number of warmup batches has been passed, we start to record the latency
             if (warmupCompleted()) {
-                currReq.req_origGenTime[i].emplace_back(std::chrono::high_resolution_clock::now());
-                std::string originStream = getOriginStream(currReq.req_travelPath[i]);
-                // TODO: Add the request number
-                msvc_processRecords.addRecord(currReq.req_origGenTime[i], currReq_batchSize, totalInMem, totalOutMem, totalEncodedOutMem, 0, originStream);
-                msvc_arrivalRecords.addRecord(
-                        currReq.req_origGenTime[i],
-                        10,
-                        getArrivalPkgSize(currReq.req_travelPath[i]),
-                        totalInMem,
-                        msvc_overallTotalReqCount,
-                        originStream,
-                        getSenderHost(currReq.req_travelPath[i])
-                );
-                addToLatencyEWMA(
-                        std::chrono::duration_cast<TimePrecisionType>(currReq_recvTime - currReq_genTime).count());
+                for (uint8_t j = 0; j < msvc_concat.numImgs; ++j) {
+                    uint8_t imageIndexInBatch = i * msvc_concat.numImgs + j;
+                    currReq.req_origGenTime[imageIndexInBatch].emplace_back(std::chrono::high_resolution_clock::now());
+                    std::string originStream = getOriginStream(currReq.req_travelPath[imageIndexInBatch]);
+                    // TODO: Add the request number
+                    msvc_processRecords.addRecord(currReq.req_origGenTime[imageIndexInBatch], currReq_batchSize, totalInMem[j], totalOutMem[j], totalEncodedOutMem[j], 0, originStream);
+                    msvc_arrivalRecords.addRecord(
+                            currReq.req_origGenTime[imageIndexInBatch],
+                            10,
+                            getArrivalPkgSize(currReq.req_travelPath[imageIndexInBatch]),
+                            totalInMem[j],
+                            msvc_overallTotalReqCount,
+                            originStream,
+                            getSenderHost(currReq.req_travelPath[imageIndexInBatch])
+                    );
+                    addToLatencyEWMA(
+                            std::chrono::duration_cast<TimePrecisionType>(currReq_recvTime - currReq_genTime).count());
+                }
             }
 
             singleImageBBoxList.clear();
@@ -540,7 +655,7 @@ void BaseBBoxCropper::cropping() {
 
         msvc_batchCount++;
         msvc_miniBatchCount++;
-        
+
         spdlog::get("container_agent")->trace("{0:s} sleeps for {1:d} millisecond", msvc_name, msvc_interReqTime);
         std::this_thread::sleep_for(std::chrono::milliseconds(msvc_interReqTime));
         // Synchronize the cuda stream
@@ -790,7 +905,7 @@ void BaseBBoxCropper::cropProfiling() {
             orig_h = imageList[i].shape[1];
             orig_w = imageList[i].shape[2];
 
-            crop(imageList[i].data, orig_h, orig_w, infer_h, infer_w, numDetsInFrame, nmsed_boxes + i * maxNumDets * 4, singleImageBBoxList);
+            // crop(imageList[i].data, orig_h, orig_w, infer_h, infer_w, numDetsInFrame, nmsed_boxes + i * maxNumDets * 4, singleImageBBoxList);
             // spdlog::get("container_agent")->trace("{0:s} cropped {1:d} bboxes in image {2:d}", msvc_name, numDetsInFrame, i);
 
             // After cropping, we need to find the right queues to put the bounding boxes in

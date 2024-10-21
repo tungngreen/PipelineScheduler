@@ -62,6 +62,7 @@
             },
             {
                 "msvc_name": "preprocessor",
+                "msvc_concat": 1,
                 "msvc_idealBatchSize": 2,
                 "msvc_appLvlConfigs": "../jsons/arcface_preproc.json",
                 "msvc_dnstreamMicroservices": [

@@ -32,9 +32,9 @@
                 ],
                 "msvc_dataShape": [
                     [
-                        3,
-                        640,
-                        640
+                        -1,
+                        -1,
+                        -1
                     ]
                 ],
                 "msvc_pipelineSLO": 999999,

@@ -60,7 +60,7 @@ std::chrono::time_point<std::chrono::_V2::system_clock, std::chrono::millisecond
 
 namespace msvcconfigs {
 
-    std::tuple<json, json> loadJson();
+    json loadJson();
 
     std::vector<BaseMicroserviceConfigs> LoadFromJson();
 }

@@ -45,6 +45,19 @@ inline cv::cuda::GpuMat resizePadRightBottom(
     uint8_t RESIZE_INTERPOL_TYPE = 3 //INTER_AREA
 );
 
+inline bool resizeIntoFrame(
+    const cv::cuda::GpuMat &input,
+    cv::cuda::GpuMat &frame,
+    const uint16_t left,
+    const uint16_t top,
+    const uint16_t height,
+    const uint16_t width,
+    cv::cuda::Stream &stream = cv::cuda::Stream::Null(),
+    uint8_t IMG_TYPE = 16, //CV_8UC3
+    uint8_t COLOR_CVT_TYPE = 4, //CV_BGR2RGB
+    uint8_t RESIZE_INTERPOL_TYPE = 3 //INTER_AREA
+);
+
 inline cv::cuda::GpuMat normalize(
     const cv::cuda::GpuMat &input,
     cv::cuda::Stream &stream = cv::cuda::Stream::Null(),
@@ -96,6 +109,25 @@ struct BaseClassifierConfigs : BaseMicroserviceConfigs {
     uint16_t msvc_numClasses;
 };
 
+struct ConcatDims {
+    int32_t x1, y1, width, height;
+};
+
+struct ConcatConfigs {
+    uint8_t numImgs = 1;
+    uint8_t currIndex = 0;
+
+    std::vector<ConcatDims> concatDims;
+};
+
+
+void concatConfigsGenerator(
+    const RequestShapeType &inferenceShapes,
+    ConcatConfigs &concat,
+    const uint8_t padding = 0
+);
+
+
 
 class BaseReqBatcher : public Microservice {
 public:
@@ -129,7 +161,10 @@ public:
     bool readModelProfile(const json &profile);
 
 protected:
-    BatchSizeType msvc_onBufferBatchSize = 0;
+    // number of concatentated and ready to be batched requests
+    BatchSizeType msvc_onBufferReadyBatchSize = 0;
+    // total number of requests that have been put into a concatenated request in this batch
+    BatchSizeType msvc_numsOnBufferReqs = 0;
     std::vector<cv::cuda::GpuMat> msvc_batchBuffer;
     inline bool isTimeToBatch() override;
     template <typename T>
@@ -148,6 +183,9 @@ protected:
     // to be processed on time
     ClockType msvc_nextMustBatchTime;
     uint64_t timeout = 100000; //microseconds
+
+    ConcatConfigs msvc_concat;
+    cv::cuda::GpuMat msvc_concatBuffer;
 };
 
 
@@ -196,13 +234,14 @@ protected:
  *                      [x1, y1, x2, y2] (e.g., [0, 266, 260, 447])
  * @return cv::cuda::GpuMat
  */
-inline void crop(
-    const cv::cuda::GpuMat &image,
+inline std::vector<uint8_t> crop(
+    const std::vector<cv::cuda::GpuMat> &images,
+    const std::vector<ConcatDims> &concatDims,
     int orig_h,
     int orig_w,
     int infer_h,
     int infer_w,
-    int numDetections,
+    uint16_t numDetections,
     const float *bbox_coorList,
     std::vector<cv::cuda::GpuMat> &croppedBBoxes
 );
@@ -229,6 +268,8 @@ public:
         }
         msvc_processRecords.setKeepLength((uint64_t)jsonConfigs.at("cont_metricsScrapeIntervalMillisec") * 2);
         msvc_arrivalRecords.setKeepLength((uint64_t) jsonConfigs.at("cont_metricsScrapeIntervalMillisec") * 2);
+
+        msvc_concat.numImgs = jsonConfigs["msvc_concat"];
     };
 
     virtual ProcessRecordType getProcessRecords() override {
@@ -282,6 +323,10 @@ protected:
         Request<LocalCPUReqDataType> cpuReq;
         Request<LocalGPUReqDataType> gpuReq;
     };
+
+    RequestShapeType msvc_inferenceShape;
+
+    ConcatConfigs msvc_concat;
 };
 
 class BaseBBoxCropper : public BasePostprocessor {
