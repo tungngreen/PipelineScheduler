@@ -15,7 +15,7 @@ service ControlCommands {
   rpc UpdateBatchSize(ContainerInts) returns (google.protobuf.Empty) {}
   rpc UpdateResolution(ContainerInts) returns (google.protobuf.Empty) {}
   rpc UpdateTimeKeeping(indevicecommunication.TimeKeeping) returns (google.protobuf.Empty) {}
-  rpc ReturnFlRequest(indevicecommunication.FlData) returns (google.protobuf.Empty) {}
+  rpc ReturnFl(indevicecommunication.FlData) returns (google.protobuf.Empty) {}
   rpc StopContainer(indevicecommunication.ContainerSignal) returns (google.protobuf.Empty) {}
   rpc Shutdown(google.protobuf.Empty) returns (google.protobuf.Empty) {}
 }

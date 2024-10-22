@@ -639,7 +639,7 @@ ContainerAgent::ContainerAgent(const json& configs) {
     run = true;
     reportHwMetrics = false;
     profiler = nullptr;
-    cont_ppo = new PPOAgent(cont_name, 5, configs["profiling"]["profile_maxBatch"], 4, 4);
+    cont_ppo = new PPOAgent(cont_name, 5, configs["profiling"]["profile_maxBatch"], 4, 4, sender_cq, stub);
     std::thread receiver(&ContainerAgent::HandleRecvRpcs, this);
     receiver.detach();
 }
@@ -1056,6 +1056,7 @@ void ContainerAgent::HandleRecvRpcs() {
     new UpdateResolutionRequestHandler(&service, server_cq.get(), this);
     new UpdateTimeKeepingRequestHandler(&service, server_cq.get(), this);
     new SyncDatasourcesRequestHandler(&service, server_cq.get(), this);
+    new FederatedLearningReturnRequestHandler(&service, server_cq.get(), cont_ppo);
     void *tag;
     bool ok;
     while (run) {
@@ -1258,6 +1259,21 @@ void ContainerAgent::SyncDatasourcesRequestHandler::Proceed() {
         service->RequestSyncDatasources(&ctx, &request, &responder, cq, cq, this);
     } else if (status == PROCESS) {
         containerAgent->transferFrameID(absl::StrFormat("localhost:%d/", request.value()));
+        status = FINISH;
+        responder.Finish(reply, Status::OK, this);
+    } else {
+        GPR_ASSERT(status == FINISH);
+        delete this;
+    }
+}
+
+void ContainerAgent::FederatedLearningReturnRequestHandler::Proceed() {
+    if (status == CREATE) {
+        status = PROCESS;
+        service->RequestFederatedLearningReturn(&ctx, &request, &responder, cq, cq, this);
+    } else if (status == PROCESS) {
+        new FederatedLearningReturnRequestHandler(service, cq, ppoAgent);
+        ppoAgent->federatedUpdateCallback(request);
         status = FINISH;
         responder.Finish(reply, Status::OK, this);
     } else {

@@ -15,7 +15,7 @@ service InDeviceCommunication {
   rpc UpdateTimeKeeping(TimeKeeping) returns (google.protobuf.Empty) {}
   rpc SyncDatasources(Int32) returns (google.protobuf.Empty) {}
   rpc SetStartFrame(Int32) returns (google.protobuf.Empty) {}
-  rpc FederatedLearningRequest(FlData) returns (google.protobuf.Empty) {}
+  rpc StartFederatedLearning(FlData) returns (google.protobuf.Empty) {}
   rpc FederatedLearningReturn(FlData) returns (google.protobuf.Empty) {}
   rpc StopExecution(ContainerSignal) returns (google.protobuf.Empty) {}
 }

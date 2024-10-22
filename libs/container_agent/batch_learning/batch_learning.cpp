@@ -1,8 +1,9 @@
 #include "batch_learning.h"
 
 PPOAgent::PPOAgent(std::string& cont_name, uint state_size, uint max_batch, uint resolution_size, uint threading_size,
-                   uint update_steps, uint federated_steps, double lambda, double gamma, const std::string& model_save)
-                   : lambda(lambda), gamma(gamma), max_batch(max_batch), update_steps(update_steps),
+                   CompletionQueue *cq, std::shared_ptr<InDeviceCommunication::Stub> stub, uint update_steps,
+                   uint federated_steps, double lambda, double gamma, const std::string& model_save)
+                   : cq(cq), stub(stub), lambda(lambda), gamma(gamma), max_batch(max_batch), update_steps(update_steps),
                    federated_steps(federated_steps) {
     path = "../models/batch_learning/" + cont_name;
     std::filesystem::create_directories(std::filesystem::path(path));
@@ -28,14 +29,18 @@ PPOAgent::PPOAgent(std::string& cont_name, uint state_size, uint max_batch, uint
 
 void PPOAgent::update() {
     steps_counter = 0;
+    if (federated_steps_counter == 0) {
+        spdlog::trace("Waiting for federated update, cancel !");
+        return;
+    }
     if (federated_steps_counter++ % federated_steps == 0) {
         std::cout << "Federated Training: " << avg_reward << std::endl;
-        avg_reward = 0.0;
-        federated_steps_counter = 1;
+        spdlog::info("Federated training RL agent at average Reward {}!", avg_reward);
+        federated_steps_counter = 0;
         federatedUpdate();
         return;
     }
-    spdlog::info("Updating reinforcement learning batch size model!");
+    spdlog::info("Locally training RL agent at average Reward {}!", avg_reward);
     Stopwatch sw;
     sw.start();
 
@@ -61,30 +66,47 @@ void PPOAgent::update() {
     // Backpropagation
     optimizer->zero_grad();
     loss.to(torch::kF64).backward();
+    std::lock_guard<std::mutex> lock(model_mutex);
     optimizer->step();
     sw.stop();
 
-    std::cout << "Training: " << sw.elapsed_microseconds() << "," << avg_reward << std::endl;
+    std::cout << "Training: " << sw.elapsed_microseconds() << std::endl;
 
-    avg_reward = 0.0;
-    states.clear();
-    resolution_actions.clear();
-    batching_actions.clear();
-    scaling_actions.clear();
-    rewards.clear();
-    log_probs.clear();
-    values.clear();
+    reset();
 }
 
 void PPOAgent::federatedUpdate() {
-    states.clear();
-    resolution_actions.clear();
-    batching_actions.clear();
-    scaling_actions.clear();
-    rewards.clear();
-    log_probs.clear();
-    values.clear();
+    FlData request;
+    // save model information in uchar* pointer and then reload it from that information
+    std::ostringstream oss;
+    torch::save(model, oss);
+    request.set_params(oss.str());
+    request.set_states(torch::stack(states).to(torch::kF64).data_ptr<uchar>(), states.size() * states[0].numel() * sizeof(double));
+    request.set_values(torch::stack(values).to(torch::kF64).data_ptr<uchar>(), values.size() * values[0].numel() * sizeof(double));
+    request.set_resolution_actions(torch::tensor(resolution_actions).to(torch::kF64).data_ptr<uchar>(), resolution_actions.size() * sizeof(int));
+    request.set_batching_actions(torch::tensor(batching_actions).to(torch::kF64).data_ptr<uchar>(), batching_actions.size() * sizeof(int));
+    request.set_scaling_actions(torch::tensor(scaling_actions).to(torch::kF64).data_ptr<uchar>(), scaling_actions.size() * sizeof(int));
+    request.set_rewards(computeCumuRewards().to(torch::kF64).data_ptr<uchar>(), rewards.size() * sizeof(double));
+    request.set_log_probs(torch::stack(log_probs).to(torch::kF64).data_ptr<uchar>(), log_probs.size() * log_probs[0].numel() * sizeof(double));
+    reset();
+    EmptyMessage reply;
+    ClientContext context;
+    Status status;
+    std::unique_ptr<ClientAsyncResponseReader<EmptyMessage>> rpc(
+            stub->AsyncStartFederatedLearning(&context, request, cq));
+    rpc->Finish(&reply, &status, (void *)1);
+    void *got_tag;
+    bool ok = false;
+    if (cq != nullptr) GPR_ASSERT(cq->Next(&got_tag, &ok));
+}
+
+void PPOAgent::federatedUpdateCallback(FlData &response) {
+    std::istringstream iss(response.params());
+    std::lock_guard<std::mutex> lock(model_mutex);
+    torch::load(model, iss);
     steps_counter = 0;
+    federated_steps_counter = 1;
+    reset();
 }
 
 void PPOAgent::rewardCallback(double throughput, double drops, double latency_penalty, double oversize_penalty) {
@@ -97,6 +119,7 @@ void PPOAgent::setState(double curr_batch, double curr_resolution_choice, double
 }
 
 std::tuple<int, int, int> PPOAgent::selectAction(torch::Tensor state) {
+    std::lock_guard<std::mutex> lock(model_mutex);
     auto [policy1, policy2, policy3, value] = model->forward(state);
 
     torch::Tensor action_dist = torch::multinomial(policy1, 1);  // Sample from policy (discrete distribution)

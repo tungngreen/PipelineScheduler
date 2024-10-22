@@ -1,3 +1,6 @@
+#ifndef PIPEPLUSPLUS_BATCH_LEARNING_H
+#define PIPEPLUSPLUS_BATCH_LEARNING_H
+
 #include "misc.h"
 #include <fstream>
 #include <torch/torch.h>
@@ -6,8 +9,13 @@
 #include <chrono>
 #include "indevicecommunication.grpc.pb.h"
 
-#ifndef PIPEPLUSPLUS_BATCH_LEARNING_H
-#define PIPEPLUSPLUS_BATCH_LEARNING_H
+using grpc::Status;
+using grpc::CompletionQueue;
+using grpc::ClientContext;
+using grpc::ClientAsyncResponseReader;
+using indevicecommunication::InDeviceCommunication;
+using indevicecommunication::FlData;
+using EmptyMessage = google::protobuf::Empty;
 
 enum threadingAction {
     NoMultiThreads = 0,
@@ -16,7 +24,6 @@ enum threadingAction {
     BothMultiThreads = 3
 };
 
-// Network model for Proximal Policy Optimization
 struct ActorCriticNet : torch::nn::Module {
     torch::nn::Linear fc1{nullptr}, policy_head{nullptr}, value_head{nullptr};
 
@@ -68,8 +75,8 @@ struct MultiPolicyNetwork: torch::nn::Module {
 class PPOAgent {
 public:
     PPOAgent(std::string& cont_name, uint state_size, uint max_batch, uint resolution_size, uint threading_size,
-             uint update_steps = 64, uint federated_steps = 5, double lambda = 0.95, double gamma = 0.99,
-             const std::string& model_save = "");
+             CompletionQueue *cq, std::shared_ptr<InDeviceCommunication::Stub> stub, uint update_steps = 64,
+             uint federated_steps = 5, double lambda = 0.95, double gamma = 0.99, const std::string& model_save = "");
 
     ~PPOAgent() {
         torch::save(model, path + "/latest_model.pt");
@@ -79,16 +86,29 @@ public:
     void rewardCallback(double throughput, double drops, double latency_penalty, double oversize_penalty);
     void setState(double curr_batch, double curr_resolution_choice,  double arrival, double pre_queue_size,
                   double inf_queue_size);
+    void federatedUpdateCallback(FlData &response);
 
 private:
     void update();
     void federatedUpdate();
+    void reset() {
+        avg_reward = 0.0;
+        states.clear();
+        values.clear();
+        resolution_actions.clear();
+        batching_actions.clear();
+        scaling_actions.clear();
+        rewards.clear();
+        log_probs.clear();
+    }
     std::tuple<int, int, int> selectAction(torch::Tensor state);
     torch::Tensor computeCumuRewards(double last_value = 0.0) const;
     torch::Tensor computeGae(double last_value = 0.0) const;
 
+    std::mutex model_mutex;
     std::shared_ptr<MultiPolicyNetwork> model;
     std::unique_ptr<torch::optim::Optimizer> optimizer;
+    torch::Tensor state;
     std::vector<torch::Tensor> states, log_probs, values;
     std::vector<int> resolution_actions;
     std::vector<int> batching_actions;
@@ -98,6 +118,8 @@ private:
     std::mt19937 re;
     std::ofstream out;
     std::string path;
+    CompletionQueue *cq;
+    std::shared_ptr<InDeviceCommunication::Stub> stub;
 
     double lambda;
     double gamma;

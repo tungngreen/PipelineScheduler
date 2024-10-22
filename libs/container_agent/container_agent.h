@@ -265,6 +265,21 @@ protected:
         ContainerAgent *containerAgent;
     };
 
+    class FederatedLearningReturnRequestHandler : public RequestHandler {
+    public:
+        FederatedLearningReturnRequestHandler(InDeviceCommunication::AsyncService *service, ServerCompletionQueue *cq,
+                                              PPOAgent *ppoAgent)
+                : RequestHandler(service, cq), ppoAgent(ppoAgent) {
+            Proceed();
+        }
+
+        void Proceed() final;
+
+    private:
+        FlData request;
+        PPOAgent *ppoAgent;
+    };
+
     virtual void HandleRecvRpcs();
 
     bool readModelProfile(const json &profile);
@@ -284,7 +299,7 @@ protected:
     CompletionQueue *sender_cq;
     InDeviceCommunication::AsyncService service;
     std::unique_ptr<grpc::Server> server;
-    std::unique_ptr<InDeviceCommunication::Stub> stub;
+    std::shared_ptr<InDeviceCommunication::Stub> stub;
     std::atomic<bool> run;
 
     unsigned int pid;
