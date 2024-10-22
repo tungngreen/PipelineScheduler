@@ -16,6 +16,7 @@ using grpc::ClientAsyncResponseReader;
 using indevicecommunication::InDeviceCommunication;
 using indevicecommunication::FlData;
 using EmptyMessage = google::protobuf::Empty;
+using T = torch::Tensor;
 
 enum threadingAction {
     NoMultiThreads = 0,
@@ -33,7 +34,7 @@ struct ActorCriticNet : torch::nn::Module {
         value_head = register_module("value_head", torch::nn::Linear(64, 1));
     }
 
-    std::pair<torch::Tensor, torch::Tensor> forward(torch::Tensor state) {
+    std::pair<T, T> forward(T state) {
         auto x = torch::relu(fc1->forward(state));
         auto policy_logits = policy_head->forward(x);
         auto policy = torch::softmax(policy_logits, -1); // Softmax to obtain action probabilities
@@ -59,7 +60,7 @@ struct MultiPolicyNetwork: torch::nn::Module {
         value_head = register_module("value_head", torch::nn::Linear(64, 1));
     }
 
-    std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor> forward(torch::Tensor x) {
+    std::tuple<T, T, T, T> forward(T x) {
         auto shared_features = torch::relu(shared_layer1(x));
         shared_features = torch::relu(shared_layer2(shared_features));
         auto policy1_output = torch::nn::functional::softmax(policy_head1(shared_features), -1);
@@ -101,15 +102,15 @@ private:
         rewards.clear();
         log_probs.clear();
     }
-    std::tuple<int, int, int> selectAction(torch::Tensor state);
-    torch::Tensor computeCumuRewards(double last_value = 0.0) const;
-    torch::Tensor computeGae(double last_value = 0.0) const;
+    std::tuple<int, int, int> selectAction();
+    T computeCumuRewards(double last_value = 0.0) const;
+    T computeGae(double last_value = 0.0) const;
 
     std::mutex model_mutex;
     std::shared_ptr<MultiPolicyNetwork> model;
     std::unique_ptr<torch::optim::Optimizer> optimizer;
-    torch::Tensor state;
-    std::vector<torch::Tensor> states, log_probs, values;
+    T state;
+    std::vector<T> states, log_probs, values;
     std::vector<int> resolution_actions;
     std::vector<int> batching_actions;
     std::vector<int> scaling_actions;
@@ -118,6 +119,7 @@ private:
     std::mt19937 re;
     std::ofstream out;
     std::string path;
+    std::string cont_name;
     CompletionQueue *cq;
     std::shared_ptr<InDeviceCommunication::Stub> stub;
 

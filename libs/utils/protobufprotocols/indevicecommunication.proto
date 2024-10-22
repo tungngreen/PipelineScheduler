@@ -58,12 +58,13 @@ message Int32 {
 }
 
 message FlData {
-  bytes params = 1;
-  optional bytes states = 2;
-  optional bytes values = 3;
-  optional bytes resolution_actions = 4;
-  optional bytes batching_actions = 5;
-  optional bytes scaling_actions = 6;
-  optional bytes rewards = 7;
-  optional bytes log_probs = 8;
+  string name = 1;
+  bytes network = 2;
+  optional bytes states = 3;
+  optional bytes values = 4;
+  optional bytes resolution_actions = 5;
+  optional bytes batching_actions = 6;
+  optional bytes scaling_actions = 7;
+  optional bytes rewards = 8;
+  optional bytes log_probs = 9;
 }

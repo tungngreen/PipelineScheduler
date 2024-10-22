@@ -454,6 +454,7 @@ void DeviceAgent::Ready(const std::string &ip, SystemDeviceType type) {
 
 void DeviceAgent::HandleDeviceRecvRpcs() {
     new ReportStartRequestHandler(&device_service, device_cq.get(), this);
+    new StartFederatedLearningRequestHandler(&device_service, device_cq.get(), this);
     void *tag;
     bool ok;
     while (running) {
@@ -469,6 +470,7 @@ void DeviceAgent::HandleControlRecvRpcs() {
     new ExecuteNetworkTestRequestHandler(&controller_service, controller_cq.get(), this);
     new StartContainerRequestHandler(&controller_service, controller_cq.get(), this);
     new UpdateDownstreamRequestHandler(&controller_service, controller_cq.get(), this);
+    new SyncDatasourceRequestHandler(&controller_service, controller_cq.get(), this);
     new UpdateBatchsizeRequestHandler(&controller_service, controller_cq.get(), this);
     new UpdateResolutionRequestHandler(&controller_service, controller_cq.get(), this);
     new UpdateTimeKeepingRequestHandler(&controller_service, controller_cq.get(), this);
@@ -509,7 +511,6 @@ void DeviceAgent::ReportStartRequestHandler::Proceed() {
         service->RequestReportMsvcStart(&ctx, &request, &responder, cq, cq, this);
     } else if (status == PROCESS) {
         new ReportStartRequestHandler(service, cq, device_agent);
-
         int pid = getContainerProcessPid(request.msvc_name());
         device_agent->containers[request.msvc_name()].pid = pid;
         device_agent->dev_profiler->addPid(pid);
@@ -517,6 +518,29 @@ void DeviceAgent::ReportStartRequestHandler::Proceed() {
         reply.set_pid(pid);
         status = FINISH;
         responder.Finish(reply, Status::OK, this);
+    } else {
+        GPR_ASSERT(status == FINISH);
+        delete this;
+    }
+}
+
+void DeviceAgent::StartFederatedLearningRequestHandler::Proceed() {
+    if (status == CREATE) {
+        status = PROCESS;
+        service->RequestStartFederatedLearning(&ctx, &request, &responder, cq, cq, this);
+    } else if (status == PROCESS) {
+        new StartFederatedLearningRequestHandler(service, cq, device_agent);
+        ClientContext context;
+        Status sending_status;
+        CompletionQueue* sending_cq = device_agent->controller_sending_cq;
+        std::unique_ptr<ClientAsyncResponseReader<EmptyMessage>> rpc(
+                device_agent->controller_stub->AsyncForwardFlRequest(&context, request, sending_cq));
+        rpc->Finish(&reply, &sending_status, (void *)1);
+        void *got_tag;
+        bool ok = false;
+        if (sending_cq != nullptr) GPR_ASSERT(sending_cq->Next(&got_tag, &ok));
+        status = FINISH;
+        responder.Finish(reply, sending_status, this);
     } else {
         GPR_ASSERT(status == FINISH);
         delete this;
@@ -719,6 +743,29 @@ void DeviceAgent::UpdateTimeKeepingRequestHandler::Proceed() {
         bool ok = false;
         if (device_agent->containers[request.name()].cq != nullptr) GPR_ASSERT(device_agent->containers[request.name()].cq->Next(&got_tag, &ok));
         status = FINISH;
+    } else {
+        GPR_ASSERT(status == FINISH);
+        delete this;
+    }
+}
+
+void DeviceAgent::ReturnFlRequestHandler::Proceed() {
+    if (status == CREATE) {
+        status = PROCESS;
+        service->RequestReturnFl(&ctx, &request, &responder, cq, cq, this);
+    } else if (status == PROCESS) {
+        new ReturnFlRequestHandler(service, cq, device_agent);
+        ClientContext context;
+        Status sending_status;
+        CompletionQueue* sending_cq = device_agent->containers[request.name()].cq;
+        std::unique_ptr<ClientAsyncResponseReader<EmptyMessage>> rpc(
+                device_agent->containers[request.name()].stub->AsyncFederatedLearningReturn(&context, request, sending_cq));
+        rpc->Finish(&reply, &sending_status, (void *)1);
+        void *got_tag;
+        bool ok = false;
+        if (sending_cq != nullptr) GPR_ASSERT(sending_cq->Next(&got_tag, &ok));
+        status = FINISH;
+        responder.Finish(reply, Status::OK, this);
     } else {
         GPR_ASSERT(status == FINISH);
         delete this;

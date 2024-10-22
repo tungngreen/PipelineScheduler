@@ -3,8 +3,8 @@
 PPOAgent::PPOAgent(std::string& cont_name, uint state_size, uint max_batch, uint resolution_size, uint threading_size,
                    CompletionQueue *cq, std::shared_ptr<InDeviceCommunication::Stub> stub, uint update_steps,
                    uint federated_steps, double lambda, double gamma, const std::string& model_save)
-                   : cq(cq), stub(stub), lambda(lambda), gamma(gamma), max_batch(max_batch), update_steps(update_steps),
-                   federated_steps(federated_steps) {
+                   : cont_name(cont_name), cq(cq), stub(stub), lambda(lambda), gamma(gamma), max_batch(max_batch),
+                   update_steps(update_steps), federated_steps(federated_steps) {
     path = "../models/batch_learning/" + cont_name;
     std::filesystem::create_directories(std::filesystem::path(path));
     out.open(path + "/latest_log.csv");
@@ -36,7 +36,7 @@ void PPOAgent::update() {
     if (federated_steps_counter++ % federated_steps == 0) {
         std::cout << "Federated Training: " << avg_reward << std::endl;
         spdlog::info("Federated training RL agent at average Reward {}!", avg_reward);
-        federated_steps_counter = 0;
+        federated_steps_counter = 0;  // 0 means that we are waiting for federated update to come back
         federatedUpdate();
         return;
     }
@@ -45,23 +45,23 @@ void PPOAgent::update() {
     sw.start();
 
     auto [policy1, policy2, policy3, v] = model->forward(torch::stack(states));
-    auto action1_probs = torch::softmax(policy1, -1);
-    auto action1_log_probs = torch::log(action1_probs.gather(-1, torch::tensor(resolution_actions).view({-1, 1, 1})).squeeze(-1));
-    auto action2_probs = torch::softmax(policy2, -1);
-    auto action2_log_probs = torch::log(action2_probs.gather(-1, torch::tensor(batching_actions).view({-1, 1, 1})).squeeze(-1));
-    auto action3_probs = torch::softmax(policy3, -1);
-    auto action3_log_probs = torch::log(action3_probs.gather(-1, torch::tensor(batching_actions).view({-1, 1, 1})).squeeze(-1));
-    auto new_log_probs = action1_log_probs + action2_log_probs + action3_log_probs;
+    T action1_probs = torch::softmax(policy1, -1);
+    T action1_log_probs = torch::log(action1_probs.gather(-1, torch::tensor(resolution_actions).view({-1, 1, 1})).squeeze(-1));
+    T action2_probs = torch::softmax(policy2, -1);
+    T action2_log_probs = torch::log(action2_probs.gather(-1, torch::tensor(batching_actions).view({-1, 1, 1})).squeeze(-1));
+    T action3_probs = torch::softmax(policy3, -1);
+    T action3_log_probs = torch::log(action3_probs.gather(-1, torch::tensor(batching_actions).view({-1, 1, 1})).squeeze(-1));
+    T new_log_probs = action1_log_probs + action2_log_probs + action3_log_probs;
 
-    auto ratio = torch::exp(new_log_probs - torch::stack(log_probs));
-    auto clipped_ratio = torch::clamp(ratio, 1 - clip_epsilon, 1 + clip_epsilon);
-    torch::Tensor advantages = computeGae();
+    T ratio = torch::exp(new_log_probs - torch::stack(log_probs));
+    T clipped_ratio = torch::clamp(ratio, 1 - clip_epsilon, 1 + clip_epsilon);
+    T advantages = computeGae();
 
-    auto policy_loss = -torch::min(ratio * advantages, clipped_ratio * advantages).to(torch::kF64).mean();
-    auto value_loss = torch::mse_loss(v, computeCumuRewards()).to(torch::kF64);
-    auto policy1_penalty = penalty_weight * torch::mean(torch::clamp(torch::tensor(resolution_actions), 0, 1)).to(torch::kF64);
-    auto policy3_penalty = penalty_weight * torch::mean(torch::clamp(torch::tensor(scaling_actions), 0, 1)).to(torch::kF64);
-    auto loss = policy_loss + 0.5 * value_loss + policy1_penalty + policy3_penalty;
+    T policy_loss = -torch::min(ratio * advantages, clipped_ratio * advantages).to(torch::kF64).mean();
+    T value_loss = torch::mse_loss(v, computeCumuRewards()).to(torch::kF64);
+    T policy1_penalty = penalty_weight * torch::mean(torch::clamp(torch::tensor(resolution_actions), 0, 1)).to(torch::kF64);
+    T policy3_penalty = penalty_weight * torch::mean(torch::clamp(torch::tensor(scaling_actions), 0, 1)).to(torch::kF64);
+    T loss = policy_loss + 0.5 * value_loss + policy1_penalty + policy3_penalty;
 
     // Backpropagation
     optimizer->zero_grad();
@@ -80,7 +80,8 @@ void PPOAgent::federatedUpdate() {
     // save model information in uchar* pointer and then reload it from that information
     std::ostringstream oss;
     torch::save(model, oss);
-    request.set_params(oss.str());
+    request.set_name(cont_name);
+    request.set_network(oss.str());
     request.set_states(torch::stack(states).to(torch::kF64).data_ptr<uchar>(), states.size() * states[0].numel() * sizeof(double));
     request.set_values(torch::stack(values).to(torch::kF64).data_ptr<uchar>(), values.size() * values[0].numel() * sizeof(double));
     request.set_resolution_actions(torch::tensor(resolution_actions).to(torch::kF64).data_ptr<uchar>(), resolution_actions.size() * sizeof(int));
@@ -98,43 +99,47 @@ void PPOAgent::federatedUpdate() {
     void *got_tag;
     bool ok = false;
     if (cq != nullptr) GPR_ASSERT(cq->Next(&got_tag, &ok));
+    if (!status.ok()){
+        spdlog::error("Federated update failed: {}", status.error_message());
+        federated_steps_counter = 1; // 1 means that we are starting local updates again until the next federation
+    }
 }
 
 void PPOAgent::federatedUpdateCallback(FlData &response) {
-    std::istringstream iss(response.params());
+    std::istringstream iss(response.network());
     std::lock_guard<std::mutex> lock(model_mutex);
     torch::load(model, iss);
     steps_counter = 0;
-    federated_steps_counter = 1;
+    federated_steps_counter = 1; // 1 means that we are starting local updates again until the next federation
     reset();
 }
 
 void PPOAgent::rewardCallback(double throughput, double drops, double latency_penalty, double oversize_penalty) {
+    states.push_back(state);
     rewards.push_back(2 * throughput - drops - latency_penalty + (1 - oversize_penalty));
 }
 
 void PPOAgent::setState(double curr_batch, double curr_resolution_choice, double arrival, double pre_queue_size, double inf_queue_size) {
-    states.push_back(torch::tensor({{curr_batch / max_batch, curr_resolution_choice, arrival, pre_queue_size,
-                                     inf_queue_size}}, torch::kF64));
+    state = torch::tensor({{curr_batch / max_batch, curr_resolution_choice, arrival, pre_queue_size, inf_queue_size}}, torch::kF64);
 }
 
-std::tuple<int, int, int> PPOAgent::selectAction(torch::Tensor state) {
+std::tuple<int, int, int> PPOAgent::selectAction() {
     std::lock_guard<std::mutex> lock(model_mutex);
     auto [policy1, policy2, policy3, value] = model->forward(state);
 
-    torch::Tensor action_dist = torch::multinomial(policy1, 1);  // Sample from policy (discrete distribution)
+    T action_dist = torch::multinomial(policy1, 1);  // Sample from policy (discrete distribution)
     int resolution = action_dist.item<int>();  // Convert tensor to int action
-    action_dist = torch::multinomial(policy2, 1);  // Sample from policy (discrete distribution)
-    int batching = action_dist.item<int>();  // Convert tensor to int action
-    action_dist = torch::multinomial(policy3, 1);  // Sample from policy (discrete distribution)
-    int scaling = action_dist.item<int>();  // Convert tensor to int action
+    action_dist = torch::multinomial(policy2, 1);
+    int batching = action_dist.item<int>();
+    action_dist = torch::multinomial(policy3, 1);
+    int scaling = action_dist.item<int>();
 
     log_probs.push_back(torch::log(policy1.squeeze(0)[resolution] + torch::log(policy2.squeeze(0)[batching]) + torch::log(policy3.squeeze(0)[scaling])));
     values.push_back(value);
     return std::make_tuple(resolution, batching, scaling);
 }
 
-torch::Tensor PPOAgent::computeCumuRewards(double last_value) const {
+T PPOAgent::computeCumuRewards(double last_value) const {
     std::vector<double> discounted_rewards;
     double cumulative = last_value;
     for (auto it = rewards.rbegin(); it != rewards.rend(); ++it) {
@@ -144,7 +149,7 @@ torch::Tensor PPOAgent::computeCumuRewards(double last_value) const {
     return torch::tensor(discounted_rewards).to(torch::kF64);
 }
 
-torch::Tensor PPOAgent::computeGae(double last_value) const {
+T PPOAgent::computeGae(double last_value) const {
     std::vector<double> advantages;
     double gae = 0.0;
     double next_value = last_value;
@@ -160,7 +165,7 @@ torch::Tensor PPOAgent::computeGae(double last_value) const {
 std::tuple<int, int, int> PPOAgent::runStep() {
     Stopwatch sw;
     sw.start();
-    std::tuple<int, int, int> action = selectAction(states.back());
+    std::tuple<int, int, int> action = selectAction();
     avg_reward += rewards[steps_counter] / update_steps;
 
     steps_counter++;
