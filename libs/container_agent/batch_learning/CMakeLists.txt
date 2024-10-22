@@ -49,12 +49,14 @@ target_include_directories(batch_learning
         ${OpenCV_INCLUDE_DIRS}
         ${PostgreSQL_INCLUDE_DIRS}
         ${LIBPQXX_INCLUDE_DIRS}
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/../../utils/protobufprotocols>
         PRIVATE
         # Used only when building the library:
         src)
 
 target_link_libraries(batch_learning
         PUBLIC
+        device_grpc_proto
         ${_GRPC_GRPCPP}
         ${_REFLECTION}
         ${_PROTOBUF_LIBPROTOBUF}

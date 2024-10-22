@@ -44,9 +44,10 @@ using grpc::ServerBuilder;
 using grpc::ServerContext;
 using grpc::ServerCompletionQueue;
 using indevicecommunication::InDeviceCommunication;
-using indevicecommunication::Signal;
+using indevicecommunication::ContainerSignal;
 using indevicecommunication::Connection;
 using indevicecommunication::ProcessData;
+using indevicecommunication::TimeKeeping;
 using EmptyMessage = google::protobuf::Empty;
 
 enum TransferMethod {
@@ -185,7 +186,7 @@ protected:
         void Proceed() final;
 
     private:
-        Signal request;
+        ContainerSignal request;
         std::atomic<bool> *run;
     };
 
@@ -245,7 +246,7 @@ protected:
         void Proceed() final;
 
     private:
-        indevicecommunication::TimeKeeping request;
+        TimeKeeping request;
         ContainerAgent *container_agent;
     };
 

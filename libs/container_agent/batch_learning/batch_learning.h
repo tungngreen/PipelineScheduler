@@ -4,9 +4,17 @@
 #include <random>
 #include <cmath>
 #include <chrono>
+#include "indevicecommunication.grpc.pb.h"
 
 #ifndef PIPEPLUSPLUS_BATCH_LEARNING_H
 #define PIPEPLUSPLUS_BATCH_LEARNING_H
+
+enum threadingAction {
+    NoMultiThreads = 0,
+    MultiPreprocess = 1,
+    MultiPostprocess = 2,
+    BothMultiThreads = 3
+};
 
 // Network model for Proximal Policy Optimization
 struct ActorCriticNet : torch::nn::Module {
@@ -22,7 +30,7 @@ struct ActorCriticNet : torch::nn::Module {
         auto x = torch::relu(fc1->forward(state));
         auto policy_logits = policy_head->forward(x);
         auto policy = torch::softmax(policy_logits, -1); // Softmax to obtain action probabilities
-        auto value = value_head->forward(x);             // State value
+        auto value = value_head->forward(x); // State value
         return {policy, value};
     }
 };
@@ -59,8 +67,9 @@ struct MultiPolicyNetwork: torch::nn::Module {
 // Proximal policy optimization, https://arxiv.org/abs/1707.06347
 class PPOAgent {
 public:
-    PPOAgent(std::string& cont_name, uint state_size, uint max_batch, uint resolution_size,
-             uint update_steps = 256, double lambda = 0.95, double gamma = 0.99, const std::string& model_save = "");
+    PPOAgent(std::string& cont_name, uint state_size, uint max_batch, uint resolution_size, uint threading_size,
+             uint update_steps = 64, uint federated_steps = 5, double lambda = 0.95, double gamma = 0.99,
+             const std::string& model_save = "");
 
     ~PPOAgent() {
         torch::save(model, path + "/latest_model.pt");
@@ -73,9 +82,10 @@ public:
 
 private:
     void update();
+    void federatedUpdate();
     std::tuple<int, int, int> selectAction(torch::Tensor state);
-    torch::Tensor compute_cumu_rewards(double last_value = 0.0);
-    torch::Tensor compute_gae(double last_value = 0.0);
+    torch::Tensor computeCumuRewards(double last_value = 0.0) const;
+    torch::Tensor computeGae(double last_value = 0.0) const;
 
     std::shared_ptr<MultiPolicyNetwork> model;
     std::unique_ptr<torch::optim::Optimizer> optimizer;
@@ -88,15 +98,18 @@ private:
     std::mt19937 re;
     std::ofstream out;
     std::string path;
-    uint max_batch;
 
-    uint counter = 0;
-    uint update_steps;
     double lambda;
     double gamma;
     double clip_epsilon;
     double avg_reward;
     double penalty_weight;
+    uint max_batch;
+
+    uint steps_counter = 0;
+    uint update_steps;
+    uint federated_steps_counter = 1;
+    uint federated_steps;
 };
 
 

@@ -1,18 +1,18 @@
 #include "batch_learning.h"
 
-PPOAgent::PPOAgent(std::string& cont_name, uint state_size, uint max_batch, uint resolution_size,
-                   uint update_steps, double lambda, double gamma, const std::string& model_save)
-                   : max_batch(max_batch), update_steps(update_steps), lambda(lambda), gamma(gamma) {
+PPOAgent::PPOAgent(std::string& cont_name, uint state_size, uint max_batch, uint resolution_size, uint threading_size,
+                   uint update_steps, uint federated_steps, double lambda, double gamma, const std::string& model_save)
+                   : lambda(lambda), gamma(gamma), max_batch(max_batch), update_steps(update_steps),
+                   federated_steps(federated_steps) {
     path = "../models/batch_learning/" + cont_name;
     std::filesystem::create_directories(std::filesystem::path(path));
     out.open(path + "/latest_log.csv");
 
     std::random_device rd;
     re = std::mt19937(rd());
-    model = std::make_shared<MultiPolicyNetwork>(state_size, resolution_size, max_batch, 2);
+    model = std::make_shared<MultiPolicyNetwork>(state_size, resolution_size, max_batch, threading_size);
     model->to(torch::kF64);
     if (!model_save.empty()) torch::load(model, model_save);
-
     optimizer = std::make_unique<torch::optim::Adam>(model->parameters(), torch::optim::AdamOptions(1e-3));
 
     avg_reward = 0.0;
@@ -27,6 +27,14 @@ PPOAgent::PPOAgent(std::string& cont_name, uint state_size, uint max_batch, uint
 }
 
 void PPOAgent::update() {
+    steps_counter = 0;
+    if (federated_steps_counter++ % federated_steps == 0) {
+        std::cout << "Federated Training: " << avg_reward << std::endl;
+        avg_reward = 0.0;
+        federated_steps_counter = 1;
+        federatedUpdate();
+        return;
+    }
     spdlog::info("Updating reinforcement learning batch size model!");
     Stopwatch sw;
     sw.start();
@@ -42,10 +50,10 @@ void PPOAgent::update() {
 
     auto ratio = torch::exp(new_log_probs - torch::stack(log_probs));
     auto clipped_ratio = torch::clamp(ratio, 1 - clip_epsilon, 1 + clip_epsilon);
-    torch::Tensor advantages = compute_gae();
+    torch::Tensor advantages = computeGae();
 
     auto policy_loss = -torch::min(ratio * advantages, clipped_ratio * advantages).to(torch::kF64).mean();
-    auto value_loss = torch::mse_loss(v, compute_cumu_rewards()).to(torch::kF64);
+    auto value_loss = torch::mse_loss(v, computeCumuRewards()).to(torch::kF64);
     auto policy1_penalty = penalty_weight * torch::mean(torch::clamp(torch::tensor(resolution_actions), 0, 1)).to(torch::kF64);
     auto policy3_penalty = penalty_weight * torch::mean(torch::clamp(torch::tensor(scaling_actions), 0, 1)).to(torch::kF64);
     auto loss = policy_loss + 0.5 * value_loss + policy1_penalty + policy3_penalty;
@@ -56,9 +64,8 @@ void PPOAgent::update() {
     optimizer->step();
     sw.stop();
 
-    std::cout << "Training: " << sw.elapsed_microseconds() << "," << counter << "," << avg_reward << std::endl;
+    std::cout << "Training: " << sw.elapsed_microseconds() << "," << avg_reward << std::endl;
 
-    counter = 0;
     avg_reward = 0.0;
     states.clear();
     resolution_actions.clear();
@@ -67,6 +74,17 @@ void PPOAgent::update() {
     rewards.clear();
     log_probs.clear();
     values.clear();
+}
+
+void PPOAgent::federatedUpdate() {
+    states.clear();
+    resolution_actions.clear();
+    batching_actions.clear();
+    scaling_actions.clear();
+    rewards.clear();
+    log_probs.clear();
+    values.clear();
+    steps_counter = 0;
 }
 
 void PPOAgent::rewardCallback(double throughput, double drops, double latency_penalty, double oversize_penalty) {
@@ -93,7 +111,7 @@ std::tuple<int, int, int> PPOAgent::selectAction(torch::Tensor state) {
     return std::make_tuple(resolution, batching, scaling);
 }
 
-torch::Tensor PPOAgent::compute_cumu_rewards(double last_value) {
+torch::Tensor PPOAgent::computeCumuRewards(double last_value) const {
     std::vector<double> discounted_rewards;
     double cumulative = last_value;
     for (auto it = rewards.rbegin(); it != rewards.rend(); ++it) {
@@ -103,7 +121,7 @@ torch::Tensor PPOAgent::compute_cumu_rewards(double last_value) {
     return torch::tensor(discounted_rewards).to(torch::kF64);
 }
 
-torch::Tensor PPOAgent::compute_gae(double last_value) {
+torch::Tensor PPOAgent::computeGae(double last_value) const {
     std::vector<double> advantages;
     double gae = 0.0;
     double next_value = last_value;
@@ -120,18 +138,18 @@ std::tuple<int, int, int> PPOAgent::runStep() {
     Stopwatch sw;
     sw.start();
     std::tuple<int, int, int> action = selectAction(states.back());
-    avg_reward += rewards[counter] / update_steps;
+    avg_reward += rewards[steps_counter] / update_steps;
 
-    counter++;
+    steps_counter++;
     resolution_actions.push_back(std::get<0>(action));
     batching_actions.push_back(std::get<1>(action));
     scaling_actions.push_back(std::get<2>(action));
     sw.stop();
-    out << sw.elapsed_microseconds() << "," << counter << "," << avg_reward << "," << std::get<0>(action) << "," << std::get<1>(action) << "," << std::get<2>(action) << std::endl;
+    out << sw.elapsed_microseconds() << "," << federated_steps_counter << "," << steps_counter << "," << avg_reward << "," << std::get<0>(action) << "," << std::get<1>(action) << "," << std::get<2>(action) << std::endl;
 
-    if (counter%update_steps == 0) {
+    if (steps_counter%update_steps == 0) {
         std::thread t(&PPOAgent::update, this);
         t.detach();
     }
-    return std::make_tuple(std::get<0>(action) + 1, std::get<1>(action) + 1, std::get<2>(action) + 1);
+    return std::make_tuple(std::get<0>(action) + 1, std::get<1>(action) + 1, std::get<2>(action));
 }
