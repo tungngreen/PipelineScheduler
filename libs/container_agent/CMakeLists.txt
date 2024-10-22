@@ -47,6 +47,9 @@ find_package(communicator CONFIG REQUIRED)
 set(controller_DIR "${CMAKE_CURRENT_BINARY_DIR}/../controller")
 find_package(controller CONFIG REQUIRED)
 
+set(baseprocessors_DIR "${CMAKE_CURRENT_BINARY_DIR}/../baseprocessors")
+find_package(baseprocessors CONFIG REQUIRED)
+
 set(batch_learning_DIR "${CMAKE_CURRENT_BINARY_DIR}/batch_learning")
 find_package(batch_learning CONFIG REQUIRED)
 
@@ -82,6 +85,7 @@ target_link_libraries(container_agent
         microservice
         controller
         communicator
+        baseprocessors
         batch_learning
 )
 

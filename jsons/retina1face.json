@@ -10,6 +10,7 @@
         "cont_pipeline": [
             {
                 "msvc_name": "receiver",
+                "msvc_numInstances": 1,
                 "msvc_idealBatchSize": 2,
                 "msvc_appLvlConfigs": "",
                 "msvc_dnstreamMicroservices": [
@@ -62,6 +63,7 @@
             },
             {
                 "msvc_name": "preprocessor",
+                "msvc_numInstances": 1,
                 "msvc_concat": 1,
                 "msvc_idealBatchSize": 2,
                 "msvc_appLvlConfigs": "../jsons/retinaface_preproc.json",
@@ -90,7 +92,7 @@
                     ]
                 ],
                 "msvc_pipelineSLO": 999999,
-                "msvc_type": 1,
+                "msvc_type": 1000,
                 "msvc_upstreamMicroservices": [
                     {
                         "nb_classOfInterest": -2,
@@ -128,6 +130,7 @@
             },
             {
                 "msvc_name": "inference",
+                "msvc_numInstances": 1,
                 "msvc_idealBatchSize": 2,
                 "msvc_appLvlConfigs": "../jsons/retinaface_trt.json",
                 "msvc_dnstreamMicroservices": [
@@ -163,7 +166,7 @@
                     ]
                 ],
                 "msvc_pipelineSLO": 999999,
-                "msvc_type": 2,
+                "msvc_type": 2000,
                 "msvc_upstreamMicroservices": [
                     {
                         "nb_classOfInterest": -2,
@@ -205,6 +208,7 @@
             },
             {
                 "msvc_name": "postprocessor",
+                "msvc_numInstances": 1,
                 "msvc_idealBatchSize": 2,
                 "msvc_appLvlConfigs": "",
                 "msvc_dnstreamMicroservices": [
@@ -240,7 +244,7 @@
                     ]
                 ],
                 "msvc_pipelineSLO": 999999,
-                "msvc_type": 3,
+                "msvc_type": 3001,
                 "msvc_upstreamMicroservices": [
                     {
                         "nb_classOfInterest": -2,
@@ -263,6 +267,7 @@
             },
             {
                 "msvc_name": "sender",
+                "msvc_numInstances": 1,
                 "msvc_idealBatchSize": 4,
                 "msvc_appLvlConfigs": "",
                 "msvc_dnstreamMicroservices": [
@@ -289,7 +294,7 @@
                     ]
                 ],
                 "msvc_pipelineSLO": 999999,
-                "msvc_type": 4,
+                "msvc_type": 4001,
                 "msvc_upstreamMicroservices": [
                     {
                         "nb_classOfInterest": -2,
