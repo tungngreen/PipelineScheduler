@@ -352,14 +352,12 @@ void DeviceAgent::ContainersLifeCheck() {
     }
 }
 
-void DeviceAgent::StopContainer(const DevContainerHandle &container, bool forced) {
-    indevicecommunication::Signal request;
+void DeviceAgent::StopContainer(const DevContainerHandle &container, ContainerSignal message) {
     EmptyMessage reply;
     ClientContext context;
     Status status;
-    request.set_forced(forced);
     std::unique_ptr<ClientAsyncResponseReader<EmptyMessage>> rpc(
-            container.stub->AsyncStopExecution(&context, request, container.cq));
+            container.stub->AsyncStopExecution(&context, message, container.cq));
 
     rpc->Finish(&reply, &status, (void *)1);
     void *got_tag;
@@ -582,7 +580,7 @@ void DeviceAgent::StopContainerRequestHandler::Proceed() {
             unsigned int pid = device_agent->containers[request.name()].pid;
             device_agent->containers[request.name()].pid = 0;
             spdlog::get("container_agent")->info("Stopping container: {}", request.name());
-            DeviceAgent::StopContainer(device_agent->containers[request.name()], request.forced());
+            DeviceAgent::StopContainer(device_agent->containers[request.name()], request);
             std::lock_guard<std::mutex> lock(device_agent->containers_mutex);
             device_agent->containers.erase(request.name());
             device_agent->dev_profiler->removePid(pid);
@@ -705,13 +703,6 @@ void DeviceAgent::UpdateTimeKeepingRequestHandler::Proceed() {
 
         ClientContext context;
         Status state;
-        indevicecommunication::TimeKeeping tk;
-        tk.set_slo(request.slo());
-        tk.set_time_budget(request.time_budget());
-        tk.set_start_time(request.start_time());
-        tk.set_end_time(request.end_time());
-        tk.set_local_duty_cycle(request.local_duty_cycle());
-        tk.set_cycle_start_time(request.cycle_start_time());
 
         //check if cont_name is in containers
         if (device_agent->containers.find(request.name()) == device_agent->containers.end()) {
@@ -720,7 +711,7 @@ void DeviceAgent::UpdateTimeKeepingRequestHandler::Proceed() {
             return;
         }
         std::unique_ptr<ClientAsyncResponseReader<EmptyMessage>> rpc(
-                device_agent->containers[request.name()].stub->AsyncUpdateTimeKeeping(&context, tk,
+                device_agent->containers[request.name()].stub->AsyncUpdateTimeKeeping(&context, request,
                                                                                      device_agent->containers[request.name()].cq));
 
         rpc->Finish(&reply, &state, (void *)1);

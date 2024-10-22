@@ -641,7 +641,7 @@ ContainerHandle *Controller::TranslateToContainer(PipelineModel *model, NodeHand
                                           ModelTypeReverseList[modelName],
                                           CheckMergable(modelName),
                                           {0},
-                                          model->task->tk_slo,
+                                          static_cast<uint64_t>(model->task->tk_slo),
                                           0.0,
                                           model->batchSize,
                                           device->next_free_port++,

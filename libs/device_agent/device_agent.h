@@ -7,7 +7,6 @@
 #include "container_agent.h"
 #include "profiler.h"
 #include "controller.h"
-#include "indevicecommunication.grpc.pb.h"
 #include <arpa/inet.h>
 #include <sys/socket.h>
 #include <netdb.h>
@@ -54,8 +53,11 @@ public:
 
     virtual ~DeviceAgent() {
         running = false;
+        ContainerSignal message;
+        message.set_forced(true);
         for (const auto &c: containers) {
-            StopContainer(c.second);
+            message.set_name(c.first);
+            StopContainer(c.second, message);
         }
 
         if (controller_server) {
@@ -122,7 +124,7 @@ protected:
         return system(command.c_str());
     };
 
-    static void StopContainer(const DevContainerHandle &container, bool forced = false);
+    static void StopContainer(const DevContainerHandle &container, ContainerSignal message);
 
     void UpdateContainerSender(int mode, const std::string &cont_name, const std::string &dwnstr, const std::string &ip,
                                const int &port);
