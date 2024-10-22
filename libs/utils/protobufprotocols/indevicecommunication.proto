@@ -15,11 +15,14 @@ service InDeviceCommunication {
   rpc UpdateTimeKeeping(TimeKeeping) returns (google.protobuf.Empty) {}
   rpc SyncDatasources(Int32) returns (google.protobuf.Empty) {}
   rpc SetStartFrame(Int32) returns (google.protobuf.Empty) {}
-  rpc StopExecution(Signal) returns (google.protobuf.Empty) {}
+  rpc FederatedLearningRequest(FlData) returns (google.protobuf.Empty) {}
+  rpc FederatedLearningReturn(FlData) returns (google.protobuf.Empty) {}
+  rpc StopExecution(ContainerSignal) returns (google.protobuf.Empty) {}
 }
 
-message Signal {
-  bool forced = 1;
+message ContainerSignal {
+  string name = 1;
+  bool forced = 2;
 }
 
 message Connection {
@@ -30,12 +33,13 @@ message Connection {
 }
 
 message TimeKeeping {
-  int32 slo = 1;
-  uint64 time_budget = 3;
-  uint64 start_time = 4;
-  uint64 end_time = 5;
-  uint64 local_duty_cycle = 6;
-  uint64 cycle_start_time = 7;
+  string name = 1;
+  int32 slo = 2;
+  uint64 time_budget = 4;
+  uint64 start_time = 5;
+  uint64 end_time = 6;
+  uint64 local_duty_cycle = 7;
+  uint64 cycle_start_time = 8;
 }
 
 message Dimensions {
@@ -51,4 +55,15 @@ message ProcessData {
 
 message Int32 {
   int32 value = 1;
+}
+
+message FlData {
+  bytes params = 1;
+  optional bytes states = 2;
+  optional bytes values = 3;
+  optional bytes resolution_actions = 4;
+  optional bytes batching_actions = 5;
+  optional bytes scaling_actions = 6;
+  optional bytes rewards = 7;
+  optional bytes log_probs = 8;
 }
