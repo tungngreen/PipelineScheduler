@@ -18,11 +18,11 @@
 #include "microservice.h"
 #include "receiver.h"
 #include "sender.h"
+#include "data_reader.h"
 #include "indevicecommunication.grpc.pb.h"
 #include "controller.h"
-#include "baseprocessor.h"
-#include "data_reader.h"
 #include "batch_learning.h"
+#include "baseprocessor.h"
 
 ABSL_DECLARE_FLAG(std::optional<std::string>, json);
 ABSL_DECLARE_FLAG(std::optional<std::string>, json_path);

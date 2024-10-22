@@ -2,7 +2,6 @@
 #define PIPEPLUSPLUS_DATA_SOURCE_H
 
 #include <list>
-#include <thread>
 #include "container_agent.h"
 
 class DataSourceAgent : public ContainerAgent {
