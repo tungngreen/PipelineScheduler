@@ -3,9 +3,7 @@
 
 #include "microservice.h"
 #include <grpcpp/grpcpp.h>
-#include "../utils/json.h"
 #include <thread>
-#include "indevicecommands.grpc.pb.h"
 #include "controlcommands.grpc.pb.h"
 #include "controlmessages.grpc.pb.h"
 #include <pqxx/pqxx>
@@ -22,7 +20,6 @@ using grpc::ClientAsyncResponseReader;
 using grpc::ServerBuilder;
 using grpc::ServerContext;
 using grpc::ServerCompletionQueue;
-using controlcommands::ControlCommands;
 using controlcommands::LoopRange;
 using controlcommands::ContainerConfig;
 using controlcommands::ContainerLink;
@@ -41,7 +38,6 @@ ABSL_DECLARE_FLAG(uint16_t, ctrl_verbose);
 ABSL_DECLARE_FLAG(uint16_t, ctrl_loggingMode);
 
 // typedef std::vector<std::pair<ModelType, std::vector<std::pair<ModelType, int>>>> Pipeline;
-
 
 struct ContainerHandle;
 struct PipelineModel;
@@ -987,8 +983,6 @@ private:
 
     void queryInDeviceNetworkEntries(NodeHandle *node);
 
-    void returnFLModel();
-
     struct TimingControl {
         uint64_t schedulingIntervalSec;
         uint64_t rescalingIntervalSec;
@@ -1161,6 +1155,8 @@ private:
     void estimateTimeBudgetLeft(PipelineModel *currModel);
 
     Tasks ctrl_mergedPipelines;
+
+    FCPOServer *ctrl_fcpo_server;
 };
 
 

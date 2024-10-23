@@ -427,7 +427,7 @@ protected:
     std::vector<Microservice *> cont_postprocessorList;
     std::vector<Microservice *> cont_inferencerList;
 
-    PPOAgent *cont_ppo;
+    FCPOAgent *cont_fcpo_agent;
     uint64_t cont_rlIntervalMillisec = 1000;
     ClockType cont_nextRLDecisionTime = std::chrono::system_clock::now();
 };

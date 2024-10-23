@@ -52,12 +52,13 @@ message Int32 {
 
 message FlData {
   string name = 1;
-  bytes network = 2;
-  optional bytes states = 3;
-  optional bytes values = 4;
-  optional bytes resolution_actions = 5;
-  optional bytes batching_actions = 6;
-  optional bytes scaling_actions = 7;
-  optional bytes rewards = 8;
-  optional bytes log_probs = 9;
+  uint32 state_size = 2;
+  uint32 resolution_size = 3;
+  uint32 max_batch = 4;
+  uint32 threading_size = 5;
+  bytes network = 6;
+  optional bytes states = 7;
+  optional bytes resolution_actions = 8;
+  optional bytes batching_actions = 9;
+  optional bytes scaling_actions = 10;
 }

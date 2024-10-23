@@ -278,10 +278,13 @@ Controller::Controller(int argc, char **argv) {
                       DATA_BASE_PORT + ctrl_port_offset, {});
     devices.addDevice("sink", sink_node);
 
+    ctrl_fcpo_server = new FCPOServer(ctrl_systemName + "_" + ctrl_experimentName, 5, torch::kF32);
+
     ctrl_nextSchedulingTime = std::chrono::system_clock::now();
 }
 
 Controller::~Controller() {
+    ctrl_fcpo_server->stop();
     for (auto msvc: containers.getList()) {
         StopContainer(msvc, msvc->device_agent, true);
     }
@@ -302,16 +305,6 @@ Controller::~Controller() {
     server->Shutdown();
     cq->Shutdown();
 }
-
-// ============================================================================================================================================ //
-// ============================================================================================================================================ //
-// ============================================================================================================================================ //
-
-
-
-
-
-
 
 // ============================================================ Excutor/Maintainers ============================================================ //
 // ============================================================================================================================================= //
@@ -1183,17 +1176,20 @@ void Controller::ForwardFLRequestHandler::Proceed() {
         service->RequestForwardFl(&ctx, &request, &responder, cq, cq, this);
     } else if (status == PROCESS) {
         new ForwardFLRequestHandler(service, cq, controller);
-
-
         status = FINISH;
         responder.Finish(reply, Status::OK, this);
+        //find container with name in scheduled pipelines
+        for (auto &cont: containers.getList()) {
+            if (cont->name == request.name()) {
+                controller->ctrl_fcpo_server->addClient(request, host->stub, host->cq);
+                break;
+            }
+        }
     } else {
         GPR_ASSERT(status == FINISH);
         delete this;
     }
 }
-
-void Controller::returnFLModel() {}
 
 /**
  * @brief '

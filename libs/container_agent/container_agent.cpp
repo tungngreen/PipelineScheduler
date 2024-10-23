@@ -639,7 +639,7 @@ ContainerAgent::ContainerAgent(const json& configs) {
     run = true;
     reportHwMetrics = false;
     profiler = nullptr;
-    cont_ppo = new FCPOAgent(cont_name, 5, configs["profiling"]["profile_maxBatch"], 4, 4, sender_cq, stub);
+    cont_fcpo_agent = new FCPOAgent(cont_name, 5, 4, configs["profiling"]["profile_maxBatch"], 4, sender_cq, stub, torch::kF32);
     std::thread receiver(&ContainerAgent::HandleRecvRpcs, this);
     receiver.detach();
 
@@ -1081,7 +1081,7 @@ void ContainerAgent::collectRuntimeMetrics() {
             avgRequestRate = perSecondArrivalRecords.getAvgArrivalRate() - tmp_lateCount;
 
             if (avgRequestRate == 0 || std::isnan(avgRequestRate)) {
-                cont_ppo->rewardCallback(0.0, 0.0, 0.0, (double) cont_preprocessorList[0]->msvc_idealBatchSize / 10.0);
+                cont_fcpo_agent->rewardCallback(0.0, 0.0, 0.0, (double) cont_preprocessorList[0]->msvc_idealBatchSize / 10.0);
                 avgRequestRate = 0;
             } else {
                 pre_queueDrops = 0;
@@ -1100,13 +1100,13 @@ void ContainerAgent::collectRuntimeMetrics() {
                     latencyEWMA += post->getLatencyEWMA();
                 }
                 latencyEWMA /= cont_postprocessorList.size();
-                cont_ppo->rewardCallback((double) miniBatchCount / avgRequestRate,
+                cont_fcpo_agent->rewardCallback((double) miniBatchCount / avgRequestRate,
                                          (double) (pre_queueDrops + inf_queueDrops) / avgRequestRate,
                                          latencyEWMA / TIME_PRECISION_TO_SEC,
                                          (double) cont_preprocessorList[0]->msvc_idealBatchSize / avgExecutedBatchSize);
             }
-            cont_ppo->setState(cont_preprocessorList[0]->msvc_idealBatchSize, cont_preprocessorList[0]->msvc_concat.numImgs, avgRequestRate, pre_queueDrops, inf_queueDrops);
-            auto [targetRes, newBS, scaling] = cont_ppo->runStep();
+            cont_fcpo_agent->setState(cont_preprocessorList[0]->msvc_idealBatchSize, cont_preprocessorList[0]->msvc_concat.numImgs, avgRequestRate, pre_queueDrops, inf_queueDrops);
+            auto [targetRes, newBS, scaling] = cont_fcpo_agent->runStep();
 
             for (auto preproc : cont_preprocessorList) {
                 // The batch size of the data reader (aka FPS) should be updated by `UpdateBatchSizeRequestHandler`
@@ -1351,7 +1351,7 @@ void ContainerAgent::HandleRecvRpcs() {
     new UpdateResolutionRequestHandler(&service, server_cq.get(), this);
     new UpdateTimeKeepingRequestHandler(&service, server_cq.get(), this);
     new SyncDatasourcesRequestHandler(&service, server_cq.get(), this);
-    new FederatedLearningReturnRequestHandler(&service, server_cq.get(), cont_ppo);
+    new FederatedLearningReturnRequestHandler(&service, server_cq.get(), cont_fcpo_agent);
     void *tag;
     bool ok;
     while (run) {
