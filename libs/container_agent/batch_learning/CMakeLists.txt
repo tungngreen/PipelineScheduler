@@ -56,7 +56,8 @@ target_include_directories(batch_learning
 
 target_link_libraries(batch_learning
         PUBLIC
-        device_grpc_proto
+        device_comm_grpc_proto
+        device_mess_grpc_proto
         ${_GRPC_GRPCPP}
         ${_REFLECTION}
         ${_PROTOBUF_LIBPROTOBUF}

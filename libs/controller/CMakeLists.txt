@@ -119,7 +119,7 @@ target_include_directories(controller
 
 target_link_libraries(controller
         PUBLIC
-        device_grpc_proto
+        device_comm_grpc_proto
         control_comm_grpc_proto
         control_mess_grpc_proto
         absl::flags

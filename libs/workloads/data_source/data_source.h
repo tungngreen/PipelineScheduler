@@ -12,7 +12,7 @@ public:
 
     class SetStartFrameRequestHandler : public RequestHandler {
     public:
-        SetStartFrameRequestHandler(InDeviceCommunication::AsyncService *service, ServerCompletionQueue *cq,
+        SetStartFrameRequestHandler(InDeviceCommands::AsyncService *service, ServerCompletionQueue *cq,
                                     std::vector<Microservice*> *msvcs)
                 : RequestHandler(service, cq), msvcs(msvcs) {
             Proceed();
@@ -21,7 +21,7 @@ public:
         void Proceed() final;
 
     private:
-        indevicecommunication::Int32 request;
+        indevicecommands::Int32 request;
         std::vector<Microservice*> *msvcs;
     };
 

@@ -19,7 +19,6 @@
 #include "receiver.h"
 #include "sender.h"
 #include "data_reader.h"
-#include "indevicecommunication.grpc.pb.h"
 #include "controller.h"
 #include "batch_learning.h"
 #include "baseprocessor.h"
@@ -38,18 +37,14 @@ ABSL_DECLARE_FLAG(uint16_t, profiling_mode);
 
 using json = nlohmann::ordered_json;
 
-using grpc::Status;
-using grpc::CompletionQueue;
-using grpc::ClientContext;
-using grpc::ClientAsyncResponseReader;
 using grpc::ServerBuilder;
 using grpc::ServerContext;
 using grpc::ServerCompletionQueue;
-using indevicecommunication::InDeviceCommunication;
-using indevicecommunication::ContainerSignal;
-using indevicecommunication::Connection;
-using indevicecommunication::ProcessData;
-using indevicecommunication::TimeKeeping;
+using indevicecommands::InDeviceCommands;
+using indevicecommands::ContainerSignal;
+using indevicecommands::Connection;
+using indevicecommands::TimeKeeping;
+using indevicemessages::ProcessData;
 using EmptyMessage = google::protobuf::Empty;
 
 enum TransferMethod {
@@ -240,7 +235,7 @@ protected:
 
     class RequestHandler {
     public:
-        RequestHandler(InDeviceCommunication::AsyncService *service, ServerCompletionQueue *cq)
+        RequestHandler(InDeviceCommands::AsyncService *service, ServerCompletionQueue *cq)
                 : service(service), cq(cq), status(CREATE), responder(&ctx) {};
 
         virtual ~RequestHandler() = default;
@@ -252,7 +247,7 @@ protected:
             CREATE, PROCESS, FINISH
         };
 
-        InDeviceCommunication::AsyncService *service;
+        InDeviceCommands::AsyncService *service;
         ServerCompletionQueue *cq;
         ServerContext ctx;
         CallStatus status;
@@ -262,7 +257,7 @@ protected:
 
     class KeepAliveRequestHandler : public RequestHandler {
     public:
-        KeepAliveRequestHandler(InDeviceCommunication::AsyncService *service, ServerCompletionQueue *cq)
+        KeepAliveRequestHandler(InDeviceCommands::AsyncService *service, ServerCompletionQueue *cq)
                 : RequestHandler(service, cq) {
             Proceed();
         }
@@ -275,7 +270,7 @@ protected:
 
     class StopRequestHandler : public RequestHandler {
     public:
-        StopRequestHandler(InDeviceCommunication::AsyncService *service, ServerCompletionQueue *cq,
+        StopRequestHandler(InDeviceCommands::AsyncService *service, ServerCompletionQueue *cq,
                            std::atomic<bool> *run)
                 : RequestHandler(service, cq), run(run) {
             Proceed();
@@ -290,7 +285,7 @@ protected:
 
     class UpdateSenderRequestHandler : public RequestHandler {
     public:
-        UpdateSenderRequestHandler(InDeviceCommunication::AsyncService *service, ServerCompletionQueue *cq,
+        UpdateSenderRequestHandler(InDeviceCommands::AsyncService *service, ServerCompletionQueue *cq,
                                    std::vector<Microservice *> *msvcs)
                 : RequestHandler(service, cq), msvcs(msvcs) {
             Proceed();
@@ -305,7 +300,7 @@ protected:
 
     class UpdateBatchSizeRequestHandler : public RequestHandler {
     public:
-        UpdateBatchSizeRequestHandler(InDeviceCommunication::AsyncService *service, ServerCompletionQueue *cq,
+        UpdateBatchSizeRequestHandler(InDeviceCommands::AsyncService *service, ServerCompletionQueue *cq,
                                       std::vector<Microservice *> *msvcs)
                 : RequestHandler(service, cq), msvcs(msvcs) {
             Proceed();
@@ -314,13 +309,13 @@ protected:
         void Proceed() final;
 
     private:
-        indevicecommunication::Int32 request;
+        indevicecommands::Int32 request;
         std::vector<Microservice *> *msvcs;
     };
 
     class UpdateResolutionRequestHandler : public RequestHandler {
     public:
-        UpdateResolutionRequestHandler(InDeviceCommunication::AsyncService *service, ServerCompletionQueue *cq,
+        UpdateResolutionRequestHandler(InDeviceCommands::AsyncService *service, ServerCompletionQueue *cq,
                                       ContainerAgent *container_agent)
                 : RequestHandler(service, cq), container_agent(container_agent) {
             Proceed();
@@ -329,13 +324,13 @@ protected:
         void Proceed() final;
 
     private:
-        indevicecommunication::Dimensions request;
+        indevicecommands::Dimensions request;
         ContainerAgent *container_agent;
     };
 
     class UpdateTimeKeepingRequestHandler : public RequestHandler {
     public:
-        UpdateTimeKeepingRequestHandler(InDeviceCommunication::AsyncService *service, ServerCompletionQueue *cq,
+        UpdateTimeKeepingRequestHandler(InDeviceCommands::AsyncService *service, ServerCompletionQueue *cq,
                                        ContainerAgent *container_agent)
                 : RequestHandler(service, cq), container_agent(container_agent) {
             Proceed();
@@ -350,7 +345,7 @@ protected:
 
     class SyncDatasourcesRequestHandler : public RequestHandler {
     public:
-        SyncDatasourcesRequestHandler(InDeviceCommunication::AsyncService *service, ServerCompletionQueue *cq,
+        SyncDatasourcesRequestHandler(InDeviceCommands::AsyncService *service, ServerCompletionQueue *cq,
                                       ContainerAgent *containerAgent)
                 : RequestHandler(service, cq), containerAgent(containerAgent) {
             Proceed();
@@ -359,13 +354,13 @@ protected:
         void Proceed() final;
 
     private:
-        indevicecommunication::Int32 request;
+        indevicecommands::Int32 request;
         ContainerAgent *containerAgent;
     };
 
     class FederatedLearningReturnRequestHandler : public RequestHandler {
     public:
-        FederatedLearningReturnRequestHandler(InDeviceCommunication::AsyncService *service, ServerCompletionQueue *cq,
+        FederatedLearningReturnRequestHandler(InDeviceCommands::AsyncService *service, ServerCompletionQueue *cq,
                                               PPOAgent *ppoAgent)
                 : RequestHandler(service, cq), ppoAgent(ppoAgent) {
             Proceed();
@@ -398,9 +393,9 @@ protected:
 
     std::unique_ptr<ServerCompletionQueue> server_cq;
     CompletionQueue *sender_cq;
-    InDeviceCommunication::AsyncService service;
+    InDeviceCommands::AsyncService service;
     std::unique_ptr<grpc::Server> server;
-    std::shared_ptr<InDeviceCommunication::Stub> stub;
+    std::shared_ptr<InDeviceMessages::Stub> stub;
     std::atomic<bool> run;
 
     unsigned int pid;

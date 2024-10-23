@@ -319,7 +319,7 @@ bool DeviceAgent::CreateContainer(ContainerConfig &c) {
             return true;
         }
         std::lock_guard<std::mutex> lock(containers_mutex);
-        containers[c.name()] = {InDeviceCommunication::NewStub(
+        containers[c.name()] = {InDeviceCommands::NewStub(
                 grpc::CreateChannel(target, grpc::InsecureChannelCredentials())),
                                 new CompletionQueue(), static_cast<unsigned int>(c.control_port()), 0, command, {}};
         return true;
@@ -391,7 +391,7 @@ void DeviceAgent::UpdateContainerSender(int mode, const std::string &cont_name, 
 }
 
 void DeviceAgent::SyncDatasources(const std::string &cont_name, const std::string &dsrc) {
-    indevicecommunication::Int32 request;
+    indevicecommands::Int32 request;
     EmptyMessage reply;
     ClientContext context;
     Status status;
@@ -655,7 +655,7 @@ void DeviceAgent::UpdateBatchsizeRequestHandler::Proceed() {
         new UpdateBatchsizeRequestHandler(service, cq, device_agent);
         ClientContext context;
         Status state;
-        indevicecommunication::Int32 bs;
+        indevicecommands::Int32 bs;
         bs.set_value(request.value().at(0));
 
         //check if cont_name is in containers
@@ -689,7 +689,7 @@ void DeviceAgent::UpdateResolutionRequestHandler::Proceed() {
         new UpdateResolutionRequestHandler(service, cq, device_agent);
         ClientContext context;
         Status state;
-        indevicecommunication::Dimensions dims;
+        indevicecommands::Dimensions dims;
         dims.set_channels(request.value().at(0));
         dims.set_height(request.value().at(1));
         dims.set_width(request.value().at(2));

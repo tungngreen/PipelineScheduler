@@ -1,7 +1,7 @@
 #include "batch_learning.h"
 
 PPOAgent::PPOAgent(std::string& cont_name, uint state_size, uint max_batch, uint resolution_size, uint threading_size,
-                   CompletionQueue *cq, std::shared_ptr<InDeviceCommunication::Stub> stub, uint update_steps,
+                   CompletionQueue *cq, std::shared_ptr<InDeviceMessages::Stub> stub, uint update_steps,
                    uint federated_steps, double lambda, double gamma, const std::string& model_save)
                    : cont_name(cont_name), cq(cq), stub(stub), lambda(lambda), gamma(gamma), max_batch(max_batch),
                    update_steps(update_steps), federated_steps(federated_steps) {

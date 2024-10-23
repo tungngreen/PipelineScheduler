@@ -7,14 +7,15 @@
 #include <random>
 #include <cmath>
 #include <chrono>
-#include "indevicecommunication.grpc.pb.h"
+#include "indevicecommands.grpc.pb.h"
+#include "indevicemessages.grpc.pb.h"
 
 using grpc::Status;
 using grpc::CompletionQueue;
 using grpc::ClientContext;
 using grpc::ClientAsyncResponseReader;
-using indevicecommunication::InDeviceCommunication;
-using indevicecommunication::FlData;
+using indevicemessages::InDeviceMessages;
+using indevicecommands::FlData;
 using EmptyMessage = google::protobuf::Empty;
 using T = torch::Tensor;
 
@@ -76,7 +77,7 @@ struct MultiPolicyNetwork: torch::nn::Module {
 class PPOAgent {
 public:
     PPOAgent(std::string& cont_name, uint state_size, uint max_batch, uint resolution_size, uint threading_size,
-             CompletionQueue *cq, std::shared_ptr<InDeviceCommunication::Stub> stub, uint update_steps = 64,
+             CompletionQueue *cq, std::shared_ptr<InDeviceMessages::Stub> stub, uint update_steps = 64,
              uint federated_steps = 5, double lambda = 0.95, double gamma = 0.99, const std::string& model_save = "");
 
     ~PPOAgent() {
@@ -121,7 +122,7 @@ private:
     std::string path;
     std::string cont_name;
     CompletionQueue *cq;
-    std::shared_ptr<InDeviceCommunication::Stub> stub;
+    std::shared_ptr<InDeviceMessages::Stub> stub;
 
     double lambda;
     double gamma;

@@ -38,7 +38,7 @@ typedef std::tuple<
 > MsvcConfigTupleType;
 
 struct DevContainerHandle {
-    std::unique_ptr<InDeviceCommunication::Stub> stub;
+    std::unique_ptr<InDeviceCommands::Stub> stub;
     CompletionQueue *cq;
     unsigned int port;
     unsigned int pid;
@@ -157,11 +157,11 @@ protected:
 
     class DeviceRequestHandler : public RequestHandler {
     public:
-        DeviceRequestHandler(InDeviceCommunication::AsyncService *service, ServerCompletionQueue *cq, DeviceAgent *d)
+        DeviceRequestHandler(InDeviceMessages::AsyncService *service, ServerCompletionQueue *cq, DeviceAgent *d)
                 : RequestHandler(cq, d), service(service) {};
 
     protected:
-        InDeviceCommunication::AsyncService *service;
+        InDeviceMessages::AsyncService *service;
     };
 
     class ControlRequestHandler : public RequestHandler {
@@ -178,7 +178,7 @@ protected:
 
     class ReportStartRequestHandler : public DeviceRequestHandler {
     public:
-        ReportStartRequestHandler(InDeviceCommunication::AsyncService *service, ServerCompletionQueue *cq,
+        ReportStartRequestHandler(InDeviceMessages::AsyncService *service, ServerCompletionQueue *cq,
                                   DeviceAgent *device)
                 : DeviceRequestHandler(service, cq, device), responder(&ctx) {
             Proceed();
@@ -194,7 +194,7 @@ protected:
 
     class StartFederatedLearningRequestHandler : public DeviceRequestHandler {
     public:
-        StartFederatedLearningRequestHandler(InDeviceCommunication::AsyncService *service, ServerCompletionQueue *cq,
+        StartFederatedLearningRequestHandler(InDeviceMessages::AsyncService *service, ServerCompletionQueue *cq,
                                              DeviceAgent *device)
                 : DeviceRequestHandler(service, cq, device), responder(&ctx) {
             Proceed();
@@ -369,7 +369,7 @@ protected:
     // Communication
     std::unique_ptr<ServerCompletionQueue> device_cq;
     std::unique_ptr<grpc::Server> device_server;
-    InDeviceCommunication::AsyncService device_service;
+    InDeviceMessages::AsyncService device_service;
     std::unique_ptr<ControlMessages::Stub> controller_stub;
     CompletionQueue *controller_sending_cq;
     std::unique_ptr<grpc::Server> controller_server;

@@ -633,7 +633,7 @@ ContainerAgent::ContainerAgent(const json& configs) {
     server = builder.BuildAndStart();
 
     server_address = absl::StrFormat("%s:%d", "localhost", INDEVICE_CONTROL_PORT  + absl::GetFlag(FLAGS_port_offset));
-    stub = InDeviceCommunication::NewStub(grpc::CreateChannel(server_address, grpc::InsecureChannelCredentials()));
+    stub = InDeviceMessages::NewStub(grpc::CreateChannel(server_address, grpc::InsecureChannelCredentials()));
     sender_cq = new CompletionQueue();
 
     run = true;
@@ -1532,11 +1532,11 @@ void ContainerAgent::UpdateTimeKeepingRequestHandler::Proceed() {
 }
 
 void ContainerAgent::transferFrameID(std::string url) {
-    indevicecommunication::Int32 request;
+    indevicecommands::Int32 request;
     EmptyMessage reply;
     ClientContext context;
     Status status;
-    auto dsrc_stub = InDeviceCommunication::NewStub(grpc::CreateChannel(url, grpc::InsecureChannelCredentials()));
+    auto dsrc_stub = InDeviceCommands::NewStub(grpc::CreateChannel(url, grpc::InsecureChannelCredentials()));
     auto dsrc_cq = new CompletionQueue();
     cont_receiverList[0]->pauseThread();
     request.set_value(cont_receiverList[0]->msvc_currFrameID);

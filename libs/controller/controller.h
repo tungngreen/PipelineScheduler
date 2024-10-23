@@ -5,7 +5,7 @@
 #include <grpcpp/grpcpp.h>
 #include "../utils/json.h"
 #include <thread>
-#include "indevicecommunication.grpc.pb.h"
+#include "indevicecommands.grpc.pb.h"
 #include "controlcommands.grpc.pb.h"
 #include "controlmessages.grpc.pb.h"
 #include <pqxx/pqxx>
@@ -30,8 +30,8 @@ using controlmessages::ControlMessages;
 using controlmessages::ConnectionConfigs;
 using controlmessages::SystemInfo;
 using controlmessages::DummyMessage;
-using indevicecommunication::TimeKeeping;
-using indevicecommunication::ContainerSignal;
+using indevicecommands::TimeKeeping;
+using indevicecommands::ContainerSignal;
 using EmptyMessage = google::protobuf::Empty;
 
 ABSL_DECLARE_FLAG(std::string, ctrl_configPath);
