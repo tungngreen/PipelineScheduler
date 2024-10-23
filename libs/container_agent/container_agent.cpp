@@ -1082,7 +1082,7 @@ void ContainerAgent::collectRuntimeMetrics() {
 
                 avgExecutedBatchSize = 0.1;
                 for (auto &pre: cont_msvcsGroups["preprocessor"].msvcList) avgExecutedBatchSize += pre->GetAvgExecutedBatchSize();
-                avgExecutedBatchSize /= cont_msvcsGroups["preprocessor"].msvcList;
+                avgExecutedBatchSize /= cont_msvcsGroups["preprocessor"].msvcList.size();
                 miniBatchCount = 0;
                 latencyEWMA = 0.0;
                 for (auto &post: cont_msvcsGroups["postprocessor"].msvcList) {
@@ -1561,8 +1561,8 @@ void ContainerAgent::FederatedLearningReturnRequestHandler::Proceed() {
         status = PROCESS;
         service->RequestFederatedLearningReturn(&ctx, &request, &responder, cq, cq, this);
     } else if (status == PROCESS) {
-        new FederatedLearningReturnRequestHandler(service, cq, ppoAgent);
-        ppoAgent->federatedUpdateCallback(request);
+        new FederatedLearningReturnRequestHandler(service, cq, fcpoAgent);
+        fcpoAgent->federatedUpdateCallback(request);
         status = FINISH;
         responder.Finish(reply, Status::OK, this);
     } else {

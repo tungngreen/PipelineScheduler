@@ -1179,9 +1179,9 @@ void Controller::ForwardFLRequestHandler::Proceed() {
         status = FINISH;
         responder.Finish(reply, Status::OK, this);
         //find container with name in scheduled pipelines
-        for (auto &cont: containers.getList()) {
+        for (auto &cont: controller->containers.getList()) {
             if (cont->name == request.name()) {
-                controller->ctrl_fcpo_server->addClient(request, host->stub, host->cq);
+                controller->ctrl_fcpo_server->addClient(request, cont->device_agent->stub, cont->device_agent->cq);
                 break;
             }
         }

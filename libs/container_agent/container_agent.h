@@ -365,8 +365,8 @@ protected:
     class FederatedLearningReturnRequestHandler : public RequestHandler {
     public:
         FederatedLearningReturnRequestHandler(InDeviceCommands::AsyncService *service, ServerCompletionQueue *cq,
-                                              PPOAgent *ppoAgent)
-                : RequestHandler(service, cq), ppoAgent(ppoAgent) {
+                                              FCPOAgent *fcpoAgent)
+                : RequestHandler(service, cq), fcpoAgent(fcpoAgent) {
             Proceed();
         }
 
@@ -374,7 +374,7 @@ protected:
 
     private:
         FlData request;
-        PPOAgent *ppoAgent;
+        FCPOAgent *fcpoAgent;
     };
 
     virtual void HandleRecvRpcs();
