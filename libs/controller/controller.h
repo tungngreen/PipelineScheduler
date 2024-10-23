@@ -13,6 +13,7 @@
 #include "absl/flags/parse.h"
 #include "absl/flags/flag.h"
 #include <random>
+#include "fcpo_learning.h"
 
 using grpc::Status;
 using grpc::CompletionQueue;
@@ -30,6 +31,7 @@ using controlmessages::ControlMessages;
 using controlmessages::ConnectionConfigs;
 using controlmessages::SystemInfo;
 using controlmessages::DummyMessage;
+using indevicecommands::FlData;
 using indevicecommands::TimeKeeping;
 using indevicecommands::ContainerSignal;
 using EmptyMessage = google::protobuf::Empty;
@@ -983,12 +985,9 @@ private:
 
     void readConfigFile(const std::string &config_path);
 
-    // double LoadTimeEstimator(const char *model_path, double input_mem_size);
-    int InferTimeEstimator(ModelType model, int batch_size);
-    // std::map<ModelType, std::vector<int>> InitialRequestCount(const std::string &input, const Pipeline &models,
-    //                                                           int fps = 30);
-
     void queryInDeviceNetworkEntries(NodeHandle *node);
+
+    void returnFLModel();
 
     struct TimingControl {
         uint64_t schedulingIntervalSec;
@@ -1054,6 +1053,22 @@ private:
 
     private:
         DummyMessage request;
+        EmptyMessage reply;
+        grpc::ServerAsyncResponseWriter<EmptyMessage> responder;
+    };
+
+    class ForwardFLRequestHandler : public RequestHandler {
+    public:
+        ForwardFLRequestHandler(ControlMessages::AsyncService *service, ServerCompletionQueue *cq,
+                                Controller *c)
+                : RequestHandler(service, cq, c), responder(&ctx) {
+            Proceed();
+        }
+
+        void Proceed() final;
+
+    private:
+        FlData request;
         EmptyMessage reply;
         grpc::ServerAsyncResponseWriter<EmptyMessage> responder;
     };

@@ -639,7 +639,7 @@ ContainerAgent::ContainerAgent(const json& configs) {
     run = true;
     reportHwMetrics = false;
     profiler = nullptr;
-    cont_ppo = new PPOAgent(cont_name, 5, configs["profiling"]["profile_maxBatch"], 4, 4, sender_cq, stub);
+    cont_ppo = new FCPOAgent(cont_name, 5, configs["profiling"]["profile_maxBatch"], 4, 4, sender_cq, stub);
     std::thread receiver(&ContainerAgent::HandleRecvRpcs, this);
     receiver.detach();
 

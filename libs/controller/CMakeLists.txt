@@ -99,6 +99,9 @@ target_compile_features(controller
 # we can have multiple versions installed at the same time.
 set(PROJECT_PREFIX controller)
 
+set(fcpo_learning_DIR "${CMAKE_CURRENT_BINARY_DIR}/../container_agent/fcpo_learning")
+find_package(fcpo_learning CONFIG REQUIRED)
+
 set(microservice_DIR "${CMAKE_CURRENT_BINARY_DIR}/../microservice")
 find_package(microservice CONFIG REQUIRED)
 
@@ -128,6 +131,7 @@ target_link_libraries(controller
         ${_REFLECTION}
         ${_PROTOBUF_LIBPROTOBUF}
         ${CMAKE_THREAD_LIBS_INIT}
+        fcpo_learning
         microservice
         # ${LIGHTGBM_LIBRARY}
 )

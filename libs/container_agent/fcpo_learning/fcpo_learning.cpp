@@ -1,11 +1,11 @@
-#include "batch_learning.h"
+#include "fcpo_learning.h"
 
-PPOAgent::PPOAgent(std::string& cont_name, uint state_size, uint max_batch, uint resolution_size, uint threading_size,
+FCPOAgent::FCPOAgent(std::string& cont_name, uint state_size, uint max_batch, uint resolution_size, uint threading_size,
                    CompletionQueue *cq, std::shared_ptr<InDeviceMessages::Stub> stub, uint update_steps,
                    uint federated_steps, double lambda, double gamma, const std::string& model_save)
                    : cont_name(cont_name), cq(cq), stub(stub), lambda(lambda), gamma(gamma), max_batch(max_batch),
                    update_steps(update_steps), federated_steps(federated_steps) {
-    path = "../models/batch_learning/" + cont_name;
+    path = "../models/fcpo_learning/" + cont_name;
     std::filesystem::create_directories(std::filesystem::path(path));
     out.open(path + "/latest_log.csv");
 
@@ -27,7 +27,7 @@ PPOAgent::PPOAgent(std::string& cont_name, uint state_size, uint max_batch, uint
     values = {};
 }
 
-void PPOAgent::update() {
+void FCPOAgent::update() {
     steps_counter = 0;
     if (federated_steps_counter == 0) {
         spdlog::trace("Waiting for federated update, cancel !");
@@ -75,7 +75,7 @@ void PPOAgent::update() {
     reset();
 }
 
-void PPOAgent::federatedUpdate() {
+void FCPOAgent::federatedUpdate() {
     FlData request;
     // save model information in uchar* pointer and then reload it from that information
     std::ostringstream oss;
@@ -105,7 +105,7 @@ void PPOAgent::federatedUpdate() {
     }
 }
 
-void PPOAgent::federatedUpdateCallback(FlData &response) {
+void FCPOAgent::federatedUpdateCallback(FlData &response) {
     std::istringstream iss(response.network());
     std::lock_guard<std::mutex> lock(model_mutex);
     torch::load(model, iss);
@@ -114,16 +114,16 @@ void PPOAgent::federatedUpdateCallback(FlData &response) {
     reset();
 }
 
-void PPOAgent::rewardCallback(double throughput, double drops, double latency_penalty, double oversize_penalty) {
+void FCPOAgent::rewardCallback(double throughput, double drops, double latency_penalty, double oversize_penalty) {
     states.push_back(state);
     rewards.push_back(2 * throughput - drops - latency_penalty + (1 - oversize_penalty));
 }
 
-void PPOAgent::setState(double curr_batch, double curr_resolution_choice, double arrival, double pre_queue_size, double inf_queue_size) {
+void FCPOAgent::setState(double curr_batch, double curr_resolution_choice, double arrival, double pre_queue_size, double inf_queue_size) {
     state = torch::tensor({{curr_batch / max_batch, curr_resolution_choice, arrival, pre_queue_size, inf_queue_size}}, torch::kF64);
 }
 
-std::tuple<int, int, int> PPOAgent::selectAction() {
+std::tuple<int, int, int> FCPOAgent::selectAction() {
     std::lock_guard<std::mutex> lock(model_mutex);
     auto [policy1, policy2, policy3, value] = model->forward(state);
 
@@ -139,7 +139,7 @@ std::tuple<int, int, int> PPOAgent::selectAction() {
     return std::make_tuple(resolution, batching, scaling);
 }
 
-T PPOAgent::computeCumuRewards(double last_value) const {
+T FCPOAgent::computeCumuRewards(double last_value) const {
     std::vector<double> discounted_rewards;
     double cumulative = last_value;
     for (auto it = rewards.rbegin(); it != rewards.rend(); ++it) {
@@ -149,7 +149,7 @@ T PPOAgent::computeCumuRewards(double last_value) const {
     return torch::tensor(discounted_rewards).to(torch::kF64);
 }
 
-T PPOAgent::computeGae(double last_value) const {
+T FCPOAgent::computeGae(double last_value) const {
     std::vector<double> advantages;
     double gae = 0.0;
     double next_value = last_value;
@@ -162,7 +162,7 @@ T PPOAgent::computeGae(double last_value) const {
     return torch::tensor(advantages).to(torch::kF64);
 }
 
-std::tuple<int, int, int> PPOAgent::runStep() {
+std::tuple<int, int, int> FCPOAgent::runStep() {
     Stopwatch sw;
     sw.start();
     std::tuple<int, int, int> action = selectAction();
@@ -176,7 +176,7 @@ std::tuple<int, int, int> PPOAgent::runStep() {
     out << sw.elapsed_microseconds() << "," << federated_steps_counter << "," << steps_counter << "," << avg_reward << "," << std::get<0>(action) << "," << std::get<1>(action) << "," << std::get<2>(action) << std::endl;
 
     if (steps_counter%update_steps == 0) {
-        std::thread t(&PPOAgent::update, this);
+        std::thread t(&FCPOAgent::update, this);
         t.detach();
     }
     return std::make_tuple(std::get<0>(action) + 1, std::get<1>(action) + 1, std::get<2>(action));

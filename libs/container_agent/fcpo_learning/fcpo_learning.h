@@ -73,14 +73,13 @@ struct MultiPolicyNetwork: torch::nn::Module {
     }
 };
 
-// Proximal policy optimization, https://arxiv.org/abs/1707.06347
-class PPOAgent {
+class FCPOAgent {
 public:
-    PPOAgent(std::string& cont_name, uint state_size, uint max_batch, uint resolution_size, uint threading_size,
+    FCPOAgent(std::string& cont_name, uint state_size, uint max_batch, uint resolution_size, uint threading_size,
              CompletionQueue *cq, std::shared_ptr<InDeviceMessages::Stub> stub, uint update_steps = 64,
              uint federated_steps = 5, double lambda = 0.95, double gamma = 0.99, const std::string& model_save = "");
 
-    ~PPOAgent() {
+    ~FCPOAgent() {
         torch::save(model, path + "/latest_model.pt");
         out.close();
     }
@@ -135,6 +134,30 @@ private:
     uint update_steps;
     uint federated_steps_counter = 1;
     uint federated_steps;
+};
+
+class FCPOServer {
+public:
+    FCPOServer(uint client_counter, double lambda = 0.95, double gamma = 0.99, const std::string& model_save = "");
+    ~FCPOServer() {
+        torch::save(model, path + "/latest_model.pt");
+        out.close();
+    }
+private:
+    std::shared_ptr<MultiPolicyNetwork> model;
+    std::unique_ptr<torch::optim::Optimizer> optimizer;
+    std::vector<FlData> federated_updates;
+    uint client_counter;
+
+    std::mt19937 re;
+    std::ofstream out;
+    std::string path;
+
+    double lambda;
+    double gamma;
+    double clip_epsilon;
+    double penalty_weight;
+
 };
 
 

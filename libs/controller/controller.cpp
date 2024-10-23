@@ -10,9 +10,6 @@ const int DATA_BASE_PORT = 55001;
 const int CONTROLLER_BASE_PORT = 60001;
 const int DEVICE_CONTROL_PORT = 60002;
 
-// ======================================================================================================================================== //
-// ======================================================================================================================================== //
-// ======================================================================================================================================== //
 
 GPULane::GPULane(GPUHandle *gpu, NodeHandle *device, uint16_t laneNum) : laneNum(laneNum), gpuHandle(gpu), node(device) {
     dutyCycle = 0;
@@ -66,11 +63,6 @@ bool GPULane::removePortion(GPUPortion *portion) {
     portionList.list.erase(it);
     return true;
 }
-
-// ======================================================================================================================================== //
-// ======================================================================================================================================== //
-// ======================================================================================================================================== //
-
 
 // ============================================================ Configurations ============================================================ //
 // ======================================================================================================================================== //
@@ -559,7 +551,7 @@ void Controller::ApplyScheduling() {
 
     // std::uniform_int_distribution<> dis(1, 100);
     // while (numReclaims < new_containers.size() - numSinks) {
-        
+
     //     for (auto container : new_containers) {
     //         if (container->model == Sink || container->executionPortion == nullptr) {
     //             continue;
@@ -1111,16 +1103,6 @@ void Controller::calculateQueueSizes(ContainerHandle &container, const ModelType
     container.expectedThroughput = postprocess_thrpt;
 }
 
-// ============================================================================================================================================ //
-// ============================================================================================================================================ //
-// ============================================================================================================================================ //
-
-
-
-
-
-
-
 
 // ============================================================ Communication Handlers ============================================================ //
 // ================================================================================================================================================ //
@@ -1130,6 +1112,7 @@ void Controller::calculateQueueSizes(ContainerHandle &container, const ModelType
 void Controller::HandleRecvRpcs() {
     new DeviseAdvertisementHandler(&service, cq.get(), this);
     new DummyDataRequestHandler(&service, cq.get(), this);
+    new ForwardFLRequestHandler(&service, cq.get(), this);
     void *tag;
     bool ok;
     while (running) {
@@ -1194,146 +1177,23 @@ void Controller::DummyDataRequestHandler::Proceed() {
     }
 }
 
-std::string DeviceNameToType(std::string name) {
-    if (name == "server" || name == "sink") {
-        return "server";
+void Controller::ForwardFLRequestHandler::Proceed() {
+    if (status == CREATE) {
+        status = PROCESS;
+        service->RequestForwardFl(&ctx, &request, &responder, cq, cq, this);
+    } else if (status == PROCESS) {
+        new ForwardFLRequestHandler(service, cq, controller);
+
+
+        status = FINISH;
+        responder.Finish(reply, Status::OK, this);
     } else {
-        return name.substr(0, name.size() - 1);
+        GPR_ASSERT(status == FINISH);
+        delete this;
     }
 }
 
-// ============================================================================================================================================ //
-// ============================================================================================================================================ //
-// ============================================================================================================================================ //
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-// ============================================================ Network Conditions ============================================================ //
-
-// void Controller::optimizeBatchSizeStep(
-//         const Pipeline &models,
-//         std::map<ModelType, int> &batch_sizes, std::map<ModelType, int> &estimated_infer_times, int nObjects) {
-//     ModelType candidate;
-//     int max_saving = 0;
-//     std::vector<ModelType> blacklist;
-//     for (const auto &m: models) {
-//         int saving;
-//         if (max_saving == 0) {
-//             saving =
-//                     estimated_infer_times[m.first] - InferTimeEstimator(m.first, batch_sizes[m.first] * 2);
-//         } else {
-//             if (batch_sizes[m.first] == 64 ||
-//                 std::find(blacklist.begin(), blacklist.end(), m.first) != blacklist.end()) {
-//                 continue;
-//             }
-//             for (const auto &d: m.second) {
-//                 if (batch_sizes[d.first] > batch_sizes[m.first]) {
-//                     blacklist.push_back(d.first);
-//                 }
-//             }
-//             saving = estimated_infer_times[m.first] -
-//                      (InferTimeEstimator(m.first, batch_sizes[m.first] * 2) * (nObjects / batch_sizes[m.first] * 2));
-//         }
-//         if (saving > max_saving) {
-//             max_saving = saving;
-//             candidate = m.first;
-//         }
-//     }
-//     batch_sizes[candidate] *= 2;
-//     estimated_infer_times[candidate] -= max_saving;
-// }
-
-// double Controller::LoadTimeEstimator(const char *model_path, double input_mem_size) {
-//     // Load the pre-trained model
-//     BoosterHandle booster;
-//     int num_iterations = 1;
-//     int ret = LGBM_BoosterCreateFromModelfile(model_path, &num_iterations, &booster);
-
-//     // Prepare the input data
-//     std::vector<double> input_data = {input_mem_size};
-
-//     // Perform inference
-//     int64_t out_len;
-//     std::vector<double> out_result(1);
-//     ret = LGBM_BoosterPredictForMat(booster,
-//                                     input_data.data(),
-//                                     C_API_DTYPE_FLOAT64,
-//                                     1,  // Number of rows
-//                                     1,  // Number of columns
-//                                     1,  // Is row major
-//                                     C_API_PREDICT_NORMAL,  // Predict type
-//                                     0,  // Start iteration
-//                                     -1,  // Number of iterations, -1 means use all
-//                                     "",  // Parameter
-//                                     &out_len,
-//                                     out_result.data());
-//     if (ret != 0) {
-//         std::cout << "Failed to perform inference!" << std::endl;
-//         exit(ret);
-//     }
-
-//     // Print the predicted value
-//     std::cout << "Predicted value: " << out_result[0] << std::endl;
-
-//     // Free the booster handle
-//     LGBM_BoosterFree(booster);
-
-//     return out_result[0];
-// }
-
-
-/**
- * @brief
- *
- * @param model to specify model
- * @param batch_size for targeted batch size (binary)
- * @return int for inference time per full batch in nanoseconds
- */
-int Controller::InferTimeEstimator(ModelType model, int batch_size) {
-    return 0;
-}
-
-// std::map<ModelType, std::vector<int>> Controller::InitialRequestCount(const std::string &input, const Pipeline &models,
-//                                                                       int fps) {
-//     std::map<ModelType, std::vector<int>> request_counts = {};
-//     std::vector<int> fps_values = {fps, fps * 3, fps * 7, fps * 15, fps * 30, fps * 60};
-
-//     request_counts[models[0].first] = fps_values;
-//     json objectCount = json::parse(std::ifstream("../jsons/object_count.json"))[input];
-
-//     for (const auto &m: models) {
-//         if (m.first == ModelType::Sink) {
-//             request_counts[m.first] = std::vector<int>(6, 0);
-//             continue;
-//         }
-
-//         for (const auto &d: m.second) {
-//             if (d.second == -1) {
-//                 request_counts[d.first] = request_counts[m.first];
-//             } else {
-//                 std::vector<int> objects = (d.second == 0 ? objectCount["person"]
-//                                                           : objectCount["car"]).get<std::vector<int>>();
-
-//                 for (int j: fps_values) {
-//                     int count = std::accumulate(objects.begin(), objects.begin() + j, 0);
-//                     request_counts[d.first].push_back(request_counts[m.first][0] * count);
-//                 }
-//             }
-//         }
-//     }
-//     return request_counts;
-// }
+void Controller::returnFLModel() {}
 
 /**
  * @brief '

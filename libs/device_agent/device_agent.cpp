@@ -474,6 +474,7 @@ void DeviceAgent::HandleControlRecvRpcs() {
     new UpdateBatchsizeRequestHandler(&controller_service, controller_cq.get(), this);
     new UpdateResolutionRequestHandler(&controller_service, controller_cq.get(), this);
     new UpdateTimeKeepingRequestHandler(&controller_service, controller_cq.get(), this);
+    new ReturnFlRequestHandler(&controller_service, controller_cq.get(), this);
     new StopContainerRequestHandler(&controller_service, controller_cq.get(), this);
     new ShutdownRequestHandler(&controller_service, controller_cq.get(), this);
     void *tag;
@@ -534,7 +535,7 @@ void DeviceAgent::StartFederatedLearningRequestHandler::Proceed() {
         Status sending_status;
         CompletionQueue* sending_cq = device_agent->controller_sending_cq;
         std::unique_ptr<ClientAsyncResponseReader<EmptyMessage>> rpc(
-                device_agent->controller_stub->AsyncForwardFlRequest(&context, request, sending_cq));
+                device_agent->controller_stub->AsyncForwardFl(&context, request, sending_cq));
         rpc->Finish(&reply, &sending_status, (void *)1);
         void *got_tag;
         bool ok = false;

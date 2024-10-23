@@ -25,8 +25,6 @@ add_library(container_agent
 # the export namespace when using add_subdirectory() instead.
 add_library(container_agent::container_agent ALIAS container_agent)
 
-add_subdirectory(batch_learning)
-
 # Required compiler features.
 # https://cmake.org/cmake/help/v3.1/manual/cmake-compile-features.7.html
 target_compile_features(container_agent
@@ -50,8 +48,8 @@ find_package(controller CONFIG REQUIRED)
 set(baseprocessors_DIR "${CMAKE_CURRENT_BINARY_DIR}/../baseprocessors")
 find_package(baseprocessors CONFIG REQUIRED)
 
-set(batch_learning_DIR "${CMAKE_CURRENT_BINARY_DIR}/batch_learning")
-find_package(batch_learning CONFIG REQUIRED)
+set(fcpo_learning_DIR "${CMAKE_CURRENT_BINARY_DIR}/fcpo_learning")
+find_package(fcpo_learning CONFIG REQUIRED)
 
 # Defines the headers for this library.
 # https://cmake.org/cmake/help/v3.11/command/target_include_directories.html
@@ -87,7 +85,7 @@ target_link_libraries(container_agent
         controller
         communicator
         baseprocessors
-        batch_learning
+        fcpo_learning
 )
 
 # add_executable(ContainerAgent container_agent.cpp)

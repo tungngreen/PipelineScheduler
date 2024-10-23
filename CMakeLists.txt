@@ -69,6 +69,8 @@ if (ON_HOST STREQUAL "ON")
 
     # Use the correct version of CUDA
     set(CUDA_TOOLKIT_ROOT_DIR /usr/local/cuda)
+    # Use the correct version of Torch
+    list(APPEND CMAKE_PREFIX_PATH /libtorch)
 
     find_package(Threads REQUIRED)
 
@@ -81,6 +83,26 @@ if (ON_HOST STREQUAL "ON")
     option(protobuf_MODULE_COMPATIBLE TRUE)
     find_package(Protobuf CONFIG REQUIRED)
     message(STATUS "Using protobuf ${Protobuf_VERSION}")
+
+    # Automatically detect the CUDA architecture using nvcc
+    execute_process(
+            COMMAND ${CUDA_TOOLKIT_ROOT_DIR}/bin/nvcc --list-gpu-arch
+            OUTPUT_VARIABLE DETECTED_ARCHITECTURE
+            ERROR_QUIET
+    )
+    # Parse the architecture from the nvcc output
+    string(REGEX MATCHALL "compute_([0-9]+)" DETECTED_ARCHITECTURE "${DETECTED_ARCHITECTURE}")
+    foreach(ARCH ${DETECTED_ARCHITECTURE})
+        string(REGEX REPLACE "compute_" "" ARCH_NUM ${ARCH})
+        list(APPEND CMAKE_CUDA_ARCHITECTURES ${ARCH_NUM})
+    endforeach()
+    if (CMAKE_CUDA_ARCHITECTURES STREQUAL "")
+        message(WARNING "No CUDA architectures detected, resorting to native")
+        set(CMAKE_CUDA_ARCHITECTURES 'native')
+    else ()
+        message(STATUS "Available CUDA architectures: ${CMAKE_CUDA_ARCHITECTURES}")
+    endif ()
+    find_package(Torch REQUIRED)
 
     set(_PROTOBUF_LIBPROTOBUF protobuf::libprotobuf)
     set(_REFLECTION gRPC::grpc++_reflection)
@@ -118,6 +140,7 @@ if (ON_HOST STREQUAL "ON")
     add_subdirectory(libs/misc)
     add_subdirectory(libs/microservice)
     add_subdirectory(libs/utils/protobufprotocols)
+    add_subdirectory(libs/container_agent/fcpo_learning)
     add_subdirectory(libs/controller)
     add_subdirectory(libs/communicator)
     add_subdirectory(libs/container_agent)
@@ -226,6 +249,7 @@ else()
     add_subdirectory(libs/misc)
     add_subdirectory(libs/microservice)
     add_subdirectory(libs/utils/protobufprotocols)
+    add_subdirectory(libs/container_agent/fcpo_learning)
     add_subdirectory(libs/controller)
     add_subdirectory(libs/communicator)
     add_subdirectory(libs/trtengine)

@@ -10,7 +10,7 @@ package controlmessages;
 service ControlMessages {
   rpc AdvertiseToController(ConnectionConfigs) returns (SystemInfo) {}
   rpc SendDummyData(DummyMessage) returns (google.protobuf.Empty) {}
-  rpc ForwardFlRequest(indevicecommands.FlData) returns (google.protobuf.Empty) {}
+  rpc ForwardFl(indevicecommands.FlData) returns (google.protobuf.Empty) {}
 }
 
 message ConnectionConfigs {
