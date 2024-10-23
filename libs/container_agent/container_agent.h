@@ -78,25 +78,30 @@ enum class CONTAINER_STATUS {
     RELOADING
 };
 
+struct MicroserviceGroup {
+    std::vector<Microservice *> msvcList;
+    std::vector<ThreadSafeFixSizedDoubleQueue *> outQueue;
+};
+
 
 class ContainerAgent {
 public:
     ContainerAgent(const json &configs);
 
     virtual ~ContainerAgent() {
-        for (auto msvc: cont_receiverList) {
+        for (auto msvc: cont_msvcsGroups["receiver"].msvcList) {
             delete msvc;
         }
-        for (auto msvc: cont_preprocessorList) {
+        for (auto msvc: cont_msvcsGroups["preprocessor"].msvcList) {
             delete msvc;
         }
-        for (auto msvc: cont_inferencerList) {
+        for (auto msvc: cont_msvcsGroups["inference"].msvcList) {
             delete msvc;
         }
-        for (auto msvc: cont_postprocessorList) {
+        for (auto msvc: cont_msvcsGroups["postprocessor"].msvcList) {
             delete msvc;
         }
-        for (auto msvc: cont_senderList) {
+        for (auto msvc: cont_msvcsGroups["sender"].msvcList) {
             delete msvc;
         }
         server->Shutdown();
@@ -109,38 +114,38 @@ public:
     }
 
     void START() {
-        for (auto msvc: cont_receiverList) {
+        for (auto msvc: cont_msvcsGroups["receiver"].msvcList) {
             msvc->unpauseThread();
         }
-        for (auto msvc: cont_preprocessorList) {
+        for (auto msvc: cont_msvcsGroups["preprocessor"].msvcList) {
             msvc->unpauseThread();
         }
-        for (auto msvc: cont_inferencerList) {
+        for (auto msvc: cont_msvcsGroups["inference"].msvcList) {
             msvc->unpauseThread();
         }
-        for (auto msvc: cont_postprocessorList) {
+        for (auto msvc: cont_msvcsGroups["postprocessor"].msvcList) {
             msvc->unpauseThread();
         }
-        for (auto msvc: cont_senderList) {
+        for (auto msvc: cont_msvcsGroups["sender"].msvcList) {
             msvc->unpauseThread();
         }
         spdlog::get("container_agent")->info("=========================================== STARTS ===========================================");
     }
 
     void PROFILING_START(BatchSizeType batch) {
-        for (auto msvc: cont_receiverList) {
+        for (auto msvc: cont_msvcsGroups["receiver"].msvcList) {
             msvc->unpauseThread();
         }
-        for (auto msvc: cont_preprocessorList) {
+        for (auto msvc: cont_msvcsGroups["preprocessor"].msvcList) {
             msvc->unpauseThread();
         }
-        for (auto msvc: cont_inferencerList) {
+        for (auto msvc: cont_msvcsGroups["inference"].msvcList) {
             msvc->unpauseThread();
         }
-        for (auto msvc: cont_postprocessorList) {
+        for (auto msvc: cont_msvcsGroups["postprocessor"].msvcList) {
             msvc->unpauseThread();
         }
-        for (auto msvc: cont_senderList) {
+        for (auto msvc: cont_msvcsGroups["sender"].msvcList) {
             msvc->unpauseThread();
         }
 
@@ -165,18 +170,18 @@ public:
         MicroserviceType type = msvc->msvc_type;
         if (type >= MicroserviceType::Receiver &&
             type < MicroserviceType::PreprocessBatcher) {
-            cont_receiverList.push_back(msvc);
+            cont_msvcsGroups["receiver"].msvcList.push_back(msvc);
         } else if (type >= MicroserviceType::PreprocessBatcher &&
                     type < MicroserviceType::TRTInferencer) {
-            cont_preprocessorList.push_back(msvc);
+            cont_msvcsGroups["preprocessor"].msvcList.push_back(msvc);
         } else if (type >= MicroserviceType::TRTInferencer &&
                     type < MicroserviceType::Postprocessor) {
-            cont_inferencerList.push_back(msvc);
+            cont_msvcsGroups["inference"].msvcList.push_back(msvc);
         } else if (type >= MicroserviceType::Postprocessor &&
                     type < MicroserviceType::Sender) {
-            cont_postprocessorList.push_back(msvc);
+            cont_msvcsGroups["postprocessor"].msvcList.push_back(msvc);
         } else if (type >= MicroserviceType::Sender) {
-            cont_senderList.push_back(msvc);
+            cont_msvcsGroups["sender"].msvcList.push_back(msvc);
         } else {
             throw std::runtime_error("Unknown microservice type: " + std::to_string((int)type));
         }
@@ -189,19 +194,19 @@ public:
     }
 
     void dispatchMicroservices() {
-        for (auto &msvc: cont_receiverList) {
+        for (auto &msvc: cont_msvcsGroups["receiver"].msvcList) {
             msvc->dispatchThread();
         }
-        for (auto &msvc: cont_preprocessorList) {
+        for (auto &msvc: cont_msvcsGroups["preprocessor"].msvcList) {
             msvc->dispatchThread();
         }
-        for (auto &msvc: cont_inferencerList) {
+        for (auto &msvc: cont_msvcsGroups["inference"].msvcList) {
             msvc->dispatchThread();
         }
-        for (auto &msvc: cont_postprocessorList) {
+        for (auto &msvc: cont_msvcsGroups["postprocessor"].msvcList) {
             msvc->dispatchThread();
         }
-        for (auto &msvc: cont_senderList) {
+        for (auto &msvc: cont_msvcsGroups["sender"].msvcList) {
             msvc->dispatchThread();
         }
     }
@@ -213,7 +218,6 @@ public:
     virtual void runService(const json &pipeConfigs, const json &configs);
 
 protected:
-
     virtual void initiateMicroservices(const json &pipeConfigs);
 
     bool addPreprocessor(uint8_t totalNumInstances);
@@ -421,11 +425,7 @@ protected:
     std::vector<spdlog::sink_ptr> cont_loggerSinks = {};
     std::shared_ptr<spdlog::logger> cont_logger;
 
-    std::vector<Microservice *> cont_receiverList;
-    std::vector<Microservice *> cont_senderList;
-    std::vector<Microservice *> cont_preprocessorList;
-    std::vector<Microservice *> cont_postprocessorList;
-    std::vector<Microservice *> cont_inferencerList;
+    std::map<std::string, MicroserviceGroup> cont_msvcsGroups;
 
     FCPOAgent *cont_fcpo_agent;
     uint64_t cont_rlIntervalMillisec = 1000;

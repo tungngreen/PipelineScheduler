@@ -135,13 +135,21 @@ private:
     std::queue<Request<LocalCPUReqDataType>> q_cpuQueue;
     std::queue<Request<LocalGPUReqDataType>> q_gpuQueue;
     std::mutex q_mutex;
-    std::condition_variable q_condition;
+    std::condition_variable q_condition_producers;
+    std::condition_variable q_condition_consumer;
     std::uint8_t activeQueueIndex;
     QueueLengthType q_MaxSize = 100;
     std::int16_t class_of_interest;
     bool isEmpty;
     bool isEncoded = false;
     std::atomic<unsigned int> dropedCount = 0;
+
+    // Fairness control variables
+    std::atomic<uint32_t> producer_ticket{0}; // Ticket number for producers
+    std::atomic<uint32_t> current_ticket{0};  // Current ticket being served
+    std::atomic<bool> consumer_waiting{false}; // To give consumer priority
+
+    static constexpr uint32_t MAX_TICKET_VALUE = UINT32_MAX - 1000; // Maximum ticket value before wraparound
 
 public:
     ThreadSafeFixSizedDoubleQueue(QueueLengthType size, int16_t coi, std::string name) :  q_name(name), q_MaxSize(size), class_of_interest(coi) {}
@@ -156,11 +164,18 @@ public:
     }
 
     /**
-     * @brief Emplacing Type 1 requests
+     * @brief Emplacing Type 1 requests with fairness for producers and ticket wraparound
      * 
      * @param request 
      */
     void emplace(Request<LocalCPUReqDataType> request) {
+        uint32_t my_ticket = producer_ticket.fetch_add(1); // Get a ticket for this producer
+        handleTicketOverflow(); // Handle overflow if needed
+
+        while (current_ticket.load() != my_ticket || consumer_waiting.load()) {
+            std::this_thread::yield(); // Wait for the producer's turn or yield to the consumer
+        }
+
         std::unique_lock<std::mutex> lock(q_mutex);
         if (q_cpuQueue.size() == q_MaxSize) {
             dropedCount += q_cpuQueue.front().req_batchSize;
@@ -168,15 +183,23 @@ public:
             q_cpuQueue.pop();
         }
         q_cpuQueue.emplace(request);
-        q_condition.notify_one();
+        current_ticket.fetch_add(1); // Move to the next producer in line
+        q_condition_consumer.notify_one(); // Notify the consumer
     }
 
     /**
-     * @brief Emplacing Type 2 requests
+     * @brief Emplacing Type 2 requests with fairness for producers and ticket wraparound
      * 
      * @param request 
      */
     void emplace(Request<LocalGPUReqDataType> request) {
+        uint32_t my_ticket = producer_ticket.fetch_add(1); // Get a ticket for this producer
+        handleTicketOverflow(); // Handle overflow if needed
+
+        while (current_ticket.load() != my_ticket || consumer_waiting.load()) {
+            std::this_thread::yield(); // Wait for the producer's turn or yield to the consumer
+        }
+
         std::unique_lock<std::mutex> lock(q_mutex);
         if (q_gpuQueue.size() == q_MaxSize) {
             dropedCount += q_gpuQueue.front().req_batchSize;
@@ -184,23 +207,27 @@ public:
             q_gpuQueue.pop();
         }
         q_gpuQueue.emplace(request);
-        q_condition.notify_one();
+        current_ticket.fetch_add(1); // Move to the next producer in line
+        q_condition_consumer.notify_one(); // Notify the consumer
     }
 
     /**
-     * @brief poping Type 1 requests
+     * @brief popping Type 1 requests with priority for the consumer
      * 
      * @param request 
      */
     Request<LocalCPUReqDataType> pop1(uint32_t timeout = 100000) { // 100ms
+        consumer_waiting.store(true); // Mark consumer as waiting
         std::unique_lock<std::mutex> lock(q_mutex);
 
         Request<LocalCPUReqDataType> request;
-        isEmpty = !q_condition.wait_for(
+        isEmpty = !q_condition_consumer.wait_for(
                 lock,
                 TimePrecisionType(timeout),
                 [this]() { return !q_cpuQueue.empty(); }
         );
+        consumer_waiting.store(false); // Consumer is no longer waiting
+
         if (!isEmpty) {
             request = q_cpuQueue.front();
             q_cpuQueue.pop();
@@ -211,18 +238,21 @@ public:
     }
 
     /**
-     * @brief popping Type 2 requests
+     * @brief popping Type 2 requests with priority for the consumer
      * 
      * @param request 
      */
     Request<LocalGPUReqDataType> pop2(uint32_t timeout = 100000) { // 100ms
+        consumer_waiting.store(true); // Mark consumer as waiting
         std::unique_lock<std::mutex> lock(q_mutex);
         Request<LocalGPUReqDataType> request;
-        isEmpty = !q_condition.wait_for(
+        isEmpty = !q_condition_consumer.wait_for(
                 lock,
                 TimePrecisionType(timeout),
                 [this]() { return !q_gpuQueue.empty(); }
         );
+        consumer_waiting.store(false); // Consumer is no longer waiting
+
         if (!isEmpty) {
             request = q_gpuQueue.front();
             q_gpuQueue.pop();
@@ -241,18 +271,16 @@ public:
         std::unique_lock<std::mutex> lock(q_mutex);
         if (activeQueueIndex == 1) {
             return q_cpuQueue.size();
-        } //else if (activeQueueIndex == 2) {
+        }
         return q_gpuQueue.size();
-        //}
     }
 
     int32_t size(uint8_t queueIndex) {
         std::unique_lock<std::mutex> lock(q_mutex);
         if (queueIndex == 1) {
             return q_cpuQueue.size();
-        } //else if (activeQueueIndex == 2) {
+        }
         return q_gpuQueue.size();
-        //}
     }
 
     unsigned int drops() {
@@ -288,7 +316,21 @@ public:
         std::unique_lock<std::mutex> lock(q_mutex);
         return isEncoded;
     }
+
+private:
+    /**
+     * @brief Handle ticket overflow by resetting tickets when they reach a high value.
+     */
+    void handleTicketOverflow() {
+        std::unique_lock<std::mutex> lock(q_mutex); // Ensure no concurrent access to tickets
+        if (producer_ticket.load() >= MAX_TICKET_VALUE && current_ticket.load() >= MAX_TICKET_VALUE) {
+            // Reset both producer_ticket and current_ticket
+            producer_ticket.store(0);
+            current_ticket.store(0);
+        }
+    }
 };
+
 
 /**
  * @brief 

@@ -450,31 +450,36 @@ void BaseReqBatcher::batchRequests() {
             continue;
         }
         // Processing the next incoming request
-        if (msvc_InQueue.at(0)->getActiveQueueIndex() != msvc_activeInQueueIndex.at(0)) {
-            if (msvc_InQueue.at(0)->size(msvc_activeInQueueIndex.at(0)) == 0) {
-                msvc_activeInQueueIndex.at(0) = msvc_InQueue.at(0)->getActiveQueueIndex();
-                spdlog::get("container_agent")->trace("{0:s} Set current active queue index to {1:d}.", msvc_name,
-                                                      msvc_activeInQueueIndex.at(0));
-            }
-            spdlog::get("container_agent")->trace("{0:s} Current active queue index {1:d}.", msvc_name,
-                                                  msvc_activeInQueueIndex.at(0));
-        }
+        // if (msvc_InQueue.at(0)->getActiveQueueIndex() != msvc_activeInQueueIndex.at(0)) {
+        //     if (msvc_InQueue.at(0)->size(msvc_activeInQueueIndex.at(0)) == 0) {
+        //         msvc_activeInQueueIndex.at(0) = msvc_InQueue.at(0)->getActiveQueueIndex();
+        //         spdlog::get("container_agent")->trace("{0:s} Set current active queue index to {1:d}.", msvc_name,
+        //                                               msvc_activeInQueueIndex.at(0));
+        //     }
+        //     spdlog::get("container_agent")->trace("{0:s} Current active queue index {1:d}.", msvc_name,
+        //                                           msvc_activeInQueueIndex.at(0));
+        // }
         if (isTimeToBatch()) {
             executeBatch(outBatch_genTime, outBatch_slo, outBatch_path, bufferData, prevData);
         }
         auto startTime = std::chrono::high_resolution_clock::now();
-        if (msvc_activeInQueueIndex.at(0) == 1) {
-            currCPUReq = msvc_InQueue.at(0)->pop1(timeout);
-            if (!validateRequest<LocalCPUReqDataType>(currCPUReq)) {
-                continue;
-            }
-            currReq = uploadReq(currCPUReq);
-        } else if (msvc_activeInQueueIndex.at(0) == 2) {
-            currReq = msvc_InQueue.at(0)->pop2(timeout);
-            if (!validateRequest<LocalGPUReqDataType>(currReq)) {
-                continue;
-            }
+        // if (msvc_activeInQueueIndex.at(0) == 1) {
+        //     currCPUReq = msvc_InQueue.at(0)->pop1(timeout);
+        //     if (!validateRequest<LocalCPUReqDataType>(currCPUReq)) {
+        //         continue;
+        //     }
+        //     currReq = uploadReq(currCPUReq);
+        // } else if (msvc_activeInQueueIndex.at(0) == 2) {
+        //     currReq = msvc_InQueue.at(0)->pop2(timeout);
+        //     if (!validateRequest<LocalGPUReqDataType>(currReq)) {
+        //         continue;
+        //     }
+        // }
+        currCPUReq = msvc_InQueue.at(0)->pop1(timeout);
+        if (!validateRequest<LocalCPUReqDataType>(currCPUReq)) {
+            continue;
         }
+        currReq = uploadReq(currCPUReq);
         // even if a valid request is not popped, if it's time to batch, we should batch the requests
         // as it doesn't take much time and otherwise, we are running the risk of the whole batch being late.
         // if (isTimeToBatch()) {
@@ -502,7 +507,7 @@ void BaseReqBatcher::batchRequests() {
 
         outBatch_slo.emplace_back(currReq.req_e2eSLOLatency[0]);
         outBatch_path.emplace_back(currReq.req_travelPath[0] + "[" + msvc_hostDevice + "|" + msvc_containerName + "|" +
-                                   std::to_string(msvc_overallTotalReqCount));
+                                   std::to_string(msvc_overallTotalReqCount) + "|" + msvc_name + "]");
         spdlog::get("container_agent")->trace("{0:s} popped a request of batch size {1:d}. In queue size is {2:d}.",
                                               msvc_name, currReq_batchSize, msvc_InQueue.at(0)->size());
 
