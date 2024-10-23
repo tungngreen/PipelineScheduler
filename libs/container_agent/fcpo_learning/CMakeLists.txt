@@ -56,6 +56,7 @@ target_include_directories(fcpo_learning
 
 target_link_libraries(fcpo_learning
         PUBLIC
+        control_comm_grpc_proto
         device_comm_grpc_proto
         device_mess_grpc_proto
         ${_GRPC_GRPCPP}

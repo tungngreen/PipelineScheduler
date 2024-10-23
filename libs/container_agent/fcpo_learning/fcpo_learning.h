@@ -9,7 +9,9 @@
 #include <chrono>
 #include "indevicecommands.grpc.pb.h"
 #include "indevicemessages.grpc.pb.h"
+#include "controlcommands.grpc.pb.h"
 
+using controlcommands::ControlCommands;
 using grpc::Status;
 using grpc::CompletionQueue;
 using grpc::ClientContext;
@@ -75,9 +77,10 @@ struct MultiPolicyNetwork: torch::nn::Module {
 
 class FCPOAgent {
 public:
-    FCPOAgent(std::string& cont_name, uint state_size, uint max_batch, uint resolution_size, uint threading_size,
-             CompletionQueue *cq, std::shared_ptr<InDeviceMessages::Stub> stub, uint update_steps = 64,
-             uint federated_steps = 5, double lambda = 0.95, double gamma = 0.99, const std::string& model_save = "");
+    FCPOAgent(std::string& cont_name, uint state_size, uint resolution_size, uint max_batch, uint threading_size,
+             CompletionQueue *cq, std::shared_ptr<InDeviceMessages::Stub> stub, torch::Dtype precision,
+             uint update_steps = 64, uint federated_steps = 5, double lambda = 0.95, double gamma = 0.99,
+             double clip_epsilon = 0.2, double penalty_weight = 0.1);
 
     ~FCPOAgent() {
         torch::save(model, path + "/latest_model.pt");
@@ -109,6 +112,7 @@ private:
     std::mutex model_mutex;
     std::shared_ptr<MultiPolicyNetwork> model;
     std::unique_ptr<torch::optim::Optimizer> optimizer;
+    torch::Dtype precision;
     T state;
     std::vector<T> states, log_probs, values;
     std::vector<int> resolution_actions;
@@ -128,7 +132,10 @@ private:
     double clip_epsilon;
     double avg_reward;
     double penalty_weight;
+    uint state_size;
+    uint resolution_size;
     uint max_batch;
+    uint threading_size;
 
     uint steps_counter = 0;
     uint update_steps;
@@ -138,26 +145,59 @@ private:
 
 class FCPOServer {
 public:
-    FCPOServer(uint client_counter, double lambda = 0.95, double gamma = 0.99, const std::string& model_save = "");
+    FCPOServer(std::string run_name, uint state_size, torch::Dtype precision, double lambda = 0.95,
+               double gamma = 0.99);
     ~FCPOServer() {
         torch::save(model, path + "/latest_model.pt");
         out.close();
     }
+
+    void addClient(FlData &data, std::shared_ptr<ControlCommands::Stub> stub, CompletionQueue *cq);
+
+    void stop() { run = false; }
+
+    nlohmann::json getConfig() {
+        return {
+                {"state_size", state_size},
+                {"lambda", lambda},
+                {"gamma", gamma},
+                {"clip_epsilon", clip_epsilon},
+                {"penalty_weight", penalty_weight},
+                {"precision", precision},
+                {"update_steps", 60},
+                {"update_step_incs", 5},
+                {"federated_steps", 5}
+        };
+    }
+
 private:
+    struct ClientModel{
+        FlData data;
+        std::shared_ptr<MultiPolicyNetwork> model;
+        std::shared_ptr<ControlCommands::Stub> stub;
+        CompletionQueue *cq;
+    };
+
+    void proceed();
+
+    void returnFLModel(ClientModel &client);
+
     std::shared_ptr<MultiPolicyNetwork> model;
     std::unique_ptr<torch::optim::Optimizer> optimizer;
-    std::vector<FlData> federated_updates;
-    uint client_counter;
+    torch::Dtype precision;
+    std::vector<ClientModel> federated_clients;
+    uint client_counter = 0;
 
     std::mt19937 re;
     std::ofstream out;
     std::string path;
+    std::atomic<bool> run;
 
     double lambda;
     double gamma;
     double clip_epsilon;
     double penalty_weight;
-
+    uint state_size;
 };
 
 
