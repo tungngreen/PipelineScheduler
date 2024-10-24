@@ -46,7 +46,7 @@ void FCPOAgent::update() {
     T action2_probs = torch::softmax(policy2, -1);
     T action2_log_probs = torch::log(action2_probs.gather(-1, torch::tensor(batching_actions).view({-1, 1, 1})).squeeze(-1));
     T action3_probs = torch::softmax(policy3, -1);
-    T action3_log_probs = torch::log(action3_probs.gather(-1, torch::tensor(batching_actions).view({-1, 1, 1})).squeeze(-1));
+    T action3_log_probs = torch::log(action3_probs.gather(-1, torch::tensor(scaling_actions).view({-1, 1, 1})).squeeze(-1));
     T new_log_probs = action1_log_probs + action2_log_probs + action3_log_probs;
 
     T ratio = torch::exp(new_log_probs - torch::stack(log_probs));
