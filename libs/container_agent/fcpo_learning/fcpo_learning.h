@@ -126,12 +126,14 @@ private:
     std::unique_ptr<torch::optim::Optimizer> optimizer;
     torch::Dtype precision;
     T state;
+    std::tuple<int, int, int> actions;
     std::vector<T> states, log_probs, values;
     std::vector<int> resolution_actions;
     std::vector<int> batching_actions;
     std::vector<int> scaling_actions;
     std::vector<double> rewards;
 
+    bool first = true;
     std::mt19937 re;
     std::ofstream out;
     std::string path;

@@ -72,7 +72,7 @@ void FCPOAgent::update() {
     if (federated_steps_counter++ % federated_steps == 0) {
         std::cout << "Federated Training: " << cumu_reward << std::endl;
         spdlog::info("Federated training RL agent at average Reward {}!", cumu_reward);
-        federated_steps_counter = 0;  // 0 means that we are waiting for federated update to come back
+        federated_steps_counter = 0; // 0 means that we are waiting for federated update to come back
         federatedUpdate();
     }
     reset();
@@ -127,7 +127,14 @@ void FCPOAgent::federatedUpdateCallback(FlData &response) {
 }
 
 void FCPOAgent::rewardCallback(double throughput, double drops, double latency_penalty, double oversize_penalty) {
+    if (first) { // First reward is not valid and needs to be discarded
+        first = false;
+        return;
+    }
     states.push_back(state);
+    resolution_actions.push_back(std::get<0>(actions));
+    batching_actions.push_back(std::get<1>(actions));
+    scaling_actions.push_back(std::get<2>(actions));
     rewards.push_back(2 * throughput - drops - latency_penalty + (1 - oversize_penalty));
 }
 
@@ -177,21 +184,18 @@ T FCPOAgent::computeGae(double last_value) const {
 std::tuple<int, int, int> FCPOAgent::runStep() {
     Stopwatch sw;
     sw.start();
-    std::tuple<int, int, int> action = selectAction();
-    cumu_reward += rewards[steps_counter];
+    actions = selectAction();
+    cumu_reward += (steps_counter) ? rewards[steps_counter - 1] : 0;
 
     steps_counter++;
-    resolution_actions.push_back(std::get<0>(action));
-    batching_actions.push_back(std::get<1>(action));
-    scaling_actions.push_back(std::get<2>(action));
     sw.stop();
-    out << "step," << sw.elapsed_microseconds() << "," << federated_steps_counter << "," << steps_counter << "," << cumu_reward  << "," << std::get<0>(action) << "," << std::get<1>(action) << "," << std::get<2>(action) << std::endl;
+    out << "step," << sw.elapsed_microseconds() << "," << federated_steps_counter << "," << steps_counter << "," << cumu_reward  << "," << std::get<0>(actions) << "," << std::get<1>(actions) << "," << std::get<2>(actions) << std::endl;
 
     if (steps_counter%update_steps == 0) {
         std::thread t(&FCPOAgent::update, this);
         t.detach();
     }
-    return std::make_tuple(std::get<0>(action) + 1, std::get<1>(action) + 1, std::get<2>(action));
+    return std::make_tuple(std::get<0>(actions) + 1, std::get<1>(actions) + 1, std::get<2>(actions));
 }
 
 
