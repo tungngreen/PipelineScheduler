@@ -39,6 +39,19 @@ if(SYSTEM_NAME STREQUAL "PPP")
                 controller.cpp
                 scheduling-ppp.cpp
         )
+elseif (SYSTEM_NAME STREQUAL "FCPO")
+        set(
+                HEADER_FILES
+                controller.h
+                scheduling-fcpo.h
+        )
+
+        # All source files and private header files go here.
+        set(
+                SOURCE_FILES
+                controller.cpp
+                scheduling-fcpo.cpp
+        )
 elseif (SYSTEM_NAME STREQUAL "JLF")
         set(
                 HEADER_FILES

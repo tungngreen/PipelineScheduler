@@ -101,7 +101,7 @@ protected:
                 "docker run --network=host -v /ssd0/tung/PipePlusPlus/data/:/app/data/  "
                 "-v /ssd0/tung/PipePlusPlus/logs/:/app/logs/ -v /ssd0/tung/PipePlusPlus/models/:/app/models/ "
                 "-v /ssd0/tung/PipePlusPlus/model_profiles/:/app/model_profiles/ "
-                "-d --rm --runtime nvidia --gpus all --name " +
+                "-d --runtime nvidia --gpus all --name " +
                 absl::StrFormat(
                         R"(%s pipeline-base-container:torch %s --json '%s' --device %i --port %i --port_offset %i)",
                         cont_name, executable, start_string, device, port, dev_port_offset) +
