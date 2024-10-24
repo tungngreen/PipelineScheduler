@@ -42,30 +42,37 @@ const std::unordered_map<std::string, torch::Dtype> DTYPE_MAP = {
 
 template <typename Experience>
 class ExperienceBuffer {
-private:
-    std::vector<Experience> buffer;
-    size_t capacity;
-    size_t current_index;  // Tracks the next position for insertion
-    bool is_full;          // Tracks if the buffer has wrapped around
-
 public:
-    // Constructor to initialize buffer with fixed capacity
+
     ExperienceBuffer(size_t capacity)
         : buffer(capacity), capacity(capacity), current_index(0), is_full(false) {}
 
-    // Add a new experience to the buffer (default cyclic behavior)
-    void add(const Experience& experience) {
-        buffer[current_index] = experience;
-        current_index = (current_index + 1) % capacity;
-        if (current_index == 0) is_full = true;  // Buffer has wrapped around
+    size_t add(const Experience& experience, float (*distance_metric)(const Experience&, const Experience&)) {
+        if (!is_full) {
+            size_t inserted_index = current_index;
+            add(experience);
+            return inserted_index;
+        }
+
+        auto min_it = std::min_element(buffer.begin(), buffer.end(),
+                                       [&experience, &distance_metric](const Experience& a, const Experience& b) {
+                                           return distance_metric(experience, a) < distance_metric(experience, b);
+                                       });
+
+        size_t removed_index = std::distance(buffer.begin(), min_it);
+
+        if (distance_metric(experience, *min_it) > 0.1) {
+            *min_it = experience;
+        }
+
+        return removed_index;
     }
 
-    // Add a new experience at a specific index (for synchronization with parallel buffer)
     void add_at(const Experience& experience, size_t index) {
         if (index >= capacity) {
             throw std::out_of_range("Index out of range.");
         }
-        buffer[index] = experience;  // Directly replace the experience at the given index
+        buffer[index] = experience;
     }
 
     // Retrieve all experiences (for debugging or analysis)
@@ -78,39 +85,18 @@ public:
         return std::vector<Experience>(buffer.begin(), buffer.begin() + current_index);
     }
 
-    // Random sampling of experiences for training
-    std::vector<Experience> sample_batch(size_t batch_size) const {
-        std::vector<Experience> all_experiences = get_all();
-        std::vector<Experience> batch;
-        std::sample(all_experiences.begin(), all_experiences.end(), std::back_inserter(batch),
-                    batch_size, std::mt19937{std::random_device{}()});
-        return batch;
+private:
+    
+    void add(const Experience& experience) {
+        buffer[current_index] = experience;
+        current_index = (current_index + 1) % capacity;
+        if (current_index == 0) is_full = true;
     }
 
-    // Add an experience with diversity-based replacement and return removed index
-    size_t add_diverse(const Experience& experience, float (*distance_metric)(const Experience&, const Experience&)) {
-        if (!is_full) {
-            size_t inserted_index = current_index;  // Track current insertion index
-            add(experience);
-            return inserted_index;  // No removal occurred yet (just adding normally)
-        }
-
-        // Find the most similar (least diverse) experience
-        auto min_it = std::min_element(buffer.begin(), buffer.end(),
-            [&experience, &distance_metric](const Experience& a, const Experience& b) {
-                return distance_metric(experience, a) < distance_metric(experience, b);
-            });
-
-        // Calculate index of the least diverse experience
-        size_t removed_index = std::distance(buffer.begin(), min_it);
-
-        // Replace it with the new experience if it adds diversity
-        if (distance_metric(experience, *min_it) > 0.1) {  // Threshold for replacement
-            *min_it = experience;
-        }
-
-        return removed_index;
-    }
+    std::vector<Experience> buffer;
+    size_t capacity;
+    size_t current_index;
+    bool is_full;
 };
 
 struct ActorCriticNet : torch::nn::Module {
