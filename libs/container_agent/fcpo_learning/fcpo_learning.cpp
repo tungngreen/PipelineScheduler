@@ -40,7 +40,7 @@ void FCPOAgent::update() {
     Stopwatch sw;
     sw.start();
 
-    auto [policy1, policy2, policy3, v] = model->forward(torch::stack(states));
+    auto [policy1, policy2, policy3, val] = model->forward(torch::stack(states));
     T action1_probs = torch::softmax(policy1, -1);
     T action1_log_probs = torch::log(action1_probs.gather(-1, torch::tensor(resolution_actions).view({-1, 1, 1})).squeeze(-1));
     T action2_probs = torch::softmax(policy2, -1);
@@ -54,7 +54,7 @@ void FCPOAgent::update() {
     T advantages = computeGae();
 
     T policy_loss = -torch::min(ratio * advantages, clipped_ratio * advantages).to(precision).mean();
-    T value_loss = torch::mse_loss(v, computeCumuRewards()).to(precision);
+    T value_loss = torch::mse_loss(val, computeCumuRewards()).to(precision);
     T policy1_penalty = penalty_weight * torch::mean(torch::clamp(torch::tensor(resolution_actions), 0, 1)).to(precision);
     T policy3_penalty = penalty_weight * torch::mean(torch::clamp(torch::tensor(scaling_actions), 0, 1)).to(precision);
     T loss = policy_loss + 0.5 * value_loss + policy1_penalty + policy3_penalty;
@@ -132,6 +132,8 @@ void FCPOAgent::rewardCallback(double throughput, double drops, double latency_p
         return;
     }
     states.push_back(state);
+    log_probs.push_back(log_prob);
+    values.push_back(value);
     resolution_actions.push_back(std::get<0>(actions));
     batching_actions.push_back(std::get<1>(actions));
     scaling_actions.push_back(std::get<2>(actions));
@@ -144,7 +146,7 @@ void FCPOAgent::setState(double curr_batch, double curr_resolution_choice, doubl
 
 std::tuple<int, int, int> FCPOAgent::selectAction() {
     std::lock_guard<std::mutex> lock(model_mutex);
-    auto [policy1, policy2, policy3, value] = model->forward(state);
+    auto [policy1, policy2, policy3, val] = model->forward(state);
 
     T action_dist = torch::multinomial(policy1, 1);  // Sample from policy (discrete distribution)
     int resolution = action_dist.item<int>();  // Convert tensor to int action
@@ -153,8 +155,8 @@ std::tuple<int, int, int> FCPOAgent::selectAction() {
     action_dist = torch::multinomial(policy3, 1);
     int scaling = action_dist.item<int>();
 
-    log_probs.push_back(torch::log(policy1.squeeze(0)[resolution] + torch::log(policy2.squeeze(0)[batching]) + torch::log(policy3.squeeze(0)[scaling])));
-    values.push_back(value);
+    log_prob = torch::log(policy1.squeeze(0)[resolution] + torch::log(policy2.squeeze(0)[batching]) + torch::log(policy3.squeeze(0)[scaling]));
+    value = val;
     return std::make_tuple(resolution, batching, scaling);
 }
 

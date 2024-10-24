@@ -198,9 +198,9 @@ private:
     std::shared_ptr<MultiPolicyNetwork> model;
     std::unique_ptr<torch::optim::Optimizer> optimizer;
     torch::Dtype precision;
-    T state;
-    std::tuple<int, int, int> actions;
+    T state, log_prob, value;
     std::vector<T> states, log_probs, values;
+    std::tuple<int, int, int> actions;
     std::vector<int> resolution_actions;
     std::vector<int> batching_actions;
     std::vector<int> scaling_actions;
