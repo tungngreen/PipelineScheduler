@@ -230,6 +230,12 @@ protected:
 
     void collectRuntimeMetrics();
 
+    void applyResolution(int resolutionConfig);
+
+    void applyBatchSize(int batchSize);
+
+    void applyMultiThreading(int multiThreadingConfig);
+
     void updateArrivalRecords(ArrivalRecordType arrivalRecords, RunningArrivalRecord &perSecondArrivalRecords,
                               unsigned int lateCount, unsigned int queueDrops);
 

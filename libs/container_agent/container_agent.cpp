@@ -882,7 +882,7 @@ std::vector<float> getThrptsInPeriods(const std::vector<ClockType> &timestamps, 
     uint8_t periodIndex = 0;
     // Iterate through each period
     for (int i = timestamps.size() - 1; i >= 0; i--) {
-        if (timestamps[i] > now) { // TODO: This is a hack to avoid the case where the timestamp is in the future because of lokal Timing Updates of the device. This needs a better solution in the future
+        if (timestamps[i] > now) { // TODO: This is a hack to avoid the case where the timestamp is in the future because of local Timing Updates of the device. This needs a better solution in the future
             continue;
         }
         // Calculate the lower bound time point for the current period
@@ -1026,13 +1026,7 @@ void ContainerAgent::collectRuntimeMetrics() {
                                       avgRequestRate, pre_queueDrops, inf_queueDrops);
             auto [targetRes, newBS, scaling] = cont_fcpo_agent->runStep();
 
-            for (auto preproc : cont_msvcsGroups["preprocessor"].msvcList) {
-                // The batch size of the data reader (aka FPS) should be updated by `UpdateBatchSizeRequestHandler`
-                if (preproc->msvc_type == msvcconfigs::MicroserviceType::DataReader) {
-                    continue;
-                }
-                preproc->msvc_idealBatchSize = newBS;
-            }
+
             cont_nextRLDecisionTime = std::chrono::high_resolution_clock::now() + std::chrono::milliseconds(cont_rlIntervalMillisec);
         }
 
@@ -1116,6 +1110,51 @@ void ContainerAgent::collectRuntimeMetrics() {
 
     stopAllMicroservices();
 }
+
+void ContainerAgent::applyResolution(int resolutionConfig) {
+    for (auto preproc : cont_msvcsGroups["preprocessor"].msvcList) {
+        preproc->msvc_concat.numImgs = resolutionConfig;
+    }
+}
+
+void ContainerAgent::applyBatchSize(int batchSize) {
+    for (auto preproc : cont_msvcsGroups["preprocessor"].msvcList) {
+        // The batch size of the data reader (aka FPS) should be updated by `UpdateBatchSizeRequestHandler`
+        if (preproc->msvc_type == msvcconfigs::MicroserviceType::DataReader) {
+            continue;
+        }
+        preproc->msvc_idealBatchSize = batchSize;
+    }
+    for (auto infer : cont_msvcsGroups["inference"].msvcList) {
+        infer->msvc_idealBatchSize = batchSize;
+    }
+};
+
+void ContainerAgent::applyMultiThreading(int multiThreadingConfig) {
+    int current_pre_count = cont_msvcsGroups["preprocessor"].msvcList.size();
+    int current_post_count = cont_msvcsGroups["postprocessor"].msvcList.size();
+    switch (multiThreadingConfig) {
+        case NoMultiThreads:
+            if (current_pre_count > 1) { removePreprocessor(1); }
+            if (current_post_count > 1) { removePostprocessor(1); }
+            break;
+        case MultiPreprocess:
+            if (current_pre_count == 1) { addPreprocessor(2); }
+            if (current_post_count > 1) { removePostprocessor(1); }
+            break;
+        case MultiPostprocess:
+            if (current_pre_count > 1) { removePreprocessor(1); }
+            if (current_post_count == 1) { addPostprocessor(2); }
+            break;
+        case BothMultiThreads:
+            if (current_pre_count == 1) { addPreprocessor(2); }
+            if (current_post_count == 1) { addPostprocessor(2); }
+            break;
+        default:
+            spdlog::get("container_agent")->error("{0:s} Unknown multi-threading configuration: {1:d}", __func__, multiThreadingConfig);
+            break;
+    }
+};
 
 void ContainerAgent::updateArrivalRecords(ArrivalRecordType arrivalRecords, RunningArrivalRecord &perSecondArrivalRecords, unsigned int lateCount, unsigned int queueDrops) {
     std::string sql;
