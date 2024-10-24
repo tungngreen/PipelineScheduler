@@ -108,7 +108,7 @@ private:
     void update();
     void federatedUpdate();
     void reset() {
-        avg_reward = 0.0;
+        cumu_reward = 0.0;
         states.clear();
         values.clear();
         resolution_actions.clear();
@@ -142,7 +142,7 @@ private:
     double lambda;
     double gamma;
     double clip_epsilon;
-    double avg_reward;
+    double cumu_reward;
     double penalty_weight;
     uint state_size;
     uint resolution_size;

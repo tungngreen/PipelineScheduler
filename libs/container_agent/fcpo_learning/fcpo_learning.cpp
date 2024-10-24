@@ -20,7 +20,7 @@ FCPOAgent::FCPOAgent(std::string& cont_name, uint state_size, uint resolution_si
     model->to(precision);
     optimizer = std::make_unique<torch::optim::Adam>(model->parameters(), torch::optim::AdamOptions(1e-3));
 
-    avg_reward = 0.0;
+    cumu_reward = 0.0;
     states = {};
     resolution_actions = {};
     batching_actions = {};
@@ -36,7 +36,7 @@ void FCPOAgent::update() {
         spdlog::trace("Waiting for federated update, cancel !");
         return;
     }
-    spdlog::info("Locally training RL agent at average Reward {}!", avg_reward);
+    spdlog::info("Locally training RL agent at average Reward {}!", cumu_reward);
     Stopwatch sw;
     sw.start();
 
@@ -67,10 +67,11 @@ void FCPOAgent::update() {
     sw.stop();
 
     std::cout << "Training: " << sw.elapsed_microseconds() << std::endl;
+    out << "episodeEnd," << sw.elapsed_microseconds() << "," << federated_steps_counter << "," << steps_counter << "," << cumu_reward << "," << (double) cumu_reward / (double) steps_counter << std::endl;
 
     if (federated_steps_counter++ % federated_steps == 0) {
-        std::cout << "Federated Training: " << avg_reward << std::endl;
-        spdlog::info("Federated training RL agent at average Reward {}!", avg_reward);
+        std::cout << "Federated Training: " << cumu_reward << std::endl;
+        spdlog::info("Federated training RL agent at average Reward {}!", cumu_reward);
         federated_steps_counter = 0;  // 0 means that we are waiting for federated update to come back
         federatedUpdate();
     }
@@ -177,14 +178,14 @@ std::tuple<int, int, int> FCPOAgent::runStep() {
     Stopwatch sw;
     sw.start();
     std::tuple<int, int, int> action = selectAction();
-    avg_reward += rewards[steps_counter] / update_steps;
+    cumu_reward += rewards[steps_counter];
 
     steps_counter++;
     resolution_actions.push_back(std::get<0>(action));
     batching_actions.push_back(std::get<1>(action));
     scaling_actions.push_back(std::get<2>(action));
     sw.stop();
-    out << sw.elapsed_microseconds() << "," << federated_steps_counter << "," << steps_counter << "," << avg_reward << "," << std::get<0>(action) << "," << std::get<1>(action) << "," << std::get<2>(action) << std::endl;
+    out << "step," << sw.elapsed_microseconds() << "," << federated_steps_counter << "," << steps_counter << "," << cumu_reward  << "," << std::get<0>(action) << "," << std::get<1>(action) << "," << std::get<2>(action) << std::endl;
 
     if (steps_counter%update_steps == 0) {
         std::thread t(&FCPOAgent::update, this);
