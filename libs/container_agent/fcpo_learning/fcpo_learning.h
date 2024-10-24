@@ -28,6 +28,18 @@ enum threadingAction {
     BothMultiThreads = 3
 };
 
+const std::unordered_map<std::string, torch::Dtype> DTYPE_MAP = {
+        {"float", torch::kFloat32},
+        {"double", torch::kDouble},
+        {"half", torch::kFloat16},
+        {"int", torch::kInt32},
+        {"long", torch::kInt64},
+        {"short", torch::kInt16},
+        {"char", torch::kInt8},
+        {"byte", torch::kUInt8},
+        {"bool", torch::kBool}
+};
+
 struct ActorCriticNet : torch::nn::Module {
     torch::nn::Linear fc1{nullptr}, policy_head{nullptr}, value_head{nullptr};
 
@@ -79,8 +91,8 @@ class FCPOAgent {
 public:
     FCPOAgent(std::string& cont_name, uint state_size, uint resolution_size, uint max_batch, uint threading_size,
              CompletionQueue *cq, std::shared_ptr<InDeviceMessages::Stub> stub, torch::Dtype precision,
-             uint update_steps = 64, uint federated_steps = 5, double lambda = 0.95, double gamma = 0.99,
-             double clip_epsilon = 0.2, double penalty_weight = 0.1);
+             uint update_steps = 60, uint update_steps_inc = 5, uint federated_steps = 5, double lambda = 0.95,
+             double gamma = 0.99, double clip_epsilon = 0.2, double penalty_weight = 0.1);
 
     ~FCPOAgent() {
         torch::save(model, path + "/latest_model.pt");
@@ -139,14 +151,14 @@ private:
 
     uint steps_counter = 0;
     uint update_steps;
+    uint update_steps_inc;
     uint federated_steps_counter = 1;
     uint federated_steps;
 };
 
 class FCPOServer {
 public:
-    FCPOServer(std::string run_name, uint state_size, torch::Dtype precision, double lambda = 0.95,
-               double gamma = 0.99);
+    FCPOServer(std::string run_name, uint state_size, torch::Dtype precision);
     ~FCPOServer() {
         torch::save(model, path + "/latest_model.pt");
         out.close();
@@ -163,7 +175,7 @@ public:
                 {"gamma", gamma},
                 {"clip_epsilon", clip_epsilon},
                 {"penalty_weight", penalty_weight},
-                {"precision", precision},
+                {"precision", torch::toString(precision)},
                 {"update_steps", 60},
                 {"update_step_incs", 5},
                 {"federated_steps", 5}

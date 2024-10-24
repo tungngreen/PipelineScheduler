@@ -431,7 +431,7 @@ void Controller::ApplyScheduling() {
      */
     for (auto &[pipeName, pipe]: ctrl_scheduledPipelines.getMap()) {
         for (auto &model: pipe->tk_pipelineModels) {
-            if (ctrl_systemName != "ppp" && ctrl_systemName != "jlf") {
+            if (ctrl_systemName != "ppp" && ctrl_systemName != "jlf" && ctrl_systemName != "fcpo") {
                 model->cudaDevices.emplace_back(0);
                 model->numReplicas = 1;
             }
@@ -525,7 +525,7 @@ void Controller::ApplyScheduling() {
         }
     }
 
-    if (ctrl_systemName != "ppp") {
+    if (ctrl_systemName != "ppp" && ctrl_systemName != "fcpo") {
         basicGPUScheduling(new_containers);
     } else {
         colocationTemporalScheduling();
@@ -741,10 +741,10 @@ void Controller::StartContainer(ContainerHandle *container, bool easy_allocation
         start_config["container"]["cont_hostDeviceType"] = ctrl_sysDeviceInfo[container->device_agent->type];
         start_config["container"]["cont_name"] = container->name;
         start_config["container"]["cont_allocationMode"] = easy_allocation ? 1 : 0;
-        if (ctrl_systemName == "ppp") {
+        if (ctrl_systemName == "ppp" || ctrl_systemName == "fcpo") {
             start_config["container"]["cont_batchMode"] = 2;
         }
-        if (ctrl_systemName == "ppp" || ctrl_systemName == "jlf") {
+        if (ctrl_systemName == "ppp" || ctrl_systemName == "fcpo" || ctrl_systemName == "jlf") {
             start_config["container"]["cont_dropMode"] = 1;
         }
         start_config["container"]["cont_pipelineSLO"] = container->task->tk_slo;
@@ -847,6 +847,18 @@ void Controller::StartContainer(ContainerHandle *container, bool easy_allocation
 
             postprocessor->at("msvc_dnstreamMicroservices").push_back(post_down);
             base_config.push_back(sender);
+            if (ctrl_systemName == "fcpo") {
+                start_config["fcpo"] = ctrl_fcpo_server->getConfig();
+                std::string deviceTypeName = getDeviceTypeName(container->device_agent->type);
+                if (container->model_file.find("yolov5") != std::string::npos) {
+                    start_config["fcpo"]["resolution_size"] =
+                            (deviceTypeName == "server" || deviceTypeName == "agx") ? 4 : 2;
+                } else {
+                    start_config["fcpo"]["resolution_size"] = 1;
+                }
+                start_config["fcpo"]["batch_size"] = container->pipelineModel->processProfiles[deviceTypeName].maxBatchSize;
+                start_config["fcpo"]["threads_size"] = (deviceTypeName == "server") ? 4 : 2;
+            }
         }
 
         start_config["container"]["cont_pipeline"] = base_config;

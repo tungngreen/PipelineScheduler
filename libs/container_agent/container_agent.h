@@ -213,8 +213,6 @@ public:
 
     void transferFrameID(std::string url);
 
-    void profiling(const json &pipeConfigs, const json &profileConfigs);
-
     virtual void runService(const json &pipeConfigs, const json &configs);
 
 protected:
@@ -394,21 +392,21 @@ protected:
     std::string cont_hostDevice;
     std::string cont_hostDeviceType;
     std::string cont_inferModel;
+    std::atomic<bool> run;
+    std::atomic<bool> hasDataReader;
+    std::atomic<bool> isDataSource;
 
     std::unique_ptr<ServerCompletionQueue> server_cq;
     CompletionQueue *sender_cq;
     InDeviceCommands::AsyncService service;
     std::unique_ptr<grpc::Server> server;
     std::shared_ptr<InDeviceMessages::Stub> stub;
-    std::atomic<bool> run;
-
-    unsigned int pid;
-    Profiler *profiler;
 
     std::string cont_logDir;
     RUNMODE cont_RUNMODE;
     uint8_t cont_deviceIndex;
-
+    unsigned int pid;
+    Profiler *profiler;
     bool reportHwMetrics;
     std::string cont_hwMetricsTableName;
     SummarizedHardwareMetrics cont_hwMetrics;

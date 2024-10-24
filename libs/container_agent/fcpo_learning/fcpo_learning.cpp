@@ -2,11 +2,12 @@
 
 FCPOAgent::FCPOAgent(std::string& cont_name, uint state_size, uint resolution_size, uint max_batch,  uint threading_size,
                    CompletionQueue *cq, std::shared_ptr<InDeviceMessages::Stub> stub, torch::Dtype precision, 
-                   uint update_steps, uint federated_steps, double lambda, double gamma, double clip_epsilon, double penalty_weight)
+                   uint update_steps, uint update_steps_inc, uint federated_steps, double lambda, double gamma,
+                   double clip_epsilon, double penalty_weight)
                    : precision(precision), cont_name(cont_name), cq(cq), stub(stub), lambda(lambda), gamma(gamma),
                      clip_epsilon(clip_epsilon), penalty_weight(penalty_weight), state_size(state_size),
                      resolution_size(resolution_size), max_batch(max_batch), threading_size(threading_size),
-                     update_steps(update_steps), federated_steps(federated_steps) {
+                     update_steps(update_steps), update_steps_inc(update_steps_inc), federated_steps(federated_steps) {
     path = "../models/fcpo_learning/" + cont_name;
     std::filesystem::create_directories(std::filesystem::path(path));
     out.open(path + "/latest_log.csv");
@@ -193,8 +194,8 @@ std::tuple<int, int, int> FCPOAgent::runStep() {
 }
 
 
-FCPOServer::FCPOServer(std::string run_name, uint state_size, torch::Dtype precision, double lambda, double gamma)
-        : precision(precision), lambda(lambda), gamma(gamma) , state_size(state_size){
+FCPOServer::FCPOServer(std::string run_name, uint state_size, torch::Dtype precision)
+                       : precision(precision), state_size(state_size) {
     path = "../models/fcpo_learning/" + run_name;
     std::filesystem::create_directories(std::filesystem::path(path));
     out.open(path + "/latest_log.csv");
@@ -207,6 +208,8 @@ FCPOServer::FCPOServer(std::string run_name, uint state_size, torch::Dtype preci
     model->to(precision);
     optimizer = std::make_unique<torch::optim::Adam>(model->parameters(), torch::optim::AdamOptions(1e-3));
 
+    lambda = 0.95;
+    gamma = 0.99;
     penalty_weight = 0.1;
     clip_epsilon = 0.2;
     federated_clients = {};

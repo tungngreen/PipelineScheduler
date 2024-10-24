@@ -20,6 +20,14 @@ std::chrono::time_point<std::chrono::_V2::system_clock, std::chrono::millisecond
     return std::chrono::time_point_cast<std::chrono::milliseconds>(tp);
 }
 
+torch::Dtype getTorchDtype(const std::string& type_str) {
+    auto it = DTYPE_MAP.find(type_str);
+    if (it != DTYPE_MAP.end()) {
+        return it->second;
+    } else {
+        throw std::invalid_argument("Unknown Torch Dtype: " + type_str);
+    }
+}
 
 void addProfileConfigs(json &msvcConfigs, const json &profileConfigs) {
     msvcConfigs["profile_inputRandomizeScheme"] = profileConfigs.at("profile_inputRandomizeScheme");
@@ -216,13 +224,6 @@ json msvcconfigs::loadJson() {
         if (absl::GetFlag(FLAGS_json_path).has_value()) {
             std::ifstream file(absl::GetFlag(FLAGS_json_path).value());
             auto json_file = json::parse(file);
-            // try {
-            //     profilingConfigs = json_file.at("profiling");
-            // } catch (json::out_of_range &e) {
-            //     spdlog::trace("{0:s} No profiling configurations found.", __func__);
-            // } catch (json::parse_error &e) {
-            //     spdlog::error("{0:s} Error parsing json file.", __func__);
-            // }
             spdlog::trace("{0:s} finished loading Json Configs from file.", __func__);
             return json_file;
         } else {
@@ -237,94 +238,10 @@ json msvcconfigs::loadJson() {
         } else {
             auto json_file = json::parse(absl::GetFlag(FLAGS_json).value());
             containerConfigs = json_file.at("container");
-            // try {
-            //     profilingConfigs = json_file.at("profiling");
-            // } catch (json::out_of_range &e) {
-            //     spdlog::trace("{0:s} No profiling configurations found.", __func__);
-            // }
             spdlog::trace("{0:s} finished loading Json Configs from command line.", __func__);
             return json_file;
         }
     }
-}
-
-void ContainerAgent::profiling(const json &pipeConfigs, const json &profileConfigs) {
-
-    // json pipelineConfigs = pipeConfigs;
-
-    // BatchSizeType minBatch = profileConfigs.at("profile_minBatch");
-    // BatchSizeType maxBatch = profileConfigs.at("profile_maxBatch");
-    // uint8_t stepMode = profileConfigs.at("profile_stepMode");
-    // uint8_t step = profileConfigs.at("profile_step");
-    // std::string templateModelPath = profileConfigs.at("profile_templateModelPath");
-
-    // std::thread metricsThread(&ContainerAgent::collectRuntimeMetrics, this);
-    // metricsThread.detach();
-
-    // this->dispatchMicroservices();
-
-    // for (BatchSizeType batch = minBatch; batch <= maxBatch;) {
-    //     spdlog::get("container_agent")->trace("{0:s} model with a max batch of {1:d}.", __func__, batch);
-    //     if (batch != minBatch) {
-    //         std::string profileDirPath, cont_name;
-
-    //         cont_name = removeSubstring(templateModelPath, ".engine");
-    //         cont_name = replaceSubstring(cont_name, "[batch]", std::to_string(batch));
-    //         cont_name = splitString(cont_name, "/").back();
-
-    //         profileDirPath = cont_logDir + "/" + cont_name;
-    //         std::filesystem::create_directory(
-    //                 std::filesystem::path(profileDirPath)
-    //         );
-
-    //         // Making sure all the microservices are paused before reloading and reallocating resources
-    //         // this is essential to avoiding runtime memory errors
-    //         for (uint8_t i = 0; i < cont_msvcsList.size(); i++) {
-    //             cont_msvcsList[i]->pauseThread();
-    //         }
-    //         waitPause();
-
-    //         // Reload the configurations and dynamic allocation based on the new configurations
-    //         for (uint8_t i = 0; i < cont_msvcsList.size(); i++) {
-    //             pipelineConfigs[i].at("msvc_idealBatchSize") = batch;
-    //             pipelineConfigs[i].at("msvc_containerLogPath") = profileDirPath;
-    //             pipelineConfigs[i].at("msvc_deviceIndex") = cont_deviceIndex;
-    //             pipelineConfigs[i].at("msvc_contName") = cont_name;
-    //             // Set the path to the engine
-    //             if (i == 2) {
-    //                 pipelineConfigs[i].at("path") = replaceSubstring(templateModelPath, "[batch]",
-    //                                                                  std::to_string(batch));
-    //             }
-    //             cont_msvcsList[i]->loadConfigs(pipelineConfigs[i], false);
-    //             cont_msvcsList[i]->setRELOAD();
-    //         }
-
-    //     }
-
-    //     this->waitReady();
-    //     this->PROFILING_START(batch);
-
-    //     for (int i = 1; i <= batch; i *= 2) {
-    //         for (auto msvc: cont_msvcsList) {
-    //             msvc->msvc_idealBatchSize = i;
-    //         }
-    //         while (true) {
-    //             spdlog::get("container_agent")->info("{0:s} waiting for profiling of model with a max batch of {1:d} and real batch of {2:d}.",
-    //                          __func__, batch, i);
-    //             if (cont_msvcsList[0]->checkPause()) {
-    //                 break;
-    //             }
-    //             std::this_thread::sleep_for(std::chrono::milliseconds(1000));
-    //         }
-    //     }
-
-    //     spdlog::get("container_agent")->info("===============================================================================================");
-    //     if (stepMode == 0) {
-    //         batch += step;
-    //     } else {
-    //         batch *= 2;
-    //     }
-    // }
 }
 
 bool ContainerAgent::readModelProfile(const json &profile) {
@@ -639,11 +556,20 @@ ContainerAgent::ContainerAgent(const json& configs) {
     run = true;
     reportHwMetrics = false;
     profiler = nullptr;
-    cont_fcpo_agent = new FCPOAgent(cont_name, 5, 4, configs["profiling"]["profile_maxBatch"], 4, sender_cq, stub, torch::kF32);
     std::thread receiver(&ContainerAgent::HandleRecvRpcs, this);
     receiver.detach();
 
     initiateMicroservices(configs);
+    hasDataReader = cont_msvcsGroups["receiver"].msvcList[0]->msvc_type == MicroserviceType::DataReader;
+    isDataSource = hasDataReader && (cont_msvcsGroups["inference"].msvcList.size() == 0);
+    if (cont_systemName == "fcpo" && !isDataSource) {
+        nlohmann::json rl_conf = configs["fcpo"];
+        cont_fcpo_agent = new FCPOAgent(cont_name, rl_conf["state_size"], rl_conf["resolution_size"],
+                                        rl_conf["batch_size"], rl_conf["threads_size"], sender_cq, stub,
+                                        getTorchDtype(rl_conf["precision"]), rl_conf["update_steps"],
+                                        rl_conf["update_step_incs"], rl_conf["federated_steps"], rl_conf["lambda"],
+                                        rl_conf["gamma"], rl_conf["clip_epsilon"], rl_conf["penalty_weight"]);
+    }
 }
 
 void ContainerAgent::initiateMicroservices(const json &configs) {
@@ -920,7 +846,7 @@ void ContainerAgent::ReportStart() {
 
 void ContainerAgent::runService(const json &pipeConfigs, const json &configs) {
     if (configs["container"]["cont_RUNMODE"] == RUNMODE::EMPTY_PROFILING) {
-        profiling(pipeConfigs, configs["profiling"]);
+        //profiling(pipeConfigs, configs["profiling"]);
     } else {
         this->dispatchMicroservices();
 
@@ -1015,7 +941,7 @@ void ContainerAgent::collectRuntimeMetrics() {
      * @brief If the container is a data source container, it will wait for the data receiver to stop before exiting
      *
      */
-    if (cont_msvcsGroups["receiver"].msvcList[0]->msvc_type == MicroserviceType::DataReader && cont_msvcsGroups["inference"].msvcList.size() == 0) {
+    if (isDataSource) {
         while (run) {
             if (cont_msvcsGroups["receiver"].msvcList[0]->STOP_THREADS) {
                 run = false;
@@ -1064,7 +990,7 @@ void ContainerAgent::collectRuntimeMetrics() {
             metricsStopwatch.start();
         }
 
-        if (cont_RUNMODE == RUNMODE::DEPLOYMENT && timePointCastMillisecond(startTime) >= timePointCastMillisecond(cont_nextRLDecisionTime)) {
+        if (cont_systemName == "fcpo" && timePointCastMillisecond(startTime) >= timePointCastMillisecond(cont_nextRLDecisionTime)) {
             tmp_lateCount = 0;
             for (auto &recv: cont_msvcsGroups["receiver"].msvcList) tmp_lateCount += recv->GetDroppedReqCount();
             lateCount += tmp_lateCount;
@@ -1179,7 +1105,7 @@ void ContainerAgent::collectRuntimeMetrics() {
         if (reportHwMetrics && hwMetricsScraped) {
             nextTime = std::min(nextTime, cont_metricsServerConfigs.nextHwMetricsScrapeTime);
         }
-        if (cont_msvcsGroups["receiver"].msvcList[0]->msvc_type == MicroserviceType::DataReader && cont_msvcsGroups["receiver"].msvcList[0]->STOP_THREADS) {
+        if (hasDataReader && cont_msvcsGroups["receiver"].msvcList[0]->STOP_THREADS) {
             run = false;
         }
         timeDiff = std::chrono::duration_cast<std::chrono::milliseconds>(nextTime - std::chrono::high_resolution_clock::now()).count();
