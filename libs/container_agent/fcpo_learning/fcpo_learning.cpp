@@ -36,42 +36,45 @@ void FCPOAgent::update() {
         spdlog::trace("Waiting for federated update, cancel !");
         return;
     }
-    spdlog::info("Locally training RL agent at average Reward {}!", cumu_reward);
+    spdlog::info("Locally training RL agent at cumulative Reward {}!", cumu_reward);
     Stopwatch sw;
     sw.start();
 
     auto [policy1, policy2, policy3, val] = model->forward(torch::stack(states));
     T action1_probs = torch::softmax(policy1, -1);
-    T action1_log_probs = torch::log(action1_probs.gather(-1, torch::tensor(resolution_actions).view({-1, 1, 1})).squeeze(-1));
+    T action1_log_probs = torch::log(action1_probs.gather(-1, torch::tensor(resolution_actions).reshape({-1, 1, 1})).squeeze(-1));
     T action2_probs = torch::softmax(policy2, -1);
-    T action2_log_probs = torch::log(action2_probs.gather(-1, torch::tensor(batching_actions).view({-1, 1, 1})).squeeze(-1));
+    T action2_log_probs = torch::log(action2_probs.gather(-1, torch::tensor(batching_actions).reshape({-1, 1, 1})).squeeze(-1));
     T action3_probs = torch::softmax(policy3, -1);
-    T action3_log_probs = torch::log(action3_probs.gather(-1, torch::tensor(scaling_actions).view({-1, 1, 1})).squeeze(-1));
-    T new_log_probs = action1_log_probs + action2_log_probs + action3_log_probs;
+    T action3_log_probs = torch::log(action3_probs.gather(-1, torch::tensor(scaling_actions).reshape({-1, 1, 1})).squeeze(-1));
+    T new_log_probs = (action1_log_probs + action2_log_probs + action3_log_probs).squeeze(-1);
 
     T ratio = torch::exp(new_log_probs - torch::stack(log_probs));
     T clipped_ratio = torch::clamp(ratio, 1 - clip_epsilon, 1 + clip_epsilon);
     T advantages = computeGae();
-
     T policy_loss = -torch::min(ratio * advantages, clipped_ratio * advantages).to(precision).mean();
-    T value_loss = torch::mse_loss(val, computeCumuRewards()).to(precision);
-    T policy1_penalty = penalty_weight * torch::mean(torch::clamp(torch::tensor(resolution_actions), 0, 1)).to(precision);
-    T policy3_penalty = penalty_weight * torch::mean(torch::clamp(torch::tensor(scaling_actions), 0, 1)).to(precision);
-    T loss = policy_loss + 0.5 * value_loss + policy1_penalty + policy3_penalty;
+
+    T cumulative_rewards = computeCumuRewards().reshape({-1, 1, 1});
+    T value_loss = torch::mse_loss(val, cumulative_rewards);
+    T policy1_penalty = penalty_weight * torch::mean(torch::clamp(torch::tensor(resolution_actions), 0, 1).to(precision));
+    T policy3_penalty = penalty_weight * torch::mean(torch::clamp(torch::tensor(scaling_actions), 0, 1).to(precision));
+    T loss = (policy_loss + 0.5 * value_loss + policy1_penalty + policy3_penalty);
 
     // Backpropagation
+    model->train();
     optimizer->zero_grad();
-    loss.to(precision).backward();
+    torch::autograd::AnomalyMode::set_enabled(true);
+    loss.backward();
     std::lock_guard<std::mutex> lock(model_mutex);
     optimizer->step();
     sw.stop();
 
     std::cout << "Training: " << sw.elapsed_microseconds() << std::endl;
-    out << "episodeEnd," << sw.elapsed_microseconds() << "," << federated_steps_counter << "," << steps_counter << "," << cumu_reward << "," << (double) cumu_reward / (double) steps_counter << std::endl;
+    out << "episodeEnd," << sw.elapsed_microseconds() << "," << federated_steps_counter << "," << steps_counter << "," << cumu_reward << "," << cumu_reward / (double) steps_counter << std::endl;
 
     if (federated_steps_counter++ % federated_steps == 0) {
         std::cout << "Federated Training: " << cumu_reward << std::endl;
-        spdlog::info("Federated training RL agent at average Reward {}!", cumu_reward);
+        spdlog::info("Federated training RL agent!");
         federated_steps_counter = 0; // 0 means that we are waiting for federated update to come back
         federatedUpdate();
     }
@@ -160,9 +163,9 @@ std::tuple<int, int, int> FCPOAgent::selectAction() {
     return std::make_tuple(resolution, batching, scaling);
 }
 
-T FCPOAgent::computeCumuRewards(double last_value) const {
+T FCPOAgent::computeCumuRewards() const {
     std::vector<double> discounted_rewards;
-    double cumulative = last_value;
+    double cumulative = 0.0;
     for (auto it = rewards.rbegin(); it != rewards.rend(); ++it) {
         cumulative = *it + gamma * cumulative;
         discounted_rewards.insert(discounted_rewards.begin(), cumulative);
@@ -170,10 +173,10 @@ T FCPOAgent::computeCumuRewards(double last_value) const {
     return torch::tensor(discounted_rewards).to(precision);
 }
 
-T FCPOAgent::computeGae(double last_value) const {
+T FCPOAgent::computeGae() const {
     std::vector<double> advantages;
     double gae = 0.0;
-    double next_value = last_value;
+    double next_value = 0.0;
     for (int t = rewards.size() - 1; t >= 0; --t) {
         double delta = rewards[t] + gamma * next_value - values[t].item<double>();
         gae = delta + gamma * lambda * gae;
