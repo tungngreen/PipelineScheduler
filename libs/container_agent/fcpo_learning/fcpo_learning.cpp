@@ -60,10 +60,12 @@ void FCPOAgent::update() {
     T policy3_penalty = penalty_weight * torch::mean(torch::clamp(torch::tensor(scaling_actions), 0, 1).to(precision));
     T loss = (policy_loss + 0.5 * value_loss + policy1_penalty + policy3_penalty);
 
+    // TODO: Debug Code, Remove after fixing the backpropagation issue
+    torch::autograd::AnomalyMode::set_enabled(true);
+
     // Backpropagation
     model->train();
     optimizer->zero_grad();
-    torch::autograd::AnomalyMode::set_enabled(true);
     loss.backward();
     std::lock_guard<std::mutex> lock(model_mutex);
     optimizer->step();

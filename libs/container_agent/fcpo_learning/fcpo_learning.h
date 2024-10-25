@@ -86,7 +86,7 @@ public:
     }
 
 private:
-    
+
     void add(const Experience& experience) {
         buffer[current_index] = experience;
         current_index = (current_index + 1) % capacity;
@@ -109,10 +109,10 @@ struct ActorCriticNet : torch::nn::Module {
     }
 
     std::pair<T, T> forward(T state) {
-        auto x = torch::relu(fc1->forward(state));
-        auto policy_logits = policy_head->forward(x);
-        auto policy = torch::softmax(policy_logits, -1); // Softmax to obtain action probabilities
-        auto value = value_head->forward(x); // State value
+        T x = torch::relu(fc1->forward(state));
+        T policy_logits = policy_head->forward(x);
+        T policy = torch::softmax(policy_logits, -1); // Softmax to obtain action probabilities
+        T value = value_head->forward(x); // State value
         return {policy, value};
     }
 };
@@ -127,22 +127,23 @@ struct MultiPolicyNetwork: torch::nn::Module {
 
     MultiPolicyNetwork(int state_size, int action1_size, int action2_size, int action3_size) {
         shared_layer1 = register_module("shared_layer", torch::nn::Linear(state_size, 64));
-        shared_layer2 = register_module("shared_layer2", torch::nn::Linear(64, 64));
-        policy_head1 = register_module("policy_head1", torch::nn::Linear(64, action1_size));
-        policy_head2 = register_module("policy_head2", torch::nn::Linear(64 + action1_size, action2_size));
-        policy_head3 = register_module("policy_head3", torch::nn::Linear(action2_size, action3_size));
-        value_head = register_module("value_head", torch::nn::Linear(64, 1));
+        shared_layer2 = register_module("shared_layer2", torch::nn::Linear(64, 48));
+        policy_head1 = register_module("policy_head1", torch::nn::Linear(48, action1_size));
+        policy_head2 = register_module("policy_head2", torch::nn::Linear(48 + action1_size, action2_size));
+        policy_head3 = register_module("policy_head3", torch::nn::Linear(48 + action1_size, action3_size));
+        value_head = register_module("value_head", torch::nn::Linear(48, 1));
     }
 
-    std::tuple<T, T, T, T> forward(T x) {
-        auto shared_features = torch::relu(shared_layer1(x));
-        shared_features = torch::relu(shared_layer2(shared_features));
-        auto policy1_output = torch::nn::functional::softmax(policy_head1(shared_features), -1);
-        auto combined_input = torch::cat({shared_features, policy1_output}, -1);
-        auto policy2_output = torch::nn::functional::glu(combined_input,-1);
-        auto policy3_output = torch::nn::functional::glu(policy2_output,-1);
-        auto value_output = value_head(shared_features);
-        return std::make_tuple(policy1_output, policy2_output, policy3_output, value_output);
+    std::tuple<T, T, T, T> forward(T state) {
+        T x = torch::nn::functional::relu(shared_layer1(state));
+        T y = torch::nn::functional::relu(shared_layer2(x));
+        T policy1_output = torch::nn::functional::softmax(policy_head1(y), -1);
+        T combined_input1 = torch::cat({y, policy1_output.clone()}, -1);
+        T policy2_output = torch::nn::functional::softmax(policy_head2(combined_input1), -1);
+        T combined_input2 = torch::cat({y, policy1_output.clone()}, -1);
+        T policy3_output = torch::nn::functional::softmax(policy_head3(combined_input2), -1);
+        T value = value_head(y);
+        return std::make_tuple(policy1_output, policy2_output, policy3_output, value);
     }
 };
 
@@ -177,8 +178,8 @@ private:
         log_probs.clear();
     }
     std::tuple<int, int, int> selectAction();
-    T computeCumuRewards(double last_value = 0.0) const;
-    T computeGae(double last_value = 0.0) const;
+    T computeCumuRewards() const;
+    T computeGae() const;
 
     std::mutex model_mutex;
     std::shared_ptr<MultiPolicyNetwork> model;
