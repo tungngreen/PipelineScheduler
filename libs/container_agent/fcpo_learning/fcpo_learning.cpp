@@ -42,11 +42,11 @@ void FCPOAgent::update() {
 
     auto [policy1, policy2, policy3, val] = model->forward(torch::stack(states));
     T action1_probs = torch::softmax(policy1, -1);
-    T action1_log_probs = torch::log(action1_probs.gather(-1, torch::tensor(resolution_actions).reshape({-1, 1, 1})).squeeze(-1));
+    T action1_log_probs = torch::log(action1_probs.gather(-1, torch::tensor(resolution_actions).reshape({-1, 1})).squeeze(-1));
     T action2_probs = torch::softmax(policy2, -1);
-    T action2_log_probs = torch::log(action2_probs.gather(-1, torch::tensor(batching_actions).reshape({-1, 1, 1})).squeeze(-1));
+    T action2_log_probs = torch::log(action2_probs.gather(-1, torch::tensor(batching_actions).reshape({-1, 1})).squeeze(-1));
     T action3_probs = torch::softmax(policy3, -1);
-    T action3_log_probs = torch::log(action3_probs.gather(-1, torch::tensor(scaling_actions).reshape({-1, 1, 1})).squeeze(-1));
+    T action3_log_probs = torch::log(action3_probs.gather(-1, torch::tensor(scaling_actions).reshape({-1, 1})).squeeze(-1));
     T new_log_probs = (action1_log_probs + action2_log_probs + action3_log_probs).squeeze(-1);
 
     T ratio = torch::exp(new_log_probs - torch::stack(log_probs));
@@ -54,10 +54,10 @@ void FCPOAgent::update() {
     T advantages = computeGae();
     T policy_loss = -torch::min(ratio * advantages, clipped_ratio * advantages).to(precision).mean();
 
-    T cumulative_rewards = computeCumuRewards().reshape({-1, 1, 1});
+    T cumulative_rewards = computeCumuRewards().reshape({-1, 1});
     T value_loss = torch::mse_loss(val, cumulative_rewards);
-    T policy1_penalty = penalty_weight * torch::mean(torch::clamp(torch::tensor(resolution_actions), 0, 1).to(precision));
-    T policy3_penalty = penalty_weight * torch::mean(torch::clamp(torch::tensor(scaling_actions), 0, 1).to(precision));
+    T policy1_penalty = penalty_weight * torch::mean(torch::tensor(resolution_actions).to(precision));
+    T policy3_penalty = penalty_weight * torch::mean(torch::tensor(scaling_actions).to(precision));
     T loss = (policy_loss + 0.5 * value_loss + policy1_penalty + policy3_penalty);
 
     // TODO: Debug Code, Remove after fixing the backpropagation issue
@@ -136,7 +136,7 @@ void FCPOAgent::rewardCallback(double throughput, double drops, double latency_p
         first = false;
         return;
     }
-    states.push_back(state);
+    states.push_back(state.squeeze());
     log_probs.push_back(log_prob);
     values.push_back(value);
     resolution_actions.push_back(std::get<0>(actions));
