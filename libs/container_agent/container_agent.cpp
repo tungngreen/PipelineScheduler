@@ -997,7 +997,7 @@ void ContainerAgent::collectRuntimeMetrics() {
             avgRequestRate = perSecondArrivalRecords.getAvgArrivalRate() - tmp_lateCount;
 
             if (avgRequestRate == 0 || std::isnan(avgRequestRate)) {
-                cont_fcpo_agent->rewardCallback(0.0, 0.0, 0.0, (double) cont_msvcsGroups["preprocessor"].msvcList[0]->msvc_idealBatchSize / 10.0);
+                cont_fcpo_agent->rewardCallback(0.0, 0.0, 0.0, (double) cont_msvcsGroups["batcher"].msvcList[0]->msvc_idealBatchSize / 10.0);
                 avgRequestRate = 0;
             } else {
                 pre_queueDrops = 0;
@@ -1007,8 +1007,8 @@ void ContainerAgent::collectRuntimeMetrics() {
                 queueDrops += pre_queueDrops + inf_queueDrops;
 
                 avgExecutedBatchSize = 0.1;
-                for (auto &pre: cont_msvcsGroups["preprocessor"].msvcList) avgExecutedBatchSize += pre->GetAvgExecutedBatchSize();
-                avgExecutedBatchSize /= cont_msvcsGroups["preprocessor"].msvcList.size();
+                for (auto &pre: cont_msvcsGroups["batcher"].msvcList) avgExecutedBatchSize += pre->GetAvgExecutedBatchSize();
+                avgExecutedBatchSize /= cont_msvcsGroups["batcher"].msvcList.size();
                 miniBatchCount = 0;
                 latencyEWMA = 0.0;
                 for (auto &post: cont_msvcsGroups["postprocessor"].msvcList) {
@@ -1019,9 +1019,9 @@ void ContainerAgent::collectRuntimeMetrics() {
                 cont_fcpo_agent->rewardCallback((double) miniBatchCount / avgRequestRate,
                                          (double) (pre_queueDrops + inf_queueDrops) / avgRequestRate,
                                          latencyEWMA / TIME_PRECISION_TO_SEC,
-                                         (double) cont_msvcsGroups["preprocessor"].msvcList[0]->msvc_idealBatchSize / avgExecutedBatchSize);
+                                         (double) cont_msvcsGroups["batcher"].msvcList[0]->msvc_idealBatchSize / avgExecutedBatchSize);
             }
-            cont_fcpo_agent->setState(cont_msvcsGroups["preprocessor"].msvcList[0]->msvc_idealBatchSize,
+            cont_fcpo_agent->setState(cont_msvcsGroups["batcher"].msvcList[0]->msvc_idealBatchSize,
                                       cont_msvcsGroups["preprocessor"].msvcList[0]->msvc_concat.numImgs,
                                       avgRequestRate, pre_queueDrops, inf_queueDrops);
             auto [targetRes, newBS, scaling] = cont_fcpo_agent->runStep();
