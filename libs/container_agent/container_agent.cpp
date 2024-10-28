@@ -1007,7 +1007,7 @@ void ContainerAgent::collectRuntimeMetrics() {
                 queueDrops += pre_queueDrops + inf_queueDrops;
 
                 avgExecutedBatchSize = 0.1;
-                for (auto &pre: cont_msvcsGroups["batcher"].msvcList) avgExecutedBatchSize += pre->GetAvgExecutedBatchSize();
+                for (auto &bat: cont_msvcsGroups["batcher"].msvcList) avgExecutedBatchSize += bat->GetAvgExecutedBatchSize();
                 avgExecutedBatchSize /= cont_msvcsGroups["batcher"].msvcList.size();
                 miniBatchCount = 0;
                 latencyEWMA = 0.0;
@@ -1025,7 +1025,9 @@ void ContainerAgent::collectRuntimeMetrics() {
                                       cont_msvcsGroups["preprocessor"].msvcList[0]->msvc_concat.numImgs,
                                       avgRequestRate, pre_queueDrops, inf_queueDrops);
             auto [targetRes, newBS, scaling] = cont_fcpo_agent->runStep();
-
+            applyResolution(targetRes);
+            applyBatchSize(newBS);
+            applyMultiThreading(scaling);
 
             cont_nextRLDecisionTime = std::chrono::high_resolution_clock::now() + std::chrono::milliseconds(cont_rlIntervalMillisec);
         }
@@ -1118,12 +1120,8 @@ void ContainerAgent::applyResolution(int resolutionConfig) {
 }
 
 void ContainerAgent::applyBatchSize(int batchSize) {
-    for (auto preproc : cont_msvcsGroups["preprocessor"].msvcList) {
-        // The batch size of the data reader (aka FPS) should be updated by `UpdateBatchSizeRequestHandler`
-        if (preproc->msvc_type == msvcconfigs::MicroserviceType::DataReader) {
-            continue;
-        }
-        preproc->msvc_idealBatchSize = batchSize;
+    for (auto batcher : cont_msvcsGroups["batcher"].msvcList) {
+        batcher->msvc_idealBatchSize = batchSize;
     }
     for (auto infer : cont_msvcsGroups["inference"].msvcList) {
         infer->msvc_idealBatchSize = batchSize;
