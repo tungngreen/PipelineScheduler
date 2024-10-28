@@ -14,7 +14,7 @@ FCPOAgent::FCPOAgent(std::string& cont_name, uint state_size, uint resolution_si
 
     std::random_device rd;
     re = std::mt19937(rd());
-    model = std::make_shared<MultiPolicyNetwork>(state_size, resolution_size, max_batch, threading_size);
+    model = std::make_shared<MultiPolicyNet>(state_size, resolution_size, max_batch, threading_size);
     std::string model_save = path + "/latest_model.pt";
     if (std::filesystem::exists(model_save)) torch::load(model, model_save);
     model->to(precision);
@@ -28,6 +28,8 @@ FCPOAgent::FCPOAgent(std::string& cont_name, uint state_size, uint resolution_si
     rewards = {};
     log_probs = {};
     values = {};
+
+    state = torch::zeros({state_size}, precision);
 }
 
 void FCPOAgent::update() {
@@ -54,8 +56,7 @@ void FCPOAgent::update() {
     T advantages = computeGae();
     T policy_loss = -torch::min(ratio * advantages, clipped_ratio * advantages).to(precision).mean();
 
-    T cumulative_rewards = computeCumuRewards().reshape({-1, 1});
-    T value_loss = torch::mse_loss(val, cumulative_rewards);
+    T value_loss = torch::mse_loss(val.squeeze(), computeCumuRewards());
     T policy1_penalty = penalty_weight * torch::mean(torch::tensor(resolution_actions).to(precision));
     T policy3_penalty = penalty_weight * torch::mean(torch::tensor(scaling_actions).to(precision));
     T loss = (policy_loss + 0.5 * value_loss + policy1_penalty + policy3_penalty);
@@ -64,7 +65,6 @@ void FCPOAgent::update() {
     torch::autograd::AnomalyMode::set_enabled(true);
 
     // Backpropagation
-    model->train();
     optimizer->zero_grad();
     loss.backward();
     std::lock_guard<std::mutex> lock(model_mutex);
@@ -75,7 +75,6 @@ void FCPOAgent::update() {
     out << "episodeEnd," << sw.elapsed_microseconds() << "," << federated_steps_counter << "," << steps_counter << "," << cumu_reward << "," << cumu_reward / (double) steps_counter << std::endl;
 
     if (federated_steps_counter++ % federated_steps == 0) {
-        std::cout << "Federated Training: " << cumu_reward << std::endl;
         spdlog::info("Federated training RL agent!");
         federated_steps_counter = 0; // 0 means that we are waiting for federated update to come back
         federatedUpdate();
@@ -132,13 +131,13 @@ void FCPOAgent::federatedUpdateCallback(FlData &response) {
 }
 
 void FCPOAgent::rewardCallback(double throughput, double drops, double latency_penalty, double oversize_penalty) {
-    if (first) { // First reward is not valid and needs to be discarded
-        first = false;
-        return;
-    }
-    states.push_back(state.squeeze());
-    log_probs.push_back(log_prob);
-    values.push_back(value);
+//    if (first) { // First reward is not valid and needs to be discarded
+//        first = false;
+//        return;
+//    }
+    states.push_back(state);
+//    log_probs.push_back(log_prob);
+//    values.push_back(value);
     resolution_actions.push_back(std::get<0>(actions));
     batching_actions.push_back(std::get<1>(actions));
     scaling_actions.push_back(std::get<2>(actions));
@@ -146,7 +145,7 @@ void FCPOAgent::rewardCallback(double throughput, double drops, double latency_p
 }
 
 void FCPOAgent::setState(double curr_batch, double curr_resolution_choice, double arrival, double pre_queue_size, double inf_queue_size) {
-    state = torch::tensor({{curr_batch / max_batch, curr_resolution_choice, arrival, pre_queue_size, inf_queue_size}}, precision);
+    state = torch::tensor({curr_batch / max_batch, curr_resolution_choice, arrival, pre_queue_size, inf_queue_size}, precision);
 }
 
 std::tuple<int, int, int> FCPOAgent::selectAction() {
@@ -160,8 +159,10 @@ std::tuple<int, int, int> FCPOAgent::selectAction() {
     action_dist = torch::multinomial(policy3, 1);
     int scaling = action_dist.item<int>();
 
-    log_prob = torch::log(policy1.squeeze(0)[resolution] + torch::log(policy2.squeeze(0)[batching]) + torch::log(policy3.squeeze(0)[scaling]));
-    value = val;
+//    log_prob = torch::log(policy1.squeeze(0)[resolution] + torch::log(policy2.squeeze(0)[batching]) + torch::log(policy3.squeeze(0)[scaling]));
+//    value = val;
+    log_probs.push_back(policy1.squeeze(0)[resolution] + torch::log(policy2.squeeze(0)[batching]) + torch::log(policy3.squeeze(0)[scaling]));
+    values.push_back(val);
     return std::make_tuple(resolution, batching, scaling);
 }
 
@@ -214,7 +215,7 @@ FCPOServer::FCPOServer(std::string run_name, uint state_size, torch::Dtype preci
 
     std::random_device rd;
     re = std::mt19937(rd());
-    model = std::make_shared<MultiPolicyNetwork>(state_size, 1, 1, 1);
+    model = std::make_shared<MultiPolicyNet>(state_size, 1, 1, 1);
     std::string model_save = path + "/latest_model.pt";
     if (std::filesystem::exists(model_save)) torch::load(model, model_save);
     model->to(precision);
@@ -233,8 +234,8 @@ FCPOServer::FCPOServer(std::string run_name, uint state_size, torch::Dtype preci
 void FCPOServer::addClient(FlData &request, std::shared_ptr<ControlCommands::Stub> stub, CompletionQueue *cq) {
     std::istringstream iss(request.network());
     federated_clients.push_back({request,
-                                 std::make_shared<MultiPolicyNetwork>(request.state_size(), request.resolution_size(),
-                                                                      request.max_batch(), request.threading_size()),
+                                 std::make_shared<MultiPolicyNet>(request.state_size(), request.resolution_size(),
+                                                                  request.max_batch(), request.threading_size()),
                                                                       stub, cq});
     torch::load(federated_clients.back().model, iss);
     federated_clients.back().model->to(precision);

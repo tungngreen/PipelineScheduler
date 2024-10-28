@@ -357,6 +357,8 @@ protected:
     };
 
     RequestShapeType msvc_inferenceShape;
+
+    ConcatConfigs msvc_concat;
 };
 
 class BaseBBoxCropper : public BasePostprocessor {

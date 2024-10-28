@@ -1,6 +1,3 @@
-#ifndef PIPEPLUSPLUS_BATCH_LEARNING_H
-#define PIPEPLUSPLUS_BATCH_LEARNING_H
-
 #include "misc.h"
 #include <fstream>
 #include <torch/torch.h>
@@ -10,6 +7,9 @@
 #include "indevicecommands.grpc.pb.h"
 #include "indevicemessages.grpc.pb.h"
 #include "controlcommands.grpc.pb.h"
+
+#ifndef PIPEPLUSPLUS_BATCH_LEARNING_H
+#define PIPEPLUSPLUS_BATCH_LEARNING_H
 
 using controlcommands::ControlCommands;
 using grpc::Status;
@@ -100,8 +100,6 @@ private:
 };
 
 struct ActorCriticNet : torch::nn::Module {
-    torch::nn::Linear fc1{nullptr}, policy_head{nullptr}, value_head{nullptr};
-
     ActorCriticNet(int state_size, int action_size) {
         fc1 = register_module("fc1", torch::nn::Linear(state_size, 64));
         policy_head = register_module("policy_head", torch::nn::Linear(64, action_size));
@@ -112,20 +110,15 @@ struct ActorCriticNet : torch::nn::Module {
         T x = torch::relu(fc1->forward(state));
         T policy_logits = policy_head->forward(x);
         T policy = torch::softmax(policy_logits, -1); // Softmax to obtain action probabilities
-        T value = value_head->forward(x); // State value
+        T value = value_head->forward(x);             // State value
         return {policy, value};
     }
+
+    torch::nn::Linear fc1{nullptr}, policy_head{nullptr}, value_head{nullptr};
 };
 
-struct MultiPolicyNetwork: torch::nn::Module {
-    torch::nn::Linear shared_layer1{nullptr};
-    torch::nn::Linear shared_layer2{nullptr};
-    torch::nn::Linear policy_head1{nullptr};
-    torch::nn::Linear policy_head2{nullptr};
-    torch::nn::Linear policy_head3{nullptr};
-    torch::nn::Linear value_head{nullptr};
-
-    MultiPolicyNetwork(int state_size, int action1_size, int action2_size, int action3_size) {
+struct MultiPolicyNet: torch::nn::Module {
+    MultiPolicyNet(int state_size, int action1_size, int action2_size, int action3_size) {
         shared_layer1 = register_module("shared_layer", torch::nn::Linear(state_size, 64));
         shared_layer2 = register_module("shared_layer2", torch::nn::Linear(64, 48));
         policy_head1 = register_module("policy_head1", torch::nn::Linear(48, action1_size));
@@ -135,22 +128,28 @@ struct MultiPolicyNetwork: torch::nn::Module {
     }
 
     std::tuple<T, T, T, T> forward(T state) {
-        T x = torch::nn::functional::relu(shared_layer1(state));
-        T y = torch::nn::functional::relu(shared_layer2(x));
-        T policy1_output = torch::nn::functional::softmax(policy_head1(y), -1);
-        T combined_input1 = torch::cat({y, policy1_output.clone()}, -1);
-        T policy2_output = torch::nn::functional::softmax(policy_head2(combined_input1), -1);
-        T combined_input2 = torch::cat({y, policy1_output.clone()}, -1);
-        T policy3_output = torch::nn::functional::softmax(policy_head3(combined_input2), -1);
-        T value = value_head(y);
+        T x = torch::relu(shared_layer1->forward(state));
+        x = torch::relu(shared_layer2->forward(x));
+        T policy1_output = torch::softmax(policy_head1->forward(x), -1);
+        T combined_input = torch::cat({x, policy1_output.clone()}, -1);
+        T policy2_output = torch::softmax(policy_head2->forward(combined_input), -1);
+        T policy3_output = torch::softmax(policy_head3->forward(combined_input), -1);
+        T value = value_head->forward(x);
         return std::make_tuple(policy1_output, policy2_output, policy3_output, value);
     }
+
+    torch::nn::Linear shared_layer1{nullptr};
+    torch::nn::Linear shared_layer2{nullptr};
+    torch::nn::Linear policy_head1{nullptr};
+    torch::nn::Linear policy_head2{nullptr};
+    torch::nn::Linear policy_head3{nullptr};
+    torch::nn::Linear value_head{nullptr};
 };
 
 class FCPOAgent {
 public:
     FCPOAgent(std::string& cont_name, uint state_size, uint resolution_size, uint max_batch, uint threading_size,
-             CompletionQueue *cq, std::shared_ptr<InDeviceMessages::Stub> stub, torch::Dtype precision,
+             CompletionQueue *cq, std::shared_ptr<InDeviceMessages::Stub> stub, torch::Dtype precision = torch::kF64,
              uint update_steps = 60, uint update_steps_inc = 5, uint federated_steps = 5, double lambda = 0.95,
              double gamma = 0.99, double clip_epsilon = 0.2, double penalty_weight = 0.1);
 
@@ -182,7 +181,7 @@ private:
     T computeGae() const;
 
     std::mutex model_mutex;
-    std::shared_ptr<MultiPolicyNetwork> model;
+    std::shared_ptr<MultiPolicyNet> model;
     std::unique_ptr<torch::optim::Optimizer> optimizer;
     torch::Dtype precision;
     T state, log_prob, value;
@@ -247,7 +246,7 @@ public:
 private:
     struct ClientModel{
         FlData data;
-        std::shared_ptr<MultiPolicyNetwork> model;
+        std::shared_ptr<MultiPolicyNet> model;
         std::shared_ptr<ControlCommands::Stub> stub;
         CompletionQueue *cq;
     };
@@ -256,7 +255,7 @@ private:
 
     void returnFLModel(ClientModel &client);
 
-    std::shared_ptr<MultiPolicyNetwork> model;
+    std::shared_ptr<MultiPolicyNet> model;
     std::unique_ptr<torch::optim::Optimizer> optimizer;
     torch::Dtype precision;
     std::vector<ClientModel> federated_clients;
