@@ -424,7 +424,7 @@ void BaseBBoxCropper::cropping() {
             // infer_h,w are given in the last dimension of the request data from the inferencer
             infer_h = currReq.req_data.back().shape[1];
             infer_w = currReq.req_data.back().shape[2];
-            // orig_h,w are given in the shape of the image in the image list, which is carried from the batcher
+            // orig_h,w are given in the shape of the image in the image list, which is carried from the preprocessor
             // TODO: For now, we assume that all images in the concatenated frame have the same shape
             orig_h = imageList[i].shape[1];
             orig_w = imageList[i].shape[2];
@@ -615,8 +615,8 @@ void BaseBBoxCropper::cropping() {
             /**
              * @brief There are 8 important timestamps to be recorded:
              * 1. When the request was generated
-             * 2. When the request was received by the batcher
-             * 3. When the request was done preprocessing by the batcher
+             * 2. When the request was received by the preprocessor
+             * 3. When the request was done preprocessing by the preprocessor
              * 4. When the request, along with all others in the batch, was batched together and sent to the inferencer
              * 5. When the batch inferencer popped the batch sent from batcher
              * 6. When the batch inference was completed by the inferencer 
@@ -953,8 +953,8 @@ void BaseBBoxCropper::cropProfiling() {
             /**
              * @brief During profiling mode, there are six important timestamps to be recorded:
              * 1. When the request was generated
-             * 2. When the request was received by the batcher
-             * 3. When the request was done preprocessing by the batcher
+             * 2. When the request was received by the preprocessor
+             * 3. When the request was done preprocessing by the preprocessor
              * 4. When the request, along with all others in the batch, was batched together and sent to the inferencer
              * 5. When the batch inferencer was completed by the inferencer 
              * 6. When each request was completed by the postprocessor

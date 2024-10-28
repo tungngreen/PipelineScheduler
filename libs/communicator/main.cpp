@@ -50,7 +50,7 @@ int main(int argc, char *argv[]) {
     int size = absl::GetFlag(FLAGS_size);
     if (type == "gpu-receiver") {
         Receiver receiver(json::parse(
-                "{\"msvc_name\": \"receiver\", \"msvc_contName\": \"receiver\", \"msvc_idealBatchSize\": 0, \"msvc_appLvlConfigs\": \"../jsons/yolov5_receiver.json\", "
+                "{\"msvc_name\": \"receiver\", \"msvc_contName\": \"receiver\", \"msvc_idealBatchSize\": 0, "
                 "\"msvc_dnstreamMicroservices\": [{\"nb_classOfInterest\": -1,\"nb_commMethod\": 4, \"nb_link\": [\"\"], "
                 "\"nb_maxQueueSize\": 10, \"nb_name\": \"::preprocessor\", \"nb_expectedShape\": [[-1, -1, -1]]}], "
                 "\"msvc_dataShape\": [[0, 0]], \"msvc_svcLevelObjLatency\": 1, \"msvc_type\": 0, "
@@ -61,7 +61,7 @@ int main(int argc, char *argv[]) {
         run_receiver(receiver, true, size);
     } else if (type == "cpu-receiver") {
         Receiver receiver(json::parse(
-                "{\"msvc_name\": \"receiver\", \"msvc_contName\": \"receiver\", \"msvc_idealBatchSize\": 0, \"msvc_appLvlConfigs\": \"../jsons/yolov5_receiver.json\", "
+                "{\"msvc_name\": \"receiver\", \"msvc_contName\": \"receiver\", \"msvc_idealBatchSize\": 0, "
                 "\"msvc_dnstreamMicroservices\": [{\"nb_classOfInterest\": -1,\"nb_commMethod\": 4, \"nb_link\": [\"\"], "
                 "\"nb_maxQueueSize\": 10, \"nb_name\": \"::preprocessor\", \"nb_expectedShape\": [[-1, -1, -1]]}], "
                 "\"msvc_dataShape\": [[0, 0]], \"msvc_svcLevelObjLatency\": 1, \"msvc_type\": 0, "
@@ -77,7 +77,7 @@ int main(int argc, char *argv[]) {
         if (type == "gpu-sender") {
             gpu = true;
             sender = new GPUSender(json::parse(
-                    "{\"msvc_name\": \"sender\", \"msvc_contName\": \"sender\", \"msvc_idealBatchSize\": 20, \"msvc_appLvlConfigs\": \"\", "
+                    "{\"msvc_name\": \"sender\", \"msvc_contName\": \"sender\", \"msvc_idealBatchSize\": 20, "
                     "\"msvc_dnstreamMicroservices\": [{\"nb_classOfInterest\": -1, \"nb_commMethod\": 3, \"nb_link\": [\"" +
                     absl::GetFlag(FLAGS_url) +
                     ":50000\"],\"nb_maxQueueSize\": 10, \"nb_name\": \"dummy_receiver_0\", \"nb_expectedShape\": [[-1, -1]]}], "
@@ -89,7 +89,7 @@ int main(int argc, char *argv[]) {
             sender->dispatchThread();
         } else if (type == "local-cpu-sender") {
             sender = new LocalCPUSender(json::parse(
-                    "{\"msvc_name\": \"sender\", \"msvc_contName\": \"sender\", \"msvc_idealBatchSize\": 20, \"msvc_appLvlConfigs\": \"\", "
+                    "{\"msvc_name\": \"sender\", \"msvc_contName\": \"sender\", \"msvc_idealBatchSize\": 20, "
                     "\"msvc_dnstreamMicroservices\": [{\"nb_classOfInterest\": -1, \"nb_commMethod\": 3, \"nb_link\": [\"" +
                     absl::GetFlag(FLAGS_url) +
                     ":50000\"],\"nb_maxQueueSize\": 10, \"nb_name\": \"dummy_receiver_0\", \"nb_expectedShape\": [[-1, -1]]}], "
@@ -101,7 +101,7 @@ int main(int argc, char *argv[]) {
             sender->dispatchThread();
         } else if (type == "remote-cpu-sender") {
             sender = new RemoteCPUSender(json::parse(
-                    "{\"msvc_name\": \"sender\", \"msvc_contName\": \"sender\", \"msvc_idealBatchSize\": 20, \"msvc_appLvlConfigs\": \"\", "
+                    "{\"msvc_name\": \"sender\", \"msvc_contName\": \"sender\", \"msvc_idealBatchSize\": 20, "
                     "\"msvc_dnstreamMicroservices\": [{\"nb_classOfInterest\": -1, \"nb_commMethod\": 3, \"nb_link\": [\"" +
                     absl::GetFlag(FLAGS_url) +
                     ":50000\"],\"nb_maxQueueSize\": 10, \"nb_name\": \"dummy_receiver_0\", \"nb_expectedShape\": [[-1, -1]]}], "

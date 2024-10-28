@@ -106,7 +106,7 @@ struct PercentilesArrivalRecord {
 struct ArrivalRecord : public Record {
     std::vector<uint64_t> outQueueingDuration; //prevPostProcTime - postproc's outqueue time
     std::vector<uint64_t> transferDuration; //arrivalTime - prevSenderTime
-    std::vector<uint64_t> queueingDuration; //batcher's pop time - arrivalTime
+    std::vector<uint64_t> queueingDuration; //preprocessor's pop time - arrivalTime
     std::vector<ClockType> arrivalTime;
     std::vector<uint32_t> totalPkgSize;
     std::vector<uint32_t> reqSize;
@@ -291,7 +291,7 @@ uint64_t estimateNetworkLatency(const NetworkEntryType& res, const uint32_t &tot
 struct NetworkProfile {
     uint64_t p95OutQueueingDuration; // out queue before sender of the last container
     uint64_t p95TransferDuration;
-    uint64_t p95QueueingDuration; // in queue of batcher of this container
+    uint64_t p95QueueingDuration; // in queue of preprocessor of this container
     uint32_t p95PackageSize;
 };
 

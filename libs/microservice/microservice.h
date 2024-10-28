@@ -169,22 +169,29 @@ public:
      * @param request 
      */
     void emplace(Request<LocalCPUReqDataType> request) {
-        uint32_t my_ticket = producer_ticket.fetch_add(1); // Get a ticket for this producer
-        handleTicketOverflow(); // Handle overflow if needed
+        // Get a ticket for this producer and handle overflow if necessary
+        uint32_t my_ticket = producer_ticket.fetch_add(1);
+        handleTicketOverflow();
 
+        // Wait until it's this producer's turn and the consumer is not waiting
         while (current_ticket.load() != my_ticket || consumer_waiting.load()) {
-            std::this_thread::yield(); // Wait for the producer's turn or yield to the consumer
+            std::this_thread::yield();
         }
 
-        std::unique_lock<std::mutex> lock(q_mutex);
-        if (q_cpuQueue.size() == q_MaxSize) {
-            dropedCount += q_cpuQueue.front().req_batchSize;
-            spdlog::get("container_agent")->warn("Queue {0:s} is full, dropping request", q_name);
-            q_cpuQueue.pop();
-        }
-        q_cpuQueue.emplace(request);
-        current_ticket.fetch_add(1); // Move to the next producer in line
-        q_condition_consumer.notify_one(); // Notify the consumer
+        // Enter critical section only for queue operations
+        {
+            std::unique_lock<std::mutex> lock(q_mutex);
+            if (q_cpuQueue.size() == q_MaxSize) {
+                dropedCount += q_cpuQueue.front().req_batchSize;
+                spdlog::get("container_agent")->warn("Queue {0:s} is full, dropping request", q_name);
+                q_cpuQueue.pop();
+            }
+            q_cpuQueue.emplace(std::move(request)); // Use move semantics for efficiency
+        } // Mutex is released here
+
+        // Move to the next producer and notify consumer, outside the critical section
+        current_ticket.fetch_add(1);
+        q_condition_consumer.notify_one();
     }
 
     /**
@@ -196,19 +203,24 @@ public:
         uint32_t my_ticket = producer_ticket.fetch_add(1); // Get a ticket for this producer
         handleTicketOverflow(); // Handle overflow if needed
 
-        while (current_ticket.load() != my_ticket || consumer_waiting.load()) {
+        while (current_ticket.load() != my_ticket) {
             std::this_thread::yield(); // Wait for the producer's turn or yield to the consumer
         }
 
-        std::unique_lock<std::mutex> lock(q_mutex);
-        if (q_gpuQueue.size() == q_MaxSize) {
-            dropedCount += q_gpuQueue.front().req_batchSize;
-            spdlog::get("container_agent")->warn("Queue {0:s} is full, dropping request", q_name);
-            q_gpuQueue.pop();
-        }
-        q_gpuQueue.emplace(request);
-        current_ticket.fetch_add(1); // Move to the next producer in line
-        q_condition_consumer.notify_one(); // Notify the consumer
+        // Lock only to modify the queue safely
+        {
+            std::unique_lock<std::mutex> lock(q_mutex);
+            if (q_gpuQueue.size() == q_MaxSize) {
+                dropedCount += q_gpuQueue.front().req_batchSize;
+                spdlog::get("container_agent")->warn("Queue {0:s} is full, dropping request", q_name);
+                q_gpuQueue.pop();
+            }
+            q_gpuQueue.emplace(std::move(request)); // Use move semantics if possible for efficiency
+        } // Unlock as soon as queue operations are done
+
+        // Move to the next producer and notify consumer, outside the critical section
+        current_ticket.fetch_add(1);
+        q_condition_consumer.notify_one();
     }
 
     /**
@@ -217,25 +229,29 @@ public:
      * @param request 
      */
     Request<LocalCPUReqDataType> pop1(uint32_t timeout = 100000) { // 100ms
-        consumer_waiting.store(true); // Mark consumer as waiting
-        std::unique_lock<std::mutex> lock(q_mutex);
-
         Request<LocalCPUReqDataType> request;
-        isEmpty = !q_condition_consumer.wait_for(
+        {
+            std::unique_lock<std::mutex> lock(q_mutex);
+            isEmpty = !q_condition_consumer.wait_for(
                 lock,
                 TimePrecisionType(timeout),
                 [this]() { return !q_cpuQueue.empty(); }
-        );
-        consumer_waiting.store(false); // Consumer is no longer waiting
+            );
 
-        if (!isEmpty) {
-            request = q_cpuQueue.front();
-            q_cpuQueue.pop();
-        } else {
+            // Only proceed if the queue is not empty
+            if (!isEmpty) {
+                request = q_cpuQueue.front();
+                q_cpuQueue.pop();
+            }
+        }
+
+        // If the queue was empty, set a default value outside the critical section
+        if (isEmpty) {
             request.req_travelPath = {"empty"};
         }
-        return request;
-    }
+
+    return request;
+}
 
     /**
      * @brief popping Type 2 requests with priority for the consumer
@@ -243,20 +259,21 @@ public:
      * @param request 
      */
     Request<LocalGPUReqDataType> pop2(uint32_t timeout = 100000) { // 100ms
-        consumer_waiting.store(true); // Mark consumer as waiting
-        std::unique_lock<std::mutex> lock(q_mutex);
         Request<LocalGPUReqDataType> request;
-        isEmpty = !q_condition_consumer.wait_for(
-                lock,
-                TimePrecisionType(timeout),
-                [this]() { return !q_gpuQueue.empty(); }
-        );
-        consumer_waiting.store(false); // Consumer is no longer waiting
+        {
+            std::unique_lock<std::mutex> lock(q_mutex);
+            isEmpty = !q_condition_consumer.wait_for(
+                    lock,
+                    TimePrecisionType(timeout),
+                    [this]() { return !q_gpuQueue.empty(); }
+            );
 
-        if (!isEmpty) {
-            request = q_gpuQueue.front();
-            q_gpuQueue.pop();
-        } else {
+            if (!isEmpty) {
+                request = q_gpuQueue.front();
+                q_gpuQueue.pop();
+            }
+        }
+        if (isEmpty) {
             request.req_travelPath = {"empty"};
         }
         return request;
@@ -399,7 +416,9 @@ namespace msvcconfigs {
         ProfileGenerator = 501,
         DataSink = 502,
         // Preprocessor should have number between 1000 and 2000
-        PreprocessBatcher = 1000,
+        Preprocessor = 1000,
+        // Batcher should have number between 1500 and 2000
+        Batcher = 1500,
         // Inferencer should have number larger than 2000
         TRTInferencer = 2000,
         // Postprocessor should have number larger than 3000
@@ -1079,9 +1098,6 @@ protected:
 
     //
     virtual bool isTimeToBatch() { return true; };
-
-    //
-    virtual bool checkReqEligibility(std::vector<ClockType> &currReq_time) { return true; };
 
     //
     virtual void updateReqRate(ClockType lastInterReqDuration);

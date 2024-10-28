@@ -35,7 +35,8 @@ set(
 set(
         SOURCE_FILES
         baseutils.cpp
-        basereqbatcher.cpp
+        basepreprocessor.cpp
+        basebatcher.cpp
         basebatchinferencer.cpp
         basebboxcropper.cpp
         basebboxcropperaugmentation.cpp
