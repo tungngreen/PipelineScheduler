@@ -1156,6 +1156,8 @@ void Controller::DeviseAdvertisementHandler::Proceed() {
         if (node->type != SystemDeviceType::Server) {
             std::thread networkCheck(&Controller::initNetworkCheck, controller, std::ref(*(controller->devices.getDevice(deviceName))), 1000, 300000, 30);
             networkCheck.detach();
+        } else {
+            node->initialNetworkCheck = true;
         }
     } else {
         GPR_ASSERT(status == FINISH);
