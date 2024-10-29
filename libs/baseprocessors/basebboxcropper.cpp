@@ -75,7 +75,7 @@ inline void scaleBBox(
  * @param bbox_coorList 
  * @param croppedBBoxes 
  */
-inline std::vector<uint8_t> crop(
+inline std::vector<std::pair<uint8_t, uint16_t>> crop(
     const std::vector<cv::cuda::GpuMat> &images,
     const std::vector<ConcatDims> &concatDims,
     int orig_h,
@@ -84,9 +84,9 @@ inline std::vector<uint8_t> crop(
     int infer_w,
     uint16_t numDetections,
     const float *bbox_coorList,
-    std::vector<cv::cuda::GpuMat> &croppedBBoxes
+    std::vector<BoundingBox<cv::cuda::GpuMat>> &croppedBBoxes
 ) {
-    std::vector<uint8_t> imageIndexList = {};
+    std::vector<std::pair<uint8_t, uint16_t>> imageIndexList = {};
     int orig_bboxCoors[4];
     uint16_t numInvalidDets = 0;
     for (uint16_t i = 0; i < numDetections; ++i) {
@@ -158,14 +158,19 @@ inline std::vector<uint8_t> crop(
             continue;
         }
         // std::cout << "Valid detection" << std::endl;
-        imageIndexList.emplace_back(chosenImgIdx);
+        imageIndexList.emplace_back(std::make_pair(chosenImgIdx, i));
         cv::cuda::GpuMat croppedBBox = images[chosenImgIdx](
             cv::Range(y1, y2),
             cv::Range(x1, x2)
         ).clone();
 
         // Store the cropped bbox in the output vector
-        croppedBBoxes.emplace_back(croppedBBox);
+        croppedBBoxes.emplace_back(BoundingBox<cv::cuda::GpuMat>{
+            croppedBBox,
+            x1, y1, x2, y2,
+            0.f,
+            0
+        });
         // saveGPUAsImg(croppedBBox, "bbox_" + std::to_string(i) + ".jpg");
     }
     return imageIndexList;
@@ -229,7 +234,7 @@ void BaseBBoxCropper::cropping() {
     std::vector<RequestData<LocalGPUReqDataType>> currReq_data;
 
     // List of bounding boxes cropped from one single image
-    std::vector<cv::cuda::GpuMat> singleImageBBoxList;
+    std::vector<BoundingBox<cv::cuda::GpuMat>> singleImageBBoxList;
 
     // Current incoming equest
     Request<LocalGPUReqDataType> currReq;
@@ -429,39 +434,56 @@ void BaseBBoxCropper::cropping() {
             orig_h = imageList[i].shape[1];
             orig_w = imageList[i].shape[2];
 
+            // List of the images in the concatenated frame to be cropped from
             std::vector<cv::cuda::GpuMat> concatImageList;
             for (uint8_t concatInd = 0; concatInd < msvc_concat.numImgs; concatInd++) {
                 concatImageList.emplace_back(imageList[i * msvc_concat.numImgs + concatInd].data);
             }
 
-            std::vector<uint8_t> concatIndexList = crop(concatImageList,
-                                                        msvc_concat.concatDims,
-                                                        orig_h,
-                                                        orig_w,
-                                                        infer_h,
-                                                        infer_w,
-                                                        numDetsInFrame,
-                                                        nmsed_boxes + i * maxNumDets * 4,
-                                                        singleImageBBoxList);
-            // actual number of detections after cropping
-            numDetsInFrame = concatIndexList.size();
+            // Cropping the detected bounding boxes from the original images and returns:
+            // 1/ in `concatIndexList`, the list of the indices of 
+            //      (a) the images in the concatenated frame from which the bounding box is cropped
+            //      (b) the bounding boxes in the detected list of the whole frame to retrieve the scores and classes
+            // 2/ the list of the cropped bounding boxes in `singleImageBBoxList`, each object in this list contains:
+            //      (a) the cropped bounding box
+            //      (b) the coordinates of the bounding box in the original image
+            //      (c) the score of the bounding box 
+            //      (d) the class of the bounding box
+            std::vector<std::pair<uint8_t, uint16_t>> indexLists = crop(concatImageList,
+                                                                        msvc_concat.concatDims,
+                                                                        orig_h,
+                                                                        orig_w,
+                                                                        infer_h,
+                                                                        infer_w,
+                                                                        numDetsInFrame,
+                                                                        nmsed_boxes + i * maxNumDets * 4,
+                                                                        singleImageBBoxList);
+            // After cropping, due to some invalid detections,
+            // we need to update the number of detections in the frame
+            numDetsInFrame = indexLists.size();
             spdlog::get("container_agent")->trace("{0:s} cropped {1:d} bboxes in image {2:d}", msvc_name, numDetsInFrame, i);
 
             std::vector<PerQueueOutRequest> outReqList(msvc_OutQueue.size());
 
+            // calculate the total memory used for the input images
             for (BatchSizeType j = 0; j < msvc_concat.numImgs; ++j) {
+                // the index of the image in the whole batch of multiple concatenated frames
                 uint16_t imageIndexInBatch = i * msvc_concat.numImgs + j;
                 totalInMem.emplace_back(imageList[imageIndexInBatch].data.channels() * imageList[imageIndexInBatch].data.rows *
                                         imageList[imageIndexInBatch].data.cols * CV_ELEM_SIZE1(imageList[imageIndexInBatch].data.type()));
             }
 
-            // List of the number of detections in each image in the concatenated frame
+            // Number of detections in each individual image in the concatenated frame
             std::vector<uint16_t> numsDetsInImages(msvc_concat.numImgs, 0);
-            //
+            // The index of the bounding box in its corresponding image
             std::vector<uint16_t> indexInImageDetList(numDetsInFrame);
             for (int j = 0; j < numDetsInFrame; ++j) {
-                indexInImageDetList[j] = numsDetsInImages[concatIndexList[j]];
-                numsDetsInImages[concatIndexList[j]]++;
+                indexInImageDetList[j] = numsDetsInImages[indexLists[j].first];
+                numsDetsInImages[indexLists[j].first]++;
+
+                // update the score and class of the bounding box                
+                singleImageBBoxList[j].score = nmsed_scores[i * maxNumDets + indexLists[j].second];
+                singleImageBBoxList[j].classID = (int16_t)nmsed_classes[i * maxNumDets + indexLists[j].second];
             }
 
             // After cropping, we need to find the right queues to put the bounding boxes in
@@ -469,14 +491,19 @@ void BaseBBoxCropper::cropping() {
                 // cv::Mat test;
                 // singleImageBBoxList[j].download(test);
                 // cv::imwrite("bbox.jpg", test);
-                bboxClass = (int16_t)nmsed_classes[i * maxNumDets + j];
+                auto bbox = singleImageBBoxList[j].bbox;
+                bboxClass = (int16_t)singleImageBBoxList[j].classID;
                 cv::Mat cpuBox;
                 cv::Mat encodedBox;
                 uint32_t boxEncodedMemSize = 0;
-                // in the constructor of each microservice, we map the class number to the corresponding queue index in 
-                // `classToDntreamMap`.
+
+                // Find the indices of the queues that need this class number
+                // And convert the bounding box to CPU if needed
                 for (size_t k = 0; k < this->classToDnstreamMap.size(); ++k) {
                     NumQueuesType qIndex = MAX_NUM_QUEUES;
+                    // Find the indices of the queues that need this class number
+                    // in the constructor of each microservice, we map the class number to the corresponding queue index in 
+                    // `classToDntreamMap`.
                     if ((classToDnstreamMap.at(k).first == bboxClass) || (classToDnstreamMap.at(k).first == -1)) {
                         qIndex = classToDnstreamMap.at(k).second;
                         queueIndex.emplace_back(qIndex);
@@ -484,9 +511,11 @@ void BaseBBoxCropper::cropping() {
                     if (qIndex == MAX_NUM_QUEUES) {
                         continue;
                     }
+
                     if (msvc_activeOutQueueIndex.at(qIndex) != 1) { //If CPU serialized data
                         continue;
                     }
+                    // Because GPU->CPU is expensive, we only do it once
                     if (cpuBox.empty()) {
                         // cv::Mat box(singleImageBBoxList[j].size(), CV_8UC3);
                         // checkCudaErrorCode(cudaMemcpyAsync(
@@ -500,7 +529,7 @@ void BaseBBoxCropper::cropping() {
                         // // Synchronize the cuda stream right away to avoid any race condition
                         // checkCudaErrorCode(cudaStreamSynchronize(postProcStream), __func__);
                         cv::cuda::Stream cvStream = cv::cuda::StreamAccessor::wrapStream(postProcStream);
-                        singleImageBBoxList[j].download(cpuBox, cvStream);
+                        bbox.download(cpuBox, cvStream);
                         cvStream.waitForCompletion();
                     }
                     if (msvc_OutQueue.at(qIndex)->getEncoded() && encodedBox.empty() && !cpuBox.empty()) {
@@ -508,29 +537,34 @@ void BaseBBoxCropper::cropping() {
                         boxEncodedMemSize = encodedBox.cols * encodedBox.rows * encodedBox.channels() * CV_ELEM_SIZE1(encodedBox.type());
                     }
                 }
-                // If this class number is not needed anywhere downstream
+                // If this class number is not needed anywhere downstream, we don't need to do anything
                 if (queueIndex.empty()) {
                     continue;
                 }
 
-                // if (bboxClass == 0 || bboxClass == 2) {
-                //     saveGPUAsImg(singleImageBBoxList[j], "bbox_" + std::to_string(j) + ".jpg");
-                // }
 
                 // Putting the bounding box into an `outReq` to be sent out
-                bboxShape = {singleImageBBoxList[j].channels(), singleImageBBoxList[j].rows, singleImageBBoxList[j].cols};
+                bboxShape = {bbox.channels(),
+                             bbox.rows,
+                             bbox.cols};
 
-                //
-                uint16_t imageIndexInBatch = i * msvc_concat.numImgs + concatIndexList[j];
+                // Index of the image in the whole batch of multiple concatenated frames
+                // each frame has mscc_concat.numImgs images
+                uint16_t imageIndexInBatch = i * msvc_concat.numImgs + indexLists[j].first;
 
                 // There could be multiple timestamps in the request, but the first one always represent
                 // the moment this request was generated at the very beginning of the pipeline
+
+                // The travel path of the request is the path of the image
+                // We will concat more information to it
                 currReq_path = currReq.req_travelPath[imageIndexInBatch];
 
+                // Forwards the bounding box meant for appropriate queues meant for the downstream microservices
                 for (auto qIndex : queueIndex) {
                     outReqList.at(qIndex).used = true;
                     std::string path = currReq_path;
-                    path += "|" + std::to_string(numsDetsInImages[concatIndexList[j]]) + "|" + std::to_string(indexInImageDetList[j]);
+                    // Add the number of bounding boxes in the image and the index of the bounding box in the image
+                    path += "|" + std::to_string(numsDetsInImages[indexLists[j].first]) + "|" + std::to_string(indexInImageDetList[j]);
                     // Put the correct type of outreq for the downstream, a sender, which expects either LocalGPU or localCPU
                     if (msvc_activeOutQueueIndex.at(qIndex) == 1) { //Local CPU
                         if (msvc_OutQueue.at(qIndex)->getEncoded()) {
@@ -554,11 +588,11 @@ void BaseBBoxCropper::cropping() {
 
                         spdlog::get("container_agent")->trace("{0:s} emplaced a bbox of class {1:d} to CPU queue {2:d}.", msvc_name, bboxClass, qIndex);
                     } else {
-                        cv::cuda::GpuMat out(singleImageBBoxList[j].size(), singleImageBBoxList[j].type());
+                        cv::cuda::GpuMat out(bbox.size(), bbox.type());
                         checkCudaErrorCode(cudaMemcpyAsync(
                             out.cudaPtr(),
-                            singleImageBBoxList[j].cudaPtr(),
-                            singleImageBBoxList[j].cols * singleImageBBoxList[j].rows * singleImageBBoxList[j].channels() * CV_ELEM_SIZE1(singleImageBBoxList[j].type()),
+                            bbox.cudaPtr(),
+                            bbox.cols * bbox.rows * bbox.channels() * CV_ELEM_SIZE1(bbox.type()),
                             cudaMemcpyDeviceToDevice,
                             postProcStream
                         ), __func__);
@@ -571,11 +605,11 @@ void BaseBBoxCropper::cropping() {
 
                         spdlog::get("container_agent")->trace("{0:s} emplaced a bbox of class {1:d} to GPU queue {2:d}.", msvc_name, bboxClass, qIndex);
                     }
-                    uint32_t imageMemSize = singleImageBBoxList[j].cols * singleImageBBoxList[j].rows * singleImageBBoxList[j].channels() * CV_ELEM_SIZE1(singleImageBBoxList[j].type());
+                    uint32_t imageMemSize = bbox.cols * bbox.rows * bbox.channels() * CV_ELEM_SIZE1(bbox.type());
                     outReqList.at(qIndex).totalSize += imageMemSize;
                     outReqList.at(qIndex).totalEncodedSize += boxEncodedMemSize;
-                    totalOutMem[concatIndexList[j]] += imageMemSize;
-                    totalEncodedOutMem[concatIndexList[j]] += boxEncodedMemSize;
+                    totalOutMem[indexLists[j].first] += imageMemSize;
+                    totalEncodedOutMem[indexLists[j].first] += boxEncodedMemSize;
                 }
                 queueIndex.clear();
             }

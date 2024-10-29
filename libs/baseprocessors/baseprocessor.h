@@ -235,6 +235,14 @@ protected:
     Engine* msvc_inferenceEngine = nullptr;
 };
 
+template <typename T>
+struct BoundingBox {
+    T bbox;
+    int x1, y1, x2, y2;
+    float score;
+    uint16_t classID;
+};
+
 /**
  * @brief crop from input image all bounding boxes whose coordinates are provided by `bbox_coorList`
  * 
@@ -245,7 +253,7 @@ protected:
  *                      [x1, y1, x2, y2] (e.g., [0, 266, 260, 447])
  * @return cv::cuda::GpuMat
  */
-inline std::vector<uint8_t> crop(
+inline std::vector<std::pair<uint8_t, uint16_t>> crop(
     const std::vector<cv::cuda::GpuMat> &images,
     const std::vector<ConcatDims> &concatDims,
     int orig_h,
@@ -254,7 +262,7 @@ inline std::vector<uint8_t> crop(
     int infer_w,
     uint16_t numDetections,
     const float *bbox_coorList,
-    std::vector<cv::cuda::GpuMat> &croppedBBoxes
+    std::vector<BoundingBox<cv::cuda::GpuMat>> &croppedBBoxes
 );
 
 inline void cropOneBox(
