@@ -236,7 +236,7 @@ public:
                 {"gamma", gamma},
                 {"clip_epsilon", clip_epsilon},
                 {"penalty_weight", penalty_weight},
-                {"precision", torch::toString(precision)},
+                {"precision", torch::toString(precision).toLowerCase()},
                 {"update_steps", 60},
                 {"update_step_incs", 5},
                 {"federated_steps", 5}
