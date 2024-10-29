@@ -28,17 +28,15 @@ FCPOAgent::FCPOAgent(std::string& cont_name, uint state_size, uint resolution_si
     rewards = {};
     log_probs = {};
     values = {};
-
-    state = torch::zeros({state_size}, precision);
 }
 
 void FCPOAgent::update() {
     steps_counter = 0;
     if (federated_steps_counter == 0) {
-        spdlog::trace("Waiting for federated update, cancel !");
+        spdlog::get("container_agent")->trace("Waiting for federated update, cancel !");
         return;
     }
-    spdlog::info("Locally training RL agent at cumulative Reward {}!", cumu_reward);
+    spdlog::get("container_agent")->info("Locally training RL agent at cumulative Reward {}!", cumu_reward);
     Stopwatch sw;
     sw.start();
 
@@ -51,6 +49,8 @@ void FCPOAgent::update() {
     T action3_log_probs = torch::log(action3_probs.gather(-1, torch::tensor(scaling_actions).reshape({-1, 1})).squeeze(-1));
     T new_log_probs = (action1_log_probs + action2_log_probs + action3_log_probs).squeeze(-1);
 
+    if (log_probs.size() != states.size()) log_probs.erase(log_probs.begin());
+
     T ratio = torch::exp(new_log_probs - torch::stack(log_probs));
     T clipped_ratio = torch::clamp(ratio, 1 - clip_epsilon, 1 + clip_epsilon);
     T advantages = computeGae();
@@ -60,9 +60,6 @@ void FCPOAgent::update() {
     T policy1_penalty = penalty_weight * torch::mean(torch::tensor(resolution_actions).to(precision));
     T policy3_penalty = penalty_weight * torch::mean(torch::tensor(scaling_actions).to(precision));
     T loss = (policy_loss + 0.5 * value_loss + policy1_penalty + policy3_penalty);
-
-    // TODO: Debug Code, Remove after fixing the backpropagation issue
-    torch::autograd::AnomalyMode::set_enabled(true);
 
     // Backpropagation
     optimizer->zero_grad();
@@ -75,7 +72,7 @@ void FCPOAgent::update() {
     out << "episodeEnd," << sw.elapsed_microseconds() << "," << federated_steps_counter << "," << steps_counter << "," << cumu_reward << "," << cumu_reward / (double) steps_counter << std::endl;
 
     if (federated_steps_counter++ % federated_steps == 0) {
-        spdlog::info("Federated training RL agent!");
+        spdlog::get("container_agent")->info("Federated training RL agent!");
         federated_steps_counter = 0; // 0 means that we are waiting for federated update to come back
         federatedUpdate();
     }
@@ -116,7 +113,7 @@ void FCPOAgent::federatedUpdate() {
     bool ok = false;
     if (cq != nullptr) GPR_ASSERT(cq->Next(&got_tag, &ok));
     if (!status.ok()){
-        spdlog::error("Federated update failed: {}", status.error_message());
+        spdlog::get("container_agent")->error("Federated update failed: {}", status.error_message());
         federated_steps_counter = 1; // 1 means that we are starting local updates again until the next federation
     }
 }
@@ -131,13 +128,13 @@ void FCPOAgent::federatedUpdateCallback(FlData &response) {
 }
 
 void FCPOAgent::rewardCallback(double throughput, double drops, double latency_penalty, double oversize_penalty) {
-//    if (first) { // First reward is not valid and needs to be discarded
-//        first = false;
-//        return;
-//    }
+    if (first) { // First reward is not valid and needs to be discarded
+        first = false;
+        return;
+    }
     states.push_back(state);
 //    log_probs.push_back(log_prob);
-//    values.push_back(value);
+    values.push_back(value);
     resolution_actions.push_back(std::get<0>(actions));
     batching_actions.push_back(std::get<1>(actions));
     scaling_actions.push_back(std::get<2>(actions));
@@ -159,10 +156,9 @@ std::tuple<int, int, int> FCPOAgent::selectAction() {
     action_dist = torch::multinomial(policy3, 1);
     int scaling = action_dist.item<int>();
 
-//    log_prob = torch::log(policy1.squeeze(0)[resolution] + torch::log(policy2.squeeze(0)[batching]) + torch::log(policy3.squeeze(0)[scaling]));
-//    value = val;
-    log_probs.push_back(policy1.squeeze(0)[resolution] + torch::log(policy2.squeeze(0)[batching]) + torch::log(policy3.squeeze(0)[scaling]));
-    values.push_back(val);
+    log_prob = torch::log(policy1.squeeze(0)[resolution]) + torch::log(policy2.squeeze(0)[batching]) + torch::log(policy3.squeeze(0)[scaling]);
+    log_probs.push_back(log_prob);
+    value = val;
     return std::make_tuple(resolution, batching, scaling);
 }
 
@@ -247,7 +243,7 @@ void FCPOServer::proceed() {
             std::this_thread::sleep_for(std::chrono::seconds(1));
             continue;
         }
-        spdlog::info("Starting Federated Aggregation of FCPO Agents!");
+        spdlog::get("container_agent")->info("Starting Federated Aggregation of FCPO Agents!");
 
         std::vector<torch::Tensor> aggregated_params;
         for (auto param: {model->shared_layer1->weight, model->shared_layer1->bias, model->shared_layer2->weight, model->shared_layer2->bias, model->value_head->weight, model->value_head->bias}) {
