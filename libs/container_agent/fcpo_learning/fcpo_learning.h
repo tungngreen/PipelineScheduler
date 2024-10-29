@@ -1,6 +1,7 @@
 #include "misc.h"
 #include <fstream>
 #include <torch/torch.h>
+#include <boost/algorithm/string.hpp>
 #include <random>
 #include <cmath>
 #include <chrono>
@@ -230,13 +231,14 @@ public:
     void stop() { run = false; }
 
     nlohmann::json getConfig() {
+        std::string p = torch::toString(precision);
         return {
                 {"state_size", state_size},
                 {"lambda", lambda},
                 {"gamma", gamma},
                 {"clip_epsilon", clip_epsilon},
                 {"penalty_weight", penalty_weight},
-                {"precision", torch::toString(precision).toLowerCase()},
+                {"precision", boost::algorithm::to_lower_copy(p)},
                 {"update_steps", 60},
                 {"update_step_incs", 5},
                 {"federated_steps", 5}

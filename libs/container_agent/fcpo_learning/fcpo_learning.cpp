@@ -156,7 +156,8 @@ std::tuple<int, int, int> FCPOAgent::selectAction() {
     action_dist = torch::multinomial(policy3, 1);
     int scaling = action_dist.item<int>();
 
-    log_prob = torch::log(policy1.squeeze(0)[resolution]) + torch::log(policy2.squeeze(0)[batching]) + torch::log(policy3.squeeze(0)[scaling]);
+
+    log_prob = torch::log(policy1[resolution]) + torch::log(policy2[batching]) + torch::log(policy3[scaling]);
     log_probs.push_back(log_prob);
     value = val;
     return std::make_tuple(resolution, batching, scaling);
