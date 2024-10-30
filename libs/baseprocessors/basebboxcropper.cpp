@@ -363,12 +363,12 @@ void BaseBBoxCropper::cropping() {
             continue;
         } 
 
-        // The generated time of this incoming request will be used to determine the rate with which the microservice should
-        // check its incoming queue.
-        currReq_recvTime = std::chrono::high_resolution_clock::now();
-        // if (msvc_inReqCount > 1) {
-        //     updateReqRate(currReq_genTime);
-        // }
+        auto timeNow = std::chrono::high_resolution_clock::now();
+        // 10. The moment the batch is received at the cropper (TENTH_TIMESTAMP)
+        for (auto& req_genTime : currReq.req_origGenTime) {
+            req_genTime.emplace_back(timeNow);
+        }
+
         currReq_batchSize = currReq.req_batchSize;
         spdlog::get("container_agent")->trace("{0:s} popped a request of batch size {1:d}", msvc_name, currReq_batchSize);
 
@@ -414,8 +414,11 @@ void BaseBBoxCropper::cropping() {
         for (BatchSizeType i = 0; i < currReq_batchSize; ++i) {
             msvc_overallTotalReqCount++;
 
-            // We consider this when the request was received by the postprocessor
-            currReq.req_origGenTime[i].emplace_back(std::chrono::high_resolution_clock::now());
+            // 11. The moment the request starts being processed by the cropper, after the batch was unloaded (ELEVENTH_TIMESTAMP)
+            for (uint8_t concatInd = 0; concatInd < msvc_concat.numImgs; concatInd++) {
+                uint16_t imageIndexInBatch = i * msvc_concat.numImgs + concatInd;
+                currReq.req_origGenTime[imageIndexInBatch].emplace_back(std::chrono::high_resolution_clock::now());
+            }
 
             // If there is no object in frame, we don't have to do nothing.
             int numDetsInFrame = (int)num_detections[i];
@@ -579,7 +582,8 @@ void BaseBBoxCropper::cropping() {
                             };
                         }
 
-
+                        // We only include the first timestamp in the request to the next container to make it aware of the time the request was generated
+                        // at the very beginning of the pipeline, which will be used to calculate the end-to-end latency and determine things like dropping
                         outReqList.at(qIndex).cpuReq.req_origGenTime.emplace_back(RequestTimeType{currReq.req_origGenTime[imageIndexInBatch].front()});
                         outReqList.at(qIndex).cpuReq.req_e2eSLOLatency.emplace_back(currReq.req_e2eSLOLatency[imageIndexInBatch]);
                         outReqList.at(qIndex).cpuReq.req_travelPath.emplace_back(path);
@@ -642,26 +646,11 @@ void BaseBBoxCropper::cropping() {
                 qIndex++;
             }
 
-            // // After cropping is done for this image in the batch, the image's cuda memory can be freed.
-            // checkCudaErrorCode(cudaFree(imageList[i].data.cudaPtr()));
-            // Clearing out data of the vector
-
-            /**
-             * @brief There are 8 important timestamps to be recorded:
-             * 1. When the request was generated
-             * 2. When the request was received by the preprocessor
-             * 3. When the request was done preprocessing by the preprocessor
-             * 4. When the request, along with all others in the batch, was batched together and sent to the inferencer
-             * 5. When the batch inferencer popped the batch sent from batcher
-             * 6. When the batch inference was completed by the inferencer 
-             * 7. When the request was received by the postprocessor
-             * 8. When each request was completed by the postprocessor
-             */
-
             // If the number of warmup batches has been passed, we start to record the latency
             if (warmupCompleted()) {
                 for (uint8_t j = 0; j < msvc_concat.numImgs; ++j) {
                     uint8_t imageIndexInBatch = i * msvc_concat.numImgs + j;
+                    // 12. When the request was completed by the postprocessor (TWELFTH_TIMESTAMP)
                     currReq.req_origGenTime[imageIndexInBatch].emplace_back(std::chrono::high_resolution_clock::now());
                     std::string originStream = getOriginStream(currReq.req_travelPath[imageIndexInBatch]);
                     // TODO: Add the request number
@@ -682,22 +671,18 @@ void BaseBBoxCropper::cropping() {
 
             singleImageBBoxList.clear();
         }
-        // // Free all the output buffers of trtengine after cropping is done.
-        // for (size_t i = 0; i < currReq_data.size(); i++) {
-        //     checkCudaErrorCode(cudaFree(currReq_data.at(i).data.cudaPtr()));
-        // }
 
         msvc_batchCount++;
         msvc_miniBatchCount++;
 
         spdlog::get("container_agent")->trace("{0:s} sleeps for {1:d} millisecond", msvc_name, msvc_interReqTime);
         std::this_thread::sleep_for(std::chrono::milliseconds(msvc_interReqTime));
-        // Synchronize the cuda stream
     }
 
-
+    // Synchronize the cuda stream
     checkCudaErrorCode(cudaStreamDestroy(postProcStream), __func__);
     msvc_logFile.close();
+    STOPPED = true;
 }
 
 
@@ -1029,4 +1014,6 @@ void BaseBBoxCropper::cropProfiling() {
         // Synchronize the cuda stream
     }
     checkCudaErrorCode(cudaStreamDestroy(postProcStream), __func__);
+    msvc_logFile.close();
+    STOPPED = true;
 }

@@ -358,13 +358,6 @@ void BasePreprocessor::preprocess() {
 
         msvc_overallTotalReqCount++;
 
-        
-
-        // After the communication-related timestamps have been kept in the arrival record, all except the very first one (genTime) are removed.
-        // The first timestamp will be carried till the end of the pipeline to determine the total latency and if the request is late, along the way.
-        // outReq_genTime = {currReq_genTime, std::chrono::high_resolution_clock::now()};
-        currReq.req_origGenTime[0].emplace_back(std::chrono::high_resolution_clock::now());
-
         if (msvc_concat.currIndex == 0) {
             // Create a new frame to hold the concatenated images
             outReq = {};
@@ -423,6 +416,7 @@ void BasePreprocessor::preprocess() {
                                                   msvc_concat.currIndex);
 
             // Consider this the moment the request preprocessed and is waiting to be batched
+            // 6. The moment the request's preprocessing is completed (SIXTH_TIMESTAMP)
             timeNow = std::chrono::high_resolution_clock::now();
             outReq.req_origGenTime.back().emplace_back(timeNow);
             msvc_concat.currIndex = (++msvc_concat.currIndex % msvc_concat.numImgs);
@@ -460,6 +454,7 @@ void BasePreprocessor::preprocess() {
         }
     }
     msvc_logFile.close();
+    STOPPED = true;
 }
 
 // inline void BasePreprocessor::executeBatch(BatchTimeType &genTime, RequestSLOType &slo, RequestPathType &path,
@@ -517,6 +512,7 @@ validateRequest(Request<T> &req) {
         return false;
     }
 
+    // 5. The moment the request is received at the preprocessor (FIFTH_TIMESTAMP)
     req.req_origGenTime[0].emplace_back(std::chrono::high_resolution_clock::now());
     return true;
 }

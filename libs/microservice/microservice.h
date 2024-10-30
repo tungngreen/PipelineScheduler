@@ -502,9 +502,10 @@ public:
 
     /**
      * @brief Add a new arrival to the records. There are 3 timestamps to keep be kept.
-     * 1. The time the request is processed by the upstream postprocessor and placed onto the outqueue.
-     * 2. The time the request is sent out by upstream sender.
-     * 3. The time the request is placed onto the outqueue of receiver.
+     * 1. The time the request is processed by the upstream postprocessor and placed onto the outqueue. (SECOND_TIMESTAMP)
+     * 2. The time the request is sent out by upstream sender. (THIRD_TIMESTAMP)
+     * 3. The time the request is placed onto the outqueue of receiver. (FOURTH_TIMESTAMP)
+     * 4. The time the request is received by the preprocessor. (FIFTH_TIMESTAMP)
      *
      * @param timestamps
      */
@@ -520,31 +521,22 @@ public:
         for (size_t i = 0; i < timestamps.size() - 1; ++i) {
             if (timestamps[i] > timestamps[i + 1]) return;
         }
+
+
+        auto outQueueingDuration = std::chrono::duration_cast<TimePrecisionType>(timestamps[2] - timestamps[1]).count();
+        auto transferDuration = std::chrono::duration_cast<TimePrecisionType>(timestamps[3] - timestamps[2]).count();
+        auto inQueueingDuration = std::chrono::duration_cast<TimePrecisionType>(timestamps[4] - timestamps[3]).count();
+    
+        lastTransferDuration = transferDuration;
+
         std::unique_lock<std::mutex> lock(mutex);
         ArrivalRecord * record = &records[{reqOriginStream, originDevice}];
-        auto transferDuration = std::chrono::duration_cast<TimePrecisionType>(timestamps[3] - timestamps[2]).count();
         // If transfer latency is 0 or negative, which only happens when time between devices are not properly synchronized
-        if (timestamps[3] <= timestamps[2]) {
-            if (record->transferDuration.empty() || lastTransferDuration == -1){
-                transferDuration = 0;
-            } else {
-                transferDuration = record->transferDuration.back();
-            }
-        }
         record->transferDuration.emplace_back(transferDuration);
-        lastTransferDuration = transferDuration;
-        if (timestamps[2] <= timestamps[1]) {
-            record->outQueueingDuration.emplace_back(0);
-        } else {
-            record->outQueueingDuration.emplace_back(
-                    std::chrono::duration_cast<TimePrecisionType>(timestamps[2] - timestamps[1]).count());
-        }
-        if (timestamps[4] <= timestamps[3]) {
-            record->queueingDuration.emplace_back(0);
-        } else {
-            record->queueingDuration.emplace_back(
-                    std::chrono::duration_cast<TimePrecisionType>(timestamps[4] - timestamps[3]).count());
-        }
+        record->outQueueingDuration.emplace_back(outQueueingDuration);
+        record->queueingDuration.emplace_back(inQueueingDuration);
+        record->queueingDuration.emplace_back(inQueueingDuration);
+        
         record->arrivalTime.emplace_back(timestamps[2]);
         record->totalPkgSize.emplace_back(totalPkgSize); //Byte
         record->reqSize.emplace_back(requestSize); //Byte
@@ -571,6 +563,8 @@ public:
      */
     void getRecords(ArrivalRecordType &overallRecords) {
         std::unique_lock<std::mutex> lock(mutex);
+        // make deep copy of records
+
         for (auto &record: records) {
             if (overallRecords.find(record.first) == overallRecords.end()) {
                 overallRecords[record.first] = record.second;
@@ -633,10 +627,15 @@ public:
 
 
     /**
-     * @brief Add a new arrival to the records. There are 3 timestamps to keep be kept.
-     * 1. The time the request is processed by the upstream postprocessor and placed onto the outqueue.
-     * 2. The time the request is sent out by upstream sender.
-     * 3. The time the request is placed onto the outqueue of receiver.
+     * @brief Add new process records to the records. There are 6 timestamps to keep be considered.
+     * 1. When the request was received by the preprocessor (FIFTH_TIMESTAMP)
+     * 2. When the request was done preprocessing by the preprocessor (SIXTH_TIMESTAMP)
+     * 3. When the request, along with all others in the batch, was batched together and sent to the inferencer (SEVENTH_TIMESTAMP)
+     * 4. When the batch was popped by the inferencer (EIGHTH_TIMESTAMP)
+     * 5. When the batch inferencer was completed by the inferencer (NINTH_TIMESTAMP)
+     * 6. When the batch was received by the postprocessor (TENTH_TIMESTAMP)
+     * 7. When each request starts to be processed by the postprocessor (ELEVENTH_TIMESTAMP)
+     * 8. When each request was completed by the postprocessor (TWELFTH_TIMESTAMP)
      *
      * @param timestamps
      */
@@ -652,19 +651,26 @@ public:
         for (size_t i = 0; i < timestamps.size() - 1; ++i) {
             if (timestamps[i] >= timestamps[i + 1]) return;
         }
+        auto prepDuration = std::chrono::duration_cast<TimePrecisionType>(timestamps[6] - timestamps[5]).count();
+        auto batchDuration = std::chrono::duration_cast<TimePrecisionType>(timestamps[7] - timestamps[6]).count();
+        auto inferQueueingDuration = std::chrono::duration_cast<TimePrecisionType>(timestamps[8] - timestamps[7]).count();
+        auto inferDuration = std::chrono::duration_cast<TimePrecisionType>(timestamps[9] - timestamps[8]).count();
+        auto postDuration = std::chrono::duration_cast<TimePrecisionType>(timestamps[11] - timestamps[10]).count();
+
         std::unique_lock<std::mutex> lock(mutex);
-        processRecords[{reqOrigin, inferBatchSize}].prepDuration.emplace_back(std::chrono::duration_cast<TimePrecisionType>(timestamps[6] - timestamps[5]).count());
-        processRecords[{reqOrigin, inferBatchSize}].batchDuration.emplace_back(std::chrono::duration_cast<TimePrecisionType>(timestamps[7] - timestamps[6]).count());
-        processRecords[{reqOrigin, inferBatchSize}].inferQueueingDuration.emplace_back(std::chrono::duration_cast<TimePrecisionType>(timestamps[8] - timestamps[7]).count());
-        processRecords[{reqOrigin, inferBatchSize}].inferDuration.emplace_back(std::chrono::duration_cast<TimePrecisionType>(timestamps[9] - timestamps[8]).count());
-        processRecords[{reqOrigin, inferBatchSize}].postDuration.emplace_back(std::chrono::duration_cast<TimePrecisionType>(timestamps[11] - timestamps[10]).count());
+        processRecords[{reqOrigin, inferBatchSize}].prepDuration.emplace_back(prepDuration);
+        processRecords[{reqOrigin, inferBatchSize}].batchDuration.emplace_back(batchDuration);
+        processRecords[{reqOrigin, inferBatchSize}].inferQueueingDuration.emplace_back(inferQueueingDuration);
+        // We consider the time during which the batch inference results were unloaded from the inferencer to the postprocessor as the inference duration
+        processRecords[{reqOrigin, inferBatchSize}].inferDuration.emplace_back(inferDuration);
+        processRecords[{reqOrigin, inferBatchSize}].postDuration.emplace_back(postDuration);
         processRecords[{reqOrigin, inferBatchSize}].inferBatchSize.emplace_back(inferBatchSize);
         processRecords[{reqOrigin, inferBatchSize}].postEndTime.emplace_back(timestamps[11]);
         processRecords[{reqOrigin, inferBatchSize}].inputSize.emplace_back(inputSize);
         processRecords[{reqOrigin, inferBatchSize}].outputSize.emplace_back(outputSize);
         processRecords[{reqOrigin, inferBatchSize}].encodedOutputSize.emplace_back(encodedOutputSize);
 
-        batchInferRecords[{reqOrigin, inferBatchSize}].inferDuration.emplace_back(std::chrono::duration_cast<TimePrecisionType>(timestamps[9] - timestamps[8]).count());
+        batchInferRecords[{reqOrigin, inferBatchSize}].inferDuration.emplace_back(inferDuration);
 
         currNumEntries++;
         totalNumEntries++;
@@ -816,7 +822,28 @@ public:
 
     explicit Microservice(const Microservice &other);
 
-    virtual ~Microservice() = default;
+    virtual ~Microservice() {
+        waitStop();
+        spdlog::get("container_agent")->info("Microservice {} has stopped", msvc_name);
+    }
+
+    void waitStop () {
+        uint8_t attempts = 0;
+        const uint8_t maxAttempts = 100;
+
+        while (!STOPPED) {
+            if (attempts == 0) {
+                spdlog::get("container_agent")->warn("Waiting for Microservice {} to stop...", msvc_name);
+            }
+            
+            std::this_thread::sleep_for(std::chrono::milliseconds(100));
+            
+            if (++attempts > maxAttempts) {
+                spdlog::get("container_agent")->error("Microservice {} failed to stop naturally after {} attempts", msvc_name, maxAttempts);
+                break;
+            }
+        }
+    }
 
     std::string msvc_experimentName;
     // Name Identifier assigned to the microservice in the format of `type_of_msvc-number`.
@@ -1006,6 +1033,7 @@ protected:
 
     // Used to signal to thread when not to run and to bring thread to a natural end.
     bool STOP_THREADS = false;
+    bool STOPPED = false;
     bool READY = false;
 
     json msvc_configs;

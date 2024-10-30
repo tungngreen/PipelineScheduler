@@ -101,6 +101,8 @@ void DataReader::Process() {
             for (auto q: msvc_OutQueue) {
                 Request<LocalCPUReqDataType> req;
                 if (!q->getEncoded()) {
+                    // 1. The very moment request is originally generated at the beggining of the pipeline. (FIRST_TIMESTAMP)
+                    // This timestamp will remain throughout the lifetime of the request
                     ClockType time = std::chrono::system_clock::now();
                     req = {{{time, time}}, {msvc_contSLO},
                            {"[" + msvc_hostDevice + "|" + link + "|" + std::to_string(readFrames) +

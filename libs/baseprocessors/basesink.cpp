@@ -97,4 +97,5 @@ void BaseSink::sink() {
         }
     }
     msvc_logFile.close();
+    STOPPED = true;
 }

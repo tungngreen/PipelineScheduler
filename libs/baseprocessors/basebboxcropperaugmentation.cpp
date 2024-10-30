@@ -554,6 +554,7 @@ void BaseBBoxCropperAugmentation::cropping() {
 
     checkCudaErrorCode(cudaStreamDestroy(postProcStream), __func__);
     msvc_logFile.close();
+    STOPPED = true;
 }
 
 

@@ -97,15 +97,9 @@ void BaseBatcher::updateCycleTiming() {
 inline void BaseBatcher::executeBatching(BatchTimeType &genTime, RequestSLOType &slo, RequestPathType &path,
                                   std::vector<RequestData<LocalGPUReqDataType>> &bufferData,
                                   std::vector<RequestData<LocalGPUReqDataType>> &prevData) {
-    // if (time < oldestReqTime) {
-    //     oldestReqTime = time;
-    // }
-
-    // If true, copy the buffer data into the out queue
+    // 7. The moment the request is batched (SEVENTH_TIMESTAMP)
     ClockType timeNow = std::chrono::high_resolution_clock::now();
 
-    // Moment of batching
-    // This is the FOURTH TIMESTAMP
     for (auto &req_genTime: genTime) {
         req_genTime.emplace_back(timeNow);
     }
@@ -126,6 +120,7 @@ inline void BaseBatcher::executeBatching(BatchTimeType &genTime, RequestSLOType 
                                           msvc_onBufferBatchSize);
     msvc_OutQueue[0]->emplace(outReq);
     msvc_avgBatchSize += (msvc_onBufferBatchSize - msvc_avgBatchSize) / msvc_miniBatchCount;
+    msvc_onBufferBatchSize = 0;
     genTime.clear();
     path.clear();
     slo.clear();
@@ -323,5 +318,6 @@ void BaseBatcher::batchRequests() {
             executeBatching(outBatch_genTime, outBatch_slo, outBatch_path, bufferData, prevData);
         }
     }
-
+    msvc_logFile.close();
+    STOPPED = true;
 }
