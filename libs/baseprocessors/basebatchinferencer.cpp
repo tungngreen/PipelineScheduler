@@ -223,6 +223,7 @@ void BaseBatchInferencer::inference() {
     }
     checkCudaErrorCode(cudaStreamDestroy(inferenceStream), __func__);
     msvc_logFile.close();
+    STOPPED = true;
 }
 
 void BaseBatchInferencer::inferenceProfiling() {

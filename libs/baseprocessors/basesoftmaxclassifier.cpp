@@ -232,6 +232,7 @@ void BaseSoftmaxClassifier::classify() {
     }
     checkCudaErrorCode(cudaStreamDestroy(postProcStream), __func__);
     msvc_logFile.close();
+    STOPPED = true;
 }
 
 void BaseSoftmaxClassifier::classifyProfiling() {
@@ -354,4 +355,5 @@ void BaseSoftmaxClassifier::classifyProfiling() {
     }
     checkCudaErrorCode(cudaStreamDestroy(postProcStream), __func__);
     msvc_logFile.close();
+    STOPPED = true;
 }

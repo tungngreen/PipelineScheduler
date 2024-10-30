@@ -312,6 +312,7 @@ void BaseBBoxCropperVerifier::cropping() {
 
     checkCudaErrorCode(cudaStreamDestroy(postProcStream), __func__);
     msvc_logFile.close();
+    STOPPED = true;
 }
 
 void BaseBBoxCropperVerifier::cropProfiling() {
@@ -541,4 +542,5 @@ void BaseBBoxCropperVerifier::cropProfiling() {
 
     checkCudaErrorCode(cudaStreamDestroy(postProcStream), __func__);
     msvc_logFile.close();
+    STOPPED = true;
 }

@@ -315,4 +315,5 @@ void Receiver::HandleRpcs() {
         thread_.detach();
     }
     msvc_logFile.close();
+    STOPPED = true;
 }

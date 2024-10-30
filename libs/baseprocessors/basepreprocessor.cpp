@@ -454,6 +454,7 @@ void BasePreprocessor::preprocess() {
         }
     }
     msvc_logFile.close();
+    STOPPED = true;
 }
 
 // inline void BasePreprocessor::executeBatch(BatchTimeType &genTime, RequestSLOType &slo, RequestPathType &path,

@@ -822,7 +822,28 @@ public:
 
     explicit Microservice(const Microservice &other);
 
-    virtual ~Microservice() = default;
+    virtual ~Microservice() {
+        waitStop();
+        spdlog::get("container_agent")->info("Microservice {} has stopped", msvc_name);
+    }
+
+    void waitStop () {
+        uint8_t attempts = 0;
+        const uint8_t maxAttempts = 100;
+
+        while (!STOPPED) {
+            if (attempts == 0) {
+                spdlog::get("container_agent")->warn("Waiting for Microservice {} to stop...", msvc_name);
+            }
+            
+            std::this_thread::sleep_for(std::chrono::milliseconds(100));
+            
+            if (++attempts > maxAttempts) {
+                spdlog::get("container_agent")->error("Microservice {} failed to stop naturally after {} attempts", msvc_name, maxAttempts);
+                break;
+            }
+        }
+    }
 
     std::string msvc_experimentName;
     // Name Identifier assigned to the microservice in the format of `type_of_msvc-number`.
@@ -1012,6 +1033,7 @@ protected:
 
     // Used to signal to thread when not to run and to bring thread to a natural end.
     bool STOP_THREADS = false;
+    bool STOPPED = false;
     bool READY = false;
 
     json msvc_configs;

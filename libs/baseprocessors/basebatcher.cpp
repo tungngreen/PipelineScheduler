@@ -118,6 +118,7 @@ inline void BaseBatcher::executeBatching(BatchTimeType &genTime, RequestSLOType 
     spdlog::get("container_agent")->trace("{0:s} emplaced a request of batch size {1:d} ", msvc_name,
                                            msvc_onBufferBatchSize);
     msvc_OutQueue[0]->emplace(outReq);
+    msvc_avgBatchSize += (msvc_onBufferBatchSize - msvc_avgBatchSize) / msvc_miniBatchCount;
     msvc_onBufferBatchSize = 0;
     genTime.clear();
     path.clear();
@@ -316,5 +317,6 @@ void BaseBatcher::batchRequests() {
             executeBatching(outBatch_genTime, outBatch_slo, outBatch_path, bufferData, prevData);
         }
     }
-
+    msvc_logFile.close();
+    STOPPED = true;
 }
