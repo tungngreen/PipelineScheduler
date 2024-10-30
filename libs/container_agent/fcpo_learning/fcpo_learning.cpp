@@ -123,6 +123,7 @@ void FCPOAgent::federatedUpdateCallback(FlData &response) {
     std::lock_guard<std::mutex> lock(model_mutex);
     torch::load(model, iss);
     steps_counter = 0;
+    update_steps += update_steps_inc; // Increase the number of steps for the next updates every time we finish federation
     federated_steps_counter = 1; // 1 means that we are starting local updates again until the next federation
     reset();
 }
