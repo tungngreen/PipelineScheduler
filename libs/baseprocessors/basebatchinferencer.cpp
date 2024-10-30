@@ -151,8 +151,10 @@ void BaseBatchInferencer::inference() {
         // if (msvc_inReqCount > 1) {
         //     updateReqRate(currReq_genTime);
         // }
+
+        // 8. The moment the request is received at the inferencer (EIGHT_TIMESTAMP)
         for (auto& req_genTime : currReq.req_origGenTime) {
-            req_genTime.emplace_back(currReq_recvTime); //FIFTH_TIMESTAMP
+            req_genTime.emplace_back(currReq_recvTime);
         }
 
         // Do batched inference with TRT
@@ -186,18 +188,10 @@ void BaseBatchInferencer::inference() {
             dummy
         };
 
+        // 9. The moment the request is done preprocessing by the inferencer (NINTH_TIMESTAMP)
         timeNow = std::chrono::high_resolution_clock::now();
-        /**
-         * @brief There are six important timestamps to be recorded:
-         * 1. When the request was generated
-         * 2. When the request was received by the batcher
-         * 3. When the request was done preprocessing by the batcher
-         * 4. When the request, along with all others in the batch, was batched together and sent to the inferencer
-         * 5. When the batch inferencer was completed by the inferencer 
-         * 6. When each request was completed by the postprocessor
-         */
         for (auto& req_genTime : currReq.req_origGenTime) {
-            req_genTime.emplace_back(timeNow); //SIXTH_TIMESTAMP
+            req_genTime.emplace_back(timeNow);
         }
 
         outReqData.emplace_back(shapeGuide);
@@ -232,172 +226,6 @@ void BaseBatchInferencer::inference() {
 }
 
 void BaseBatchInferencer::inferenceProfiling() {
-    msvc_logFile.open(msvc_microserviceLogPath, std::ios::out);
-    // The time where the last request was generated.
-    ClockType lastReq_genTime;
-    // The time where the current incoming request was generated.
-    ClockType currReq_genTime;
-    // The time where the current incoming request arrives
-    ClockType currReq_recvTime;
-
-    // Vector of GPU Mat to copy data into and out of the TRT Engine
-    std::vector<LocalGPUReqDataType> trtInBuffer, trtOutBuffer;
-
-    // Data package to be sent to and processed at the next microservice
-    std::vector<RequestData<LocalGPUReqDataType>> outReqData;   
-
-    // Instance of data to be packed into `outReqData`
-    RequestData<LocalGPUReqDataType> data;
-
-    Request<LocalGPUReqDataType> outReq;
-
-    // Batch size of current request
-    BatchSizeType currReq_batchSize;
-    spdlog::get("container_agent")->info("{0:s} STARTS.", msvc_name);
-
-    auto timeNow = std::chrono::high_resolution_clock::now();
-
-    cudaStream_t inferenceStream;
-    while (true) {
-        // Allowing this thread to naturally come to an end
-        if (STOP_THREADS) {
-            spdlog::get("container_agent")->info("{0:s} STOPS.", msvc_name);
-            break;
-        }
-        else if (PAUSE_THREADS) {
-            if (RELOADING) {
-                spdlog::get("container_agent")->trace("{0:s} is BEING (re)loaded...", msvc_name);
-                READY = false;
-                /**
-                 * @brief Opening a new log file
-                 * During runtime: log file should come with a new timestamp everytime the microservice is reloaded
-                 * 
-                 */
-
-                if (msvc_logFile.is_open()) {
-                    msvc_logFile.close();
-                }
-                msvc_logFile.open(msvc_microserviceLogPath, std::ios::out);
-
-                /**
-                 * @brief Set the current working device
-                 * 
-                 */
-                setDevice();
-                // Create a new cuda stream for inference
-                checkCudaErrorCode(cudaStreamCreate(&inferenceStream), __func__);
-                
-
-
-                /**
-                 * @brief Generate a new instance of the inference engine with the new configurations
-                 * 
-                 */
-                if (msvc_inferenceEngine != nullptr) {
-                    delete msvc_inferenceEngine;
-                }
-                msvc_inferenceEngine = new Engine(msvc_engineConfigs);
-                msvc_inferenceEngine->loadNetwork();
-
-                outReqData.clear();
-                trtInBuffer.clear();
-                trtOutBuffer.clear();
-                
-                spdlog::get("container_agent")->info("{0:s} is (RE)LOADED.", msvc_name);
-                RELOADING = false;
-                READY = true;
-            }
-            //spdlog::info("{0:s} is being PAUSED.", msvc_name);
-            continue;
-        }
-        // Processing the next incoming request
-        // Current incoming equest and request to be sent out to the next
-        Request<LocalGPUReqDataType> currReq = msvc_InQueue.at(0)->pop2();
-        // Meaning the the timeout in pop() has been reached and no request was actually popped
-        if (strcmp(currReq.req_travelPath[0].c_str(), "empty") == 0) {
-            continue;
-        }
-        
-        msvc_overallTotalReqCount++;
-
-        // The generated time of this incoming request will be used to determine the rate with which the microservice should
-        // check its incoming queue.
-        currReq_recvTime = std::chrono::high_resolution_clock::now();
-        if (msvc_overallTotalReqCount > 1) {
-            updateReqRate(currReq_genTime);
-        }
-
-        // Do batched inference with TRT
-        currReq_batchSize = currReq.req_batchSize;
-        spdlog::get("container_agent")->trace("{0:s} popped a request of batch size {1:d}", msvc_name, currReq_batchSize);
-
-        for (std::size_t i = 0; i < currReq_batchSize; ++i) {
-            trtInBuffer.emplace_back(currReq.req_data[i].data);
-        }
-        spdlog::get("container_agent")->trace("{0:s} extracts inference data from message. Run inference!", msvc_name);
-        msvc_inferenceEngine->runInference(trtInBuffer, trtOutBuffer, currReq_batchSize, inferenceStream);
-        spdlog::get("container_agent")->trace("{0:s} finished INFERENCE.", msvc_name);
-
-        // After inference, 4 buffers are filled with memory, which we need to carry to post processor.
-        // We put 4 buffers into a vector along with their respective shapes for the post processor to interpret.
-        for (std::size_t i = 0; i < msvc_outReqShape.at(0).size(); ++i) {
-            data = {
-                msvc_outReqShape.at(0).at(i),
-                trtOutBuffer[i]
-            };
-            outReqData.emplace_back(data);
-        }
-
-        cv::cuda::GpuMat dummy;
-        // Add a piece of data at the end of `req_data` to let the next msvc (e.g., cropper) knows about the shape used
-        // udring inference.
-        // This shape together with the shape of the original data will be used to scale the bounding boxes
-        RequestData<LocalGPUReqDataType> shapeGuide = {
-            currReq.req_data[0].shape,
-            dummy
-        };
-        outReqData.emplace_back(shapeGuide);
-
-        timeNow = std::chrono::high_resolution_clock::now();
-
-        /**
-         * @brief During profiling mode, there are six important timestamps to be recorded:
-         * 1. When the request was generated
-         * 2. When the request was received by the batcher
-         * 3. When the request was done preprocessing by the batcher
-         * 4. When the request, along with all others in the batch, was batched together and sent to the inferencer
-         * 5. When the batch inferencer was completed by the inferencer 
-         * 6. When each request was completed by the postprocessor
-         */
-        for (auto& req_genTime : currReq.req_origGenTime) {
-            req_genTime.emplace_back(timeNow); //FIFTH_TIMESTAMP
-        }
-
-        // Packing everything inside the `outReq` to be sent to and processed at the next microservice
-        outReq = {
-            currReq.req_origGenTime,
-            currReq.req_e2eSLOLatency,
-            currReq.req_travelPath,
-            currReq_batchSize,
-            outReqData, //req_data
-            currReq.upstreamReq_data // upstreamReq_data
-        };
-        // // After inference, the gpumat inside `inbuffer` is no longer used and can be freed.
-        // for (std::size_t i = 0; i < trtInBuffer.size(); i++) {
-        //     checkCudaErrorCode(cudaFree(trtInBuffer.at(i).cudaPtr()));
-        // }
-        spdlog::get("container_agent")->info("{0:s} emplaced a request for a batch size of {1:d}", msvc_name, currReq_batchSize);
-
-        msvc_OutQueue[0]->emplace(outReq);
-        outReqData.clear();
-        trtInBuffer.clear();
-        trtOutBuffer.clear();
-
-        spdlog::get("container_agent")->trace("{0:s} sleeps for {1:d} millisecond", msvc_name, msvc_interReqTime);
-        std::this_thread::sleep_for(std::chrono::milliseconds(msvc_interReqTime));
-    }
-    checkCudaErrorCode(cudaStreamDestroy(inferenceStream), __func__);
-    msvc_logFile.close();
 }
 
 RequestShapeType BaseBatchInferencer::getInputShapeVector() {

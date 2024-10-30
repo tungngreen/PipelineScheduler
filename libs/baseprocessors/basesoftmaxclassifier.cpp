@@ -194,8 +194,8 @@ void BaseSoftmaxClassifier::classify() {
             /**
              * @brief There are 8 important timestamps to be recorded:
              * 1. When the request was generated
-             * 2. When the request was received by the batcher
-             * 3. When the request was done preprocessing by the batcher
+             * 2. When the request was received by the preprocessor
+             * 3. When the request was done preprocessing by the preprocessor
              * 4. When the request, along with all others in the batch, was batched together and sent to the inferencer
              * 5. When the batch inferencer popped the batch sent from batcher
              * 6. When the batch inference was completed by the inferencer 

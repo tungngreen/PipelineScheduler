@@ -114,20 +114,10 @@ public:
     }
 
     void START() {
-        for (auto msvc: cont_msvcsGroups["receiver"].msvcList) {
-            msvc->unpauseThread();
-        }
-        for (auto msvc: cont_msvcsGroups["preprocessor"].msvcList) {
-            msvc->unpauseThread();
-        }
-        for (auto msvc: cont_msvcsGroups["inference"].msvcList) {
-            msvc->unpauseThread();
-        }
-        for (auto msvc: cont_msvcsGroups["postprocessor"].msvcList) {
-            msvc->unpauseThread();
-        }
-        for (auto msvc: cont_msvcsGroups["sender"].msvcList) {
-            msvc->unpauseThread();
+        for (auto msvcGroup: cont_msvcsGroups) {
+            for (auto msvc: msvcGroup.second.msvcList) {
+                msvc->unpauseThread();
+            }
         }
         spdlog::get("container_agent")->info("=========================================== STARTS ===========================================");
     }
@@ -169,11 +159,14 @@ public:
     void addMicroservice(Microservice *msvc) {
         MicroserviceType type = msvc->msvc_type;
         if (type >= MicroserviceType::Receiver &&
-            type < MicroserviceType::PreprocessBatcher) {
+            type < MicroserviceType::Preprocessor) {
             cont_msvcsGroups["receiver"].msvcList.push_back(msvc);
-        } else if (type >= MicroserviceType::PreprocessBatcher &&
+        } else if (type >= MicroserviceType::Preprocessor &&
                     type < MicroserviceType::TRTInferencer) {
             cont_msvcsGroups["preprocessor"].msvcList.push_back(msvc);
+        } else if (type >= MicroserviceType::Batcher &&
+                    type < MicroserviceType::TRTInferencer) {
+            cont_msvcsGroups["batcher"].msvcList.push_back(msvc);
         } else if (type >= MicroserviceType::TRTInferencer &&
                     type < MicroserviceType::Postprocessor) {
             cont_msvcsGroups["inference"].msvcList.push_back(msvc);
@@ -194,20 +187,10 @@ public:
     }
 
     void dispatchMicroservices() {
-        for (auto &msvc: cont_msvcsGroups["receiver"].msvcList) {
-            msvc->dispatchThread();
-        }
-        for (auto &msvc: cont_msvcsGroups["preprocessor"].msvcList) {
-            msvc->dispatchThread();
-        }
-        for (auto &msvc: cont_msvcsGroups["inference"].msvcList) {
-            msvc->dispatchThread();
-        }
-        for (auto &msvc: cont_msvcsGroups["postprocessor"].msvcList) {
-            msvc->dispatchThread();
-        }
-        for (auto &msvc: cont_msvcsGroups["sender"].msvcList) {
-            msvc->dispatchThread();
+        for (auto &group: cont_msvcsGroups) {
+            for (auto &msvc: group.second.msvcList) {
+                msvc->dispatchThread();
+            }
         }
     }
 

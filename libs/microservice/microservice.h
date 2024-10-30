@@ -169,22 +169,29 @@ public:
      * @param request 
      */
     void emplace(Request<LocalCPUReqDataType> request) {
-        uint32_t my_ticket = producer_ticket.fetch_add(1); // Get a ticket for this producer
-        handleTicketOverflow(); // Handle overflow if needed
+        // Get a ticket for this producer and handle overflow if necessary
+        uint32_t my_ticket = producer_ticket.fetch_add(1);
+        handleTicketOverflow();
 
+        // Wait until it's this producer's turn and the consumer is not waiting
         while (current_ticket.load() != my_ticket || consumer_waiting.load()) {
-            std::this_thread::yield(); // Wait for the producer's turn or yield to the consumer
+            std::this_thread::yield();
         }
 
-        std::unique_lock<std::mutex> lock(q_mutex);
-        if (q_cpuQueue.size() == q_MaxSize) {
-            dropedCount += q_cpuQueue.front().req_batchSize;
-            spdlog::get("container_agent")->warn("Queue {0:s} is full, dropping request", q_name);
-            q_cpuQueue.pop();
-        }
-        q_cpuQueue.emplace(request);
-        current_ticket.fetch_add(1); // Move to the next producer in line
-        q_condition_consumer.notify_one(); // Notify the consumer
+        // Enter critical section only for queue operations
+        {
+            std::unique_lock<std::mutex> lock(q_mutex);
+            if (q_cpuQueue.size() == q_MaxSize) {
+                dropedCount += q_cpuQueue.front().req_batchSize;
+                spdlog::get("container_agent")->warn("Queue {0:s} is full, dropping request", q_name);
+                q_cpuQueue.pop();
+            }
+            q_cpuQueue.emplace(std::move(request)); // Use move semantics for efficiency
+        } // Mutex is released here
+
+        // Move to the next producer and notify consumer, outside the critical section
+        current_ticket.fetch_add(1);
+        q_condition_consumer.notify_one();
     }
 
     /**
@@ -196,19 +203,24 @@ public:
         uint32_t my_ticket = producer_ticket.fetch_add(1); // Get a ticket for this producer
         handleTicketOverflow(); // Handle overflow if needed
 
-        while (current_ticket.load() != my_ticket || consumer_waiting.load()) {
+        while (current_ticket.load() != my_ticket) {
             std::this_thread::yield(); // Wait for the producer's turn or yield to the consumer
         }
 
-        std::unique_lock<std::mutex> lock(q_mutex);
-        if (q_gpuQueue.size() == q_MaxSize) {
-            dropedCount += q_gpuQueue.front().req_batchSize;
-            spdlog::get("container_agent")->warn("Queue {0:s} is full, dropping request", q_name);
-            q_gpuQueue.pop();
-        }
-        q_gpuQueue.emplace(request);
-        current_ticket.fetch_add(1); // Move to the next producer in line
-        q_condition_consumer.notify_one(); // Notify the consumer
+        // Lock only to modify the queue safely
+        {
+            std::unique_lock<std::mutex> lock(q_mutex);
+            if (q_gpuQueue.size() == q_MaxSize) {
+                dropedCount += q_gpuQueue.front().req_batchSize;
+                spdlog::get("container_agent")->warn("Queue {0:s} is full, dropping request", q_name);
+                q_gpuQueue.pop();
+            }
+            q_gpuQueue.emplace(std::move(request)); // Use move semantics if possible for efficiency
+        } // Unlock as soon as queue operations are done
+
+        // Move to the next producer and notify consumer, outside the critical section
+        current_ticket.fetch_add(1);
+        q_condition_consumer.notify_one();
     }
 
     /**
@@ -217,25 +229,29 @@ public:
      * @param request 
      */
     Request<LocalCPUReqDataType> pop1(uint32_t timeout = 100000) { // 100ms
-        consumer_waiting.store(true); // Mark consumer as waiting
-        std::unique_lock<std::mutex> lock(q_mutex);
-
         Request<LocalCPUReqDataType> request;
-        isEmpty = !q_condition_consumer.wait_for(
+        {
+            std::unique_lock<std::mutex> lock(q_mutex);
+            isEmpty = !q_condition_consumer.wait_for(
                 lock,
                 TimePrecisionType(timeout),
                 [this]() { return !q_cpuQueue.empty(); }
-        );
-        consumer_waiting.store(false); // Consumer is no longer waiting
+            );
 
-        if (!isEmpty) {
-            request = q_cpuQueue.front();
-            q_cpuQueue.pop();
-        } else {
+            // Only proceed if the queue is not empty
+            if (!isEmpty) {
+                request = q_cpuQueue.front();
+                q_cpuQueue.pop();
+            }
+        }
+
+        // If the queue was empty, set a default value outside the critical section
+        if (isEmpty) {
             request.req_travelPath = {"empty"};
         }
-        return request;
-    }
+
+    return request;
+}
 
     /**
      * @brief popping Type 2 requests with priority for the consumer
@@ -243,20 +259,21 @@ public:
      * @param request 
      */
     Request<LocalGPUReqDataType> pop2(uint32_t timeout = 100000) { // 100ms
-        consumer_waiting.store(true); // Mark consumer as waiting
-        std::unique_lock<std::mutex> lock(q_mutex);
         Request<LocalGPUReqDataType> request;
-        isEmpty = !q_condition_consumer.wait_for(
-                lock,
-                TimePrecisionType(timeout),
-                [this]() { return !q_gpuQueue.empty(); }
-        );
-        consumer_waiting.store(false); // Consumer is no longer waiting
+        {
+            std::unique_lock<std::mutex> lock(q_mutex);
+            isEmpty = !q_condition_consumer.wait_for(
+                    lock,
+                    TimePrecisionType(timeout),
+                    [this]() { return !q_gpuQueue.empty(); }
+            );
 
-        if (!isEmpty) {
-            request = q_gpuQueue.front();
-            q_gpuQueue.pop();
-        } else {
+            if (!isEmpty) {
+                request = q_gpuQueue.front();
+                q_gpuQueue.pop();
+            }
+        }
+        if (isEmpty) {
             request.req_travelPath = {"empty"};
         }
         return request;
@@ -399,7 +416,9 @@ namespace msvcconfigs {
         ProfileGenerator = 501,
         DataSink = 502,
         // Preprocessor should have number between 1000 and 2000
-        PreprocessBatcher = 1000,
+        Preprocessor = 1000,
+        // Batcher should have number between 1500 and 2000
+        Batcher = 1500,
         // Inferencer should have number larger than 2000
         TRTInferencer = 2000,
         // Postprocessor should have number larger than 3000
@@ -483,9 +502,10 @@ public:
 
     /**
      * @brief Add a new arrival to the records. There are 3 timestamps to keep be kept.
-     * 1. The time the request is processed by the upstream postprocessor and placed onto the outqueue.
-     * 2. The time the request is sent out by upstream sender.
-     * 3. The time the request is placed onto the outqueue of receiver.
+     * 1. The time the request is processed by the upstream postprocessor and placed onto the outqueue. (SECOND_TIMESTAMP)
+     * 2. The time the request is sent out by upstream sender. (THIRD_TIMESTAMP)
+     * 3. The time the request is placed onto the outqueue of receiver. (FOURTH_TIMESTAMP)
+     * 4. The time the request is received by the preprocessor. (FIFTH_TIMESTAMP)
      *
      * @param timestamps
      */
@@ -501,31 +521,22 @@ public:
         for (size_t i = 0; i < timestamps.size() - 1; ++i) {
             if (timestamps[i] > timestamps[i + 1]) return;
         }
+
+
+        auto outQueueingDuration = std::chrono::duration_cast<TimePrecisionType>(timestamps[2] - timestamps[1]).count();
+        auto transferDuration = std::chrono::duration_cast<TimePrecisionType>(timestamps[3] - timestamps[2]).count();
+        auto inQueueingDuration = std::chrono::duration_cast<TimePrecisionType>(timestamps[4] - timestamps[3]).count();
+    
+        lastTransferDuration = transferDuration;
+
         std::unique_lock<std::mutex> lock(mutex);
         ArrivalRecord * record = &records[{reqOriginStream, originDevice}];
-        auto transferDuration = std::chrono::duration_cast<TimePrecisionType>(timestamps[3] - timestamps[2]).count();
         // If transfer latency is 0 or negative, which only happens when time between devices are not properly synchronized
-        if (timestamps[3] <= timestamps[2]) {
-            if (record->transferDuration.empty() || lastTransferDuration == -1){
-                transferDuration = 0;
-            } else {
-                transferDuration = record->transferDuration.back();
-            }
-        }
         record->transferDuration.emplace_back(transferDuration);
-        lastTransferDuration = transferDuration;
-        if (timestamps[2] <= timestamps[1]) {
-            record->outQueueingDuration.emplace_back(0);
-        } else {
-            record->outQueueingDuration.emplace_back(
-                    std::chrono::duration_cast<TimePrecisionType>(timestamps[2] - timestamps[1]).count());
-        }
-        if (timestamps[4] <= timestamps[3]) {
-            record->queueingDuration.emplace_back(0);
-        } else {
-            record->queueingDuration.emplace_back(
-                    std::chrono::duration_cast<TimePrecisionType>(timestamps[4] - timestamps[3]).count());
-        }
+        record->outQueueingDuration.emplace_back(outQueueingDuration);
+        record->queueingDuration.emplace_back(inQueueingDuration);
+        record->queueingDuration.emplace_back(inQueueingDuration);
+        
         record->arrivalTime.emplace_back(timestamps[2]);
         record->totalPkgSize.emplace_back(totalPkgSize); //Byte
         record->reqSize.emplace_back(requestSize); //Byte
@@ -552,6 +563,8 @@ public:
      */
     void getRecords(ArrivalRecordType &overallRecords) {
         std::unique_lock<std::mutex> lock(mutex);
+        // make deep copy of records
+
         for (auto &record: records) {
             if (overallRecords.find(record.first) == overallRecords.end()) {
                 overallRecords[record.first] = record.second;
@@ -614,10 +627,15 @@ public:
 
 
     /**
-     * @brief Add a new arrival to the records. There are 3 timestamps to keep be kept.
-     * 1. The time the request is processed by the upstream postprocessor and placed onto the outqueue.
-     * 2. The time the request is sent out by upstream sender.
-     * 3. The time the request is placed onto the outqueue of receiver.
+     * @brief Add new process records to the records. There are 6 timestamps to keep be considered.
+     * 1. When the request was received by the preprocessor (FIFTH_TIMESTAMP)
+     * 2. When the request was done preprocessing by the preprocessor (SIXTH_TIMESTAMP)
+     * 3. When the request, along with all others in the batch, was batched together and sent to the inferencer (SEVENTH_TIMESTAMP)
+     * 4. When the batch was popped by the inferencer (EIGHTH_TIMESTAMP)
+     * 5. When the batch inferencer was completed by the inferencer (NINTH_TIMESTAMP)
+     * 6. When the batch was received by the postprocessor (TENTH_TIMESTAMP)
+     * 7. When each request starts to be processed by the postprocessor (ELEVENTH_TIMESTAMP)
+     * 8. When each request was completed by the postprocessor (TWELFTH_TIMESTAMP)
      *
      * @param timestamps
      */
@@ -633,19 +651,26 @@ public:
         for (size_t i = 0; i < timestamps.size() - 1; ++i) {
             if (timestamps[i] >= timestamps[i + 1]) return;
         }
+        auto prepDuration = std::chrono::duration_cast<TimePrecisionType>(timestamps[6] - timestamps[5]).count();
+        auto batchDuration = std::chrono::duration_cast<TimePrecisionType>(timestamps[7] - timestamps[6]).count();
+        auto inferQueueingDuration = std::chrono::duration_cast<TimePrecisionType>(timestamps[8] - timestamps[7]).count();
+        auto inferDuration = std::chrono::duration_cast<TimePrecisionType>(timestamps[9] - timestamps[8]).count();
+        auto postDuration = std::chrono::duration_cast<TimePrecisionType>(timestamps[11] - timestamps[10]).count();
+
         std::unique_lock<std::mutex> lock(mutex);
-        processRecords[{reqOrigin, inferBatchSize}].prepDuration.emplace_back(std::chrono::duration_cast<TimePrecisionType>(timestamps[6] - timestamps[5]).count());
-        processRecords[{reqOrigin, inferBatchSize}].batchDuration.emplace_back(std::chrono::duration_cast<TimePrecisionType>(timestamps[7] - timestamps[6]).count());
-        processRecords[{reqOrigin, inferBatchSize}].inferQueueingDuration.emplace_back(std::chrono::duration_cast<TimePrecisionType>(timestamps[8] - timestamps[7]).count());
-        processRecords[{reqOrigin, inferBatchSize}].inferDuration.emplace_back(std::chrono::duration_cast<TimePrecisionType>(timestamps[9] - timestamps[8]).count());
-        processRecords[{reqOrigin, inferBatchSize}].postDuration.emplace_back(std::chrono::duration_cast<TimePrecisionType>(timestamps[11] - timestamps[10]).count());
+        processRecords[{reqOrigin, inferBatchSize}].prepDuration.emplace_back(prepDuration);
+        processRecords[{reqOrigin, inferBatchSize}].batchDuration.emplace_back(batchDuration);
+        processRecords[{reqOrigin, inferBatchSize}].inferQueueingDuration.emplace_back(inferQueueingDuration);
+        // We consider the time during which the batch inference results were unloaded from the inferencer to the postprocessor as the inference duration
+        processRecords[{reqOrigin, inferBatchSize}].inferDuration.emplace_back(inferDuration);
+        processRecords[{reqOrigin, inferBatchSize}].postDuration.emplace_back(postDuration);
         processRecords[{reqOrigin, inferBatchSize}].inferBatchSize.emplace_back(inferBatchSize);
         processRecords[{reqOrigin, inferBatchSize}].postEndTime.emplace_back(timestamps[11]);
         processRecords[{reqOrigin, inferBatchSize}].inputSize.emplace_back(inputSize);
         processRecords[{reqOrigin, inferBatchSize}].outputSize.emplace_back(outputSize);
         processRecords[{reqOrigin, inferBatchSize}].encodedOutputSize.emplace_back(encodedOutputSize);
 
-        batchInferRecords[{reqOrigin, inferBatchSize}].inferDuration.emplace_back(std::chrono::duration_cast<TimePrecisionType>(timestamps[9] - timestamps[8]).count());
+        batchInferRecords[{reqOrigin, inferBatchSize}].inferDuration.emplace_back(inferDuration);
 
         currNumEntries++;
         totalNumEntries++;
@@ -1079,9 +1104,6 @@ protected:
 
     //
     virtual bool isTimeToBatch() { return true; };
-
-    //
-    virtual bool checkReqEligibility(std::vector<ClockType> &currReq_time) { return true; };
 
     //
     virtual void updateReqRate(ClockType lastInterReqDuration);

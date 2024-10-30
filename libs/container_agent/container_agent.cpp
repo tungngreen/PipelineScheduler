@@ -91,7 +91,7 @@ void manageJsonConfigs(json &configs) {
 
     (*containerConfigs)["cont_metricsServerConfigs"] = metricsServerConfigs;
     if (containerConfigs->at("cont_taskName") != "dsrc") {
-        (*containerConfigs)["cont_inferModelName"] = splitString(containerConfigs->at("cont_pipeline")[2]["path"], "/").back();
+        (*containerConfigs)["cont_inferModelName"] = splitString(containerConfigs->at("cont_pipeline")[3]["path"], "/").back();
         containerConfigs->at("cont_inferModelName") = splitString(containerConfigs->at("cont_inferModelName"), ".").front();
         // The maximum batch size supported by the model (for TensorRT)
         std::vector<std::string> modelOptions = splitString(containerConfigs->at("cont_inferModelName"), "_");
@@ -102,11 +102,7 @@ void manageJsonConfigs(json &configs) {
             (*containerConfigs)["cont_maxBatchSize"] = maxModelBatchSize;
         }
 
-        containerConfigs->at("cont_pipeline")[3]["msvc_concat"] = containerConfigs->at("cont_pipeline")[1]["msvc_concat"];
-
-        if (containerConfigs->at("cont_pipeline")[3]["msvc_concat"] > 1) {
-            
-        }
+        containerConfigs->at("cont_pipeline")[4]["msvc_concat"] = containerConfigs->at("cont_pipeline")[1]["msvc_concat"];
     }
 
     for (uint16_t i = 0; i < containerConfigs->at("cont_pipeline").size(); i++) {
@@ -125,7 +121,7 @@ void manageJsonConfigs(json &configs) {
         containerConfigs->at("cont_pipeline")[i]["msvc_taskName"] = containerConfigs->at("cont_taskName");
         containerConfigs->at("cont_pipeline")[i]["msvc_hostDevice"] = containerConfigs->at("cont_hostDevice");
         containerConfigs->at("cont_pipeline")[i]["msvc_deviceIndex"] = containerConfigs->at("cont_device");
-        containerConfigs->at("cont_pipeline")[i]["msvc_containerLogPath"] = containerConfigs->at("cont_logPath").get<std::string>() + "/" + name;
+        containerConfigs->at("cont_pipeline")[i]["msvc_containerLogPath"] = logPath;
         containerConfigs->at("cont_pipeline")[i]["msvc_RUNMODE"] = runmode;
         containerConfigs->at(
                 "cont_pipeline")[i]["cont_metricsScrapeIntervalMillisec"] = metricsServerConfigs["metricsServer_metricsReportIntervalMillisec"];
@@ -149,14 +145,14 @@ void manageJsonConfigs(json &configs) {
             containerConfigs->at("cont_pipeline")[i].at("msvc_idealBatchSize") = minBatch;
             if (i == 0) {
                 addProfileConfigs(containerConfigs->at("cont_pipeline")[i], *profilingConfigs);
-            } else if (i == 2) {
+            } else if (i == 3) {
                 // Set the path to the engine
                 containerConfigs->at("cont_pipeline")[i].at("path") = replaceSubstring(templateModelPath, "[batch]",
                                                                                       std::to_string(minBatch));
             }
         }
 
-        if (i == 1) {
+        if (i == 2) {
             containerConfigs->at("cont_pipeline")[i]["msvc_modelProfile"] = containerConfigs->at("cont_modelProfile");
         }
     };
@@ -290,6 +286,10 @@ ContainerAgent::ContainerAgent(const json& configs) {
     cont_deviceIndex = containerConfigs["cont_device"];
     cont_RUNMODE = containerConfigs["cont_RUNMODE"];
     cont_logDir = containerConfigs["cont_logPath"].get<std::string>();
+
+    std::filesystem::create_directory(
+        std::filesystem::path(cont_logDir)
+    );
 
     setupLogger(
         cont_logDir,
@@ -588,15 +588,19 @@ void ContainerAgent::initiateMicroservices(const json &configs) {
                 msvcsList.push_back(new DataReader(pipeConfig));
             } else if (msvc_type == MicroserviceType::Receiver) {
                 msvcsList.push_back(new Receiver(pipeConfig));
-            } else if (msvc_type >= MicroserviceType::PreprocessBatcher &&
-                       msvc_type < MicroserviceType::TRTInferencer) {
+            } else if (msvc_type >= MicroserviceType::Preprocessor &&
+                       msvc_type < MicroserviceType::Batcher) {
 
-                msvcsList.push_back(new BaseReqBatcher(pipeConfig));
+                msvcsList.push_back(new BasePreprocessor(pipeConfig));
                 msvcsList.back()->SetInQueue(cont_msvcsGroups["receiver"].outQueue);
+            } else if (msvc_type >= MicroserviceType::Batcher &&
+                       msvc_type < MicroserviceType::TRTInferencer) {
+                msvcsList.push_back(new BaseBatcher(pipeConfig));
+                msvcsList.back()->SetInQueue(cont_msvcsGroups["preprocessor"].outQueue);
             } else if (msvc_type >= MicroserviceType::TRTInferencer &&
                        msvc_type < MicroserviceType::Postprocessor) {
                 msvcsList.push_back(new BaseBatchInferencer(pipeConfig));
-                msvcsList.back()->SetInQueue(cont_msvcsGroups["preprocessor"].outQueue);
+                msvcsList.back()->SetInQueue(cont_msvcsGroups["batcher"].outQueue);
             } else if (msvc_type >= MicroserviceType::Postprocessor &&
                        msvc_type < MicroserviceType::Sender) {
 
@@ -668,9 +672,9 @@ bool ContainerAgent::addPreprocessor(uint8_t totalNumInstances) {
     Microservice *msvc;
     std::vector<Microservice *> newMsvcList;
     for (uint8_t i = 0; i < numNewInstances; i++) {
-        if (cont_msvcsGroups["preprocessor"].msvcList[0]->msvc_type == MicroserviceType::PreprocessBatcher) {
-            BaseReqBatcher *preprocessor = (BaseReqBatcher*) cont_msvcsGroups["preprocessor"].msvcList[0];
-            msvc = new BaseReqBatcher(*preprocessor);
+        if (cont_msvcsGroups["preprocessor"].msvcList[0]->msvc_type == MicroserviceType::Preprocessor) {
+            BasePreprocessor *preprocessor = (BasePreprocessor*) cont_msvcsGroups["preprocessor"].msvcList[0];
+            msvc = new BasePreprocessor(*preprocessor);
         // Add more types of preprocessors here
         } else {
             spdlog::get("container_agent")->error("{0:s} Unknown preprocessor type: {1:d}", __func__, cont_msvcsGroups["preprocessor"].msvcList[0]->msvc_type);

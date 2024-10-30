@@ -22,7 +22,7 @@ int main(int argc, char **argv) {
 
     std::vector<Microservice *> msvcsList;
     msvcsList.push_back(new Receiver(pipeConfigs[0]));
-    msvcsList.push_back(new BaseReqBatcher(pipeConfigs[1]));
+    msvcsList.push_back(new BasePreprocessor(pipeConfigs[1]));
     msvcsList[1]->SetInQueue(msvcsList[0]->GetOutQueue());
     msvcsList.push_back(new BaseBatchInferencer(pipeConfigs[2]));
     msvcsList[2]->SetInQueue(msvcsList[1]->GetOutQueue());
