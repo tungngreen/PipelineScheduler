@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.18)
 
-project(device_agent)
+project(profiler)
 
 # This include defines standard install locations.
 # https://cmake.org/cmake/help/v3.11/module/GNUInstallDirs.html
@@ -27,80 +27,55 @@ endif(CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
 # Only public header files go here.
 set(
         HEADER_FILES
-        device_agent.h
+        profiler.h
 )
 
 # All source files and private header files go here.
 set(
         SOURCE_FILES
-        device_agent.cpp
+        profiler.cpp
 )
 
 # Here we define the library.
-add_library(device_agent
+add_library(profiler
         ${HEADER_FILES}
         ${SOURCE_FILES})
 
 # We also add an alias definition so that we shadown
 # the export namespace when using add_subdirectory() instead.
-add_library(device_agent::device_agent ALIAS device_agent)
+add_library(profiler::profiler ALIAS profiler)
 
 
 # Required compiler features.
 # https://cmake.org/cmake/help/v3.1/manual/cmake-compile-features.7.html
-target_compile_features(device_agent
+target_compile_features(profiler
         # Features required to compile the library itself.
         PRIVATE cxx_std_11)
 # By prefixing the installation paths with our name and version
 # we can have multiple versions installed at the same time.
-set(PROJECT_PREFIX device_agent)
-
-set (profiler_DIR "${CMAKE_CURRENT_BINARY_DIR}/../profiler")
-find_package(profiler CONFIG REQUIRED)
-
-set(microservice_DIR "${CMAKE_CURRENT_BINARY_DIR}/../microservice")
-find_package(microservice CONFIG REQUIRED)
-
-set(communicator_DIR "${CMAKE_CURRENT_BINARY_DIR}/../communicator")
-find_package(communicator CONFIG REQUIRED)
-
-set(controller_DIR "${CMAKE_CURRENT_BINARY_DIR}/../controller")
-find_package(controller CONFIG REQUIRED)
+set(PROJECT_PREFIX profiler)
 
 # Defines the headers for this library.
 # https://cmake.org/cmake/help/v3.11/command/target_include_directories.html
-target_include_directories(device_agent
+target_include_directories(profiler
         PUBLIC
             # Used when building the library:
-            $<BUILD_INTERFACE:${device_agent_SOURCE_DIR}/>
+            $<BUILD_INTERFACE:${profiler_SOURCE_DIR}/>
             # Used when installing the library:
             $<INSTALL_INTERFACE:${PROJECT_PREFIX}>
-            ${OpenCV_INCLUDE_DIRS}
-            ${PostgreSQL_INCLUDE_DIRS}
-            ${LIBPQXX_INCLUDE_DIRS}
-            $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/../utils/protobufprotocols>
+            ${CUDA_INCLUDE_DIRS} 
         PRIVATE
             # Used only when building the library:
             src)
 
-target_link_libraries(device_agent
+target_link_libraries(profiler
         PUBLIC
-                device_comm_grpc_proto
-                device_mess_grpc_proto
-                absl::flags
-                absl::flags_parse
-                ${CMAKE_THREAD_LIBS_INIT}
-                ${_GRPC_GRPCPP}
-                ${_REFLECTION}
-                ${_PROTOBUF_LIBPROTOBUF}
-                ${PostgreSQL_LIBRARIES}
-                ${LIBPQXX_LIBRARIES}
-                ${CMAKE_THREAD_LIBS_INIT}
-                ${CUDA_LIBRARIES}
-                profiler
-                communicator
-                microservice
-                controller
+        absl::flags
+        absl::flags_parse
+        ${CMAKE_THREAD_LIBS_INIT}
+        ${CUDA_LIBRARIES}
+        CUDA::nvml
+        cuda
 )
 
 # Here we configure variables specifying the target directories.
@@ -108,21 +83,21 @@ set(INSTALL_RUNTIME_DIR ${CMAKE_INSTALL_BINDIR})
 set(INSTALL_CONFIG_DIR  ${CMAKE_INSTALL_LIBDIR}/${PROJECT_PREFIX}/cmake)
 set(INSTALL_LIBRARY_DIR ${CMAKE_INSTALL_LIBDIR}/${PROJECT_PREFIX}/${CMAKE_BUILD_TYPE})
 set(INSTALL_ARCHIVE_DIR ${CMAKE_INSTALL_LIBDIR}/${PROJECT_PREFIX}/${CMAKE_BUILD_TYPE}/static)
-set(INSTALL_INCLUDE_DIR ${CMAKE_INSTALL_INCLUDEDIR}/${PROJECT_PREFIX}/device_agent)
+set(INSTALL_INCLUDE_DIR ${CMAKE_INSTALL_INCLUDEDIR}/${PROJECT_PREFIX}/profiler)
 
 # Define the configuration file locations.
-set(PROJECT_CONFIG_VERSION_FILE "${PROJECT_BINARY_DIR}/device_agent-config-version.cmake")
-set(PROJECT_CONFIG_FILE         "${PROJECT_BINARY_DIR}/device_agent-config.cmake")
+set(PROJECT_CONFIG_VERSION_FILE "${PROJECT_BINARY_DIR}/profiler-config-version.cmake")
+set(PROJECT_CONFIG_FILE         "${PROJECT_BINARY_DIR}/profiler-config.cmake")
 
-configure_package_config_file(cmake/device_agent-config.cmake.in
+configure_package_config_file(cmake/profiler-config.cmake.in
         ${PROJECT_CONFIG_FILE}
         INSTALL_DESTINATION ${INSTALL_CONFIG_DIR})
 
 
 # The INSTALL(TARGET) command specifies where to install specific targets.
 # By specifying EXPORT here, we add these targets to an export group.
-install(TARGETS device_agent
-        EXPORT device_agent-targets
+install(TARGETS profiler
+        EXPORT profiler-targets
         RUNTIME DESTINATION ${INSTALL_RUNTIME_DIR}
         LIBRARY DESTINATION ${INSTALL_LIBRARY_DIR}
         ARCHIVE DESTINATION ${INSTALL_ARCHIVE_DIR})
@@ -138,15 +113,15 @@ install(FILES
         DESTINATION ${INSTALL_CONFIG_DIR})
 
 # The INSTALL(EXPORT) command installs a previously defined export group to a script.
-install(EXPORT device_agent-targets
-        FILE device_agent-targets.cmake
-        NAMESPACE device_agent::
+install(EXPORT profiler-targets
+        FILE profiler-targets.cmake
+        NAMESPACE profiler::
         DESTINATION ${INSTALL_CONFIG_DIR})
 
-export(EXPORT device_agent-targets
-       FILE ${CMAKE_CURRENT_BINARY_DIR}/device_agent-targets.cmake
-       NAMESPACE device_agent::)
+export(EXPORT profiler-targets
+       FILE ${CMAKE_CURRENT_BINARY_DIR}/profiler-targets.cmake
+       NAMESPACE profiler::)
 
 # Register the package in the user's package registry.
 # https://cmake.org/cmake/help/v3.11/command/export.html
-export(PACKAGE device_agent)
+export(PACKAGE profiler)

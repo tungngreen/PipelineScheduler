@@ -53,9 +53,6 @@ enum TransferMethod {
     GPU
 };
 
-std::chrono::time_point<std::chrono::_V2::system_clock, std::chrono::milliseconds> timePointCastMillisecond(
-    std::chrono::system_clock::time_point tp);
-
 namespace msvcconfigs {
 
     json loadJson();

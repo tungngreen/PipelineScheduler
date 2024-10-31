@@ -6,14 +6,12 @@ project(container_agent)
 set(
         HEADER_FILES
         container_agent.h
-        profiler.h
 )
 
 # All source files and private header files go here.
 set(
         SOURCE_FILES
         container_agent.cpp
-        profiler.cpp
 )
 
 # Here we define the library.
@@ -35,6 +33,9 @@ target_compile_features(container_agent
 set(PROJECT_PREFIX container_agent)
 
 find_package(Threads REQUIRED)
+
+set (profiler_DIR "${CMAKE_CURRENT_BINARY_DIR}/../profiler")
+find_package(profiler CONFIG REQUIRED)
 
 set(microservice_DIR "${CMAKE_CURRENT_BINARY_DIR}/../microservice")
 find_package(microservice CONFIG REQUIRED)
@@ -81,6 +82,7 @@ target_link_libraries(container_agent
         ${CMAKE_THREAD_LIBS_INIT}
         ${CUDA_LIBRARIES}
         CUDA::nvml
+        profiler
         microservice
         controller
         communicator

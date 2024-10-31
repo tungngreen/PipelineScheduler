@@ -188,6 +188,7 @@ protected:
 
     // number of concatentated and ready to be batched requests
     BatchSizeType msvc_onBufferBatchSize = 0;
+    BatchSizeType msvc_avgBatchSize;
 
     BatchInferProfileListType msvc_batchInferProfileList;
     ClockType oldestReqTime;
