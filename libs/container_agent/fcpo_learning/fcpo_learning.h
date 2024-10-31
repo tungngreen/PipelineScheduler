@@ -169,6 +169,7 @@ private:
     void federatedUpdate();
     void reset() {
         cumu_reward = 0.0;
+        first = true;
         states.clear();
         values.clear();
         resolution_actions.clear();

@@ -49,9 +49,13 @@ void FCPOAgent::update() {
     T action3_log_probs = torch::log(action3_probs.gather(-1, torch::tensor(scaling_actions).reshape({-1, 1})).squeeze(-1));
     T new_log_probs = (action1_log_probs + action2_log_probs + action3_log_probs).squeeze(-1);
 
-    if (log_probs.size() != states.size()) log_probs.erase(log_probs.begin());
-
     T ratio = torch::exp(new_log_probs - torch::stack(log_probs));
+
+    if (rewards.size() < states.size()) {
+        ratio = ratio.slice(0, 1, ratio.size(0), 1);
+        val = val.slice(0, 1, val.size(0), 1);
+    }
+
     T clipped_ratio = torch::clamp(ratio, 1 - clip_epsilon, 1 + clip_epsilon);
     T advantages = computeGae();
     T policy_loss = -torch::min(ratio * advantages, clipped_ratio * advantages).to(precision).mean();
@@ -133,12 +137,6 @@ void FCPOAgent::rewardCallback(double throughput, double drops, double latency_p
         first = false;
         return;
     }
-    states.push_back(state);
-//    log_probs.push_back(log_prob);
-    values.push_back(value);
-    resolution_actions.push_back(std::get<0>(actions));
-    batching_actions.push_back(std::get<1>(actions));
-    scaling_actions.push_back(std::get<2>(actions));
     rewards.push_back(2 * throughput - drops - latency_penalty + (1 - oversize_penalty));
 }
 
@@ -159,8 +157,12 @@ std::tuple<int, int, int> FCPOAgent::selectAction() {
 
 
     log_prob = torch::log(policy1[resolution]) + torch::log(policy2[batching]) + torch::log(policy3[scaling]);
+    states.push_back(state);
     log_probs.push_back(log_prob);
-    value = val;
+    values.push_back(val);
+    resolution_actions.push_back(resolution);
+    batching_actions.push_back(batching);
+    scaling_actions.push_back(scaling);
     return std::make_tuple(resolution, batching, scaling);
 }
 
