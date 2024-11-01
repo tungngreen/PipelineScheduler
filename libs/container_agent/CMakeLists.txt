@@ -6,14 +6,12 @@ project(container_agent)
 set(
         HEADER_FILES
         container_agent.h
-        profiler.h
 )
 
 # All source files and private header files go here.
 set(
         SOURCE_FILES
         container_agent.cpp
-        profiler.cpp
 )
 
 # Here we define the library.
@@ -37,6 +35,9 @@ set(PROJECT_PREFIX container_agent)
 
 find_package(Threads REQUIRED)
 
+set (profiler_DIR "${CMAKE_CURRENT_BINARY_DIR}/../profiler")
+find_package(profiler CONFIG REQUIRED)
+
 set(microservice_DIR "${CMAKE_CURRENT_BINARY_DIR}/../microservice")
 find_package(microservice CONFIG REQUIRED)
 
@@ -45,6 +46,9 @@ find_package(communicator CONFIG REQUIRED)
 
 set(controller_DIR "${CMAKE_CURRENT_BINARY_DIR}/../controller")
 find_package(controller CONFIG REQUIRED)
+
+set(baseprocessors_DIR "${CMAKE_CURRENT_BINARY_DIR}/../baseprocessors")
+find_package(baseprocessors CONFIG REQUIRED)
 
 # Defines the headers for this library.
 # https://cmake.org/cmake/help/v3.11/command/target_include_directories.html
@@ -74,10 +78,13 @@ target_link_libraries(container_agent
         ${PostgreSQL_LIBRARIES}
         ${LIBPQXX_LIBRARIES}
         ${CMAKE_THREAD_LIBS_INIT}
-        ${PYTHON_LIBRARIES}
+        ${CUDA_LIBRARIES}
+        CUDA::nvml
+        profiler
         microservice
         controller
         communicator
+        baseprocessors
 )
 
 # add_executable(ContainerAgent container_agent.cpp)

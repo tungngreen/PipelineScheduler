@@ -4,6 +4,11 @@ ABSL_FLAG(uint16_t, deploy_mode, 0, "The deployment mode of the system. 0: devel
 
 using json = nlohmann::json;
 
+std::chrono::time_point<std::chrono::_V2::system_clock, std::chrono::milliseconds> timePointCastMillisecond(
+    std::chrono::system_clock::time_point tp) {
+    return std::chrono::time_point_cast<std::chrono::milliseconds>(tp);
+}
+
 uint64_t calculateP95(std::vector<uint64_t> &values) {
     if (values.empty()) {
         throw std::invalid_argument("Values set is empty.");

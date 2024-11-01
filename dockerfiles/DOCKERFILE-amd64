@@ -168,21 +168,21 @@ RUN apt install postgresql-client libspdlog-dev -y
 # GDB for debugging
 RUN apt install gdb -y
 
-# Store load time model
-ARG upload_model="upload_model.txt"
-ARG download_model="download_model.txt"
-COPY ${upload_model} /ltmodel
-COPY ${download_model} /ltmodel
+# # Store load time model
+# ARG upload_model="upload_model.txt"
+# ARG download_model="download_model.txt"
+# COPY ${upload_model} /ltmodel
+# COPY ${download_model} /ltmodel
 
-# Install LightGBM
-ARG LIGHTGBM_SRC_DIR=/lightgbm-src
-RUN mkdir -p ${LIGHTGBM_SRC_DIR}
-RUN cd lightgbm-src
-RUN git clone --recursive https://github.com/microsoft/LightGBM && \
-    cd LightGBM && \
-    cmake -B build -S . -DCMAKE_INSTALL_PREFIX=/usr && \
-    cmake --build build -j4 && \
-    cmake --install build
+# # Install LightGBM
+# ARG LIGHTGBM_SRC_DIR=/lightgbm-src
+# RUN mkdir -p ${LIGHTGBM_SRC_DIR}
+# RUN cd lightgbm-src
+# RUN git clone --recursive https://github.com/microsoft/LightGBM && \
+#     cd LightGBM && \
+#     cmake -B build -S . -DCMAKE_INSTALL_PREFIX=/usr && \
+#     cmake --build build -j4 && \
+#     cmake --install build
 
 # Add more libraries here if needed
 
