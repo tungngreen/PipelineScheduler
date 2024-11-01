@@ -10,8 +10,8 @@
         "cont_pipeline": [
             {
                 "msvc_name": "receiver",
+                "msvc_numInstances": 1,
                 "msvc_idealBatchSize": 2,
-                "msvc_appLvlConfigs": "../jsons/arcface_receiver.json",
                 "msvc_dnstreamMicroservices": [
                     {
                         "nb_classOfInterest": -1,
@@ -62,8 +62,9 @@
             },
             {
                 "msvc_name": "preprocessor",
-                "msvc_idealBatchSize": 2,
-                "msvc_appLvlConfigs": "../jsons/arcface_preproc.json",
+                "msvc_numInstances": 1,
+                "msvc_concat": 1,
+                "msvc_idealBatchSize": 1,
                 "msvc_dnstreamMicroservices": [
                     {
                         "nb_classOfInterest": -1,
@@ -72,7 +73,7 @@
                             ""
                         ],
                         "nb_maxQueueSize": 100,
-                        "nb_name": "inference",
+                        "nb_name": "batcher",
                         "nb_expectedShape": [
                             [
                                 3,
@@ -89,7 +90,7 @@
                     ]
                 ],
                 "msvc_pipelineSLO": 999999,
-                "msvc_type": 1,
+                "msvc_type": 1000,
                 "msvc_upstreamMicroservices": [
                     {
                         "nb_classOfInterest": -2,
@@ -125,9 +126,60 @@
                 ]
             },
             {
-                "msvc_name": "inference",
+                "msvc_name": "batcher",
+                "msvc_numInstances": 1,
                 "msvc_idealBatchSize": 2,
-                "msvc_appLvlConfigs": "../jsons/arcface_trt.json",
+                "msvc_dnstreamMicroservices": [
+                    {
+                        "nb_classOfInterest": -1,
+                        "nb_commMethod": 3,
+                        "nb_link": [
+                            ""
+                        ],
+                        "nb_maxQueueSize": 100,
+                        "nb_name": "inference",
+                        "nb_expectedShape": [
+                            [
+                                -1,
+                                -1,
+                                -1
+                            ]
+                        ]
+                    }
+                ],
+                "msvc_dataShape": [
+                    [
+                        -1,
+                        -1
+                    ]
+                ],
+                "msvc_pipelineSLO": 999999,
+                "msvc_type": 1500,
+                "msvc_upstreamMicroservices": [
+                    {
+                        "nb_classOfInterest": -2,
+                        "nb_commMethod": 3,
+                        "nb_link": [
+                            ""
+                        ],
+                        "nb_maxQueueSize": 100,
+                        "nb_name": "preprocessor",
+                        "nb_expectedShape": [
+                            [
+                                3,
+                                112,
+                                112
+                            ]
+                        ]
+                    }
+                ],
+                "msvc_maxQueueSize": 100,
+                "=========================================Here ends the common part of the microservice configuration": "The following are the specific configurations for each microservice."
+            },
+            {
+                "msvc_name": "inference",
+                "msvc_numInstances": 1,
+                "msvc_idealBatchSize": 2,
                 "msvc_dnstreamMicroservices": [
                     {
                         "nb_classOfInterest": -1,
@@ -151,7 +203,7 @@
                     ]
                 ],
                 "msvc_pipelineSLO": 999999,
-                "msvc_type": 2,
+                "msvc_type": 2000,
                 "msvc_upstreamMicroservices": [
                     {
                         "nb_classOfInterest": -2,
@@ -193,8 +245,8 @@
             },
             {
                 "msvc_name": "postprocessor",
+                "msvc_numInstances": 1,
                 "msvc_idealBatchSize": 2,
-                "msvc_appLvlConfigs": "",
                 "msvc_dnstreamMicroservices": [
                     {
                         "nb_classOfInterest": -1,
@@ -218,7 +270,7 @@
                     ]
                 ],
                 "msvc_pipelineSLO": 999999,
-                "msvc_type": 3,
+                "msvc_type": 3002,
                 "msvc_upstreamMicroservices": [
                     {
                         "nb_classOfInterest": -2,
@@ -241,8 +293,8 @@
             },
             {
                 "msvc_name": "sender",
+                "msvc_numInstances": 1,
                 "msvc_idealBatchSize": 4,
-                "msvc_appLvlConfigs": "",
                 "msvc_dnstreamMicroservices": [
                     {
                         "nb_classOfInterest": -1,
@@ -267,7 +319,7 @@
                     ]
                 ],
                 "msvc_pipelineSLO": 999999,
-                "msvc_type": 4,
+                "msvc_type": 4002,
                 "msvc_upstreamMicroservices": [
                     {
                         "nb_classOfInterest": -2,

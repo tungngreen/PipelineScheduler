@@ -6,9 +6,6 @@ ABSL_FLAG(uint16_t, ctrl_verbose, 0, "Verbosity level of the controller.");
 ABSL_FLAG(uint16_t, ctrl_loggingMode, 0, "Logging mode of the controller. 0:stdout, 1:file, 2:both");
 ABSL_FLAG(std::string, ctrl_logPath, "../logs", "Path to the log dir for the controller.");
 
-const int DATA_BASE_PORT = 55001;
-const int CONTROLLER_BASE_PORT = 60001;
-const int DEVICE_CONTROL_PORT = 60002;
 
 // ======================================================================================================================================== //
 // ======================================================================================================================================== //
