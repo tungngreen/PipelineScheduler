@@ -6,6 +6,7 @@
 #include <sys/sysinfo.h>
 #include "profiler.h"
 #include "controller.h"
+#include "bcedge.h"
 #include <arpa/inet.h>
 #include <sys/socket.h>
 #include <netdb.h>

@@ -6,12 +6,14 @@ project(fcpo_learning)
 set(
         HEADER_FILES
         fcpo_learning.h
+        bcedge.h
 )
 
 # All source files and private header files go here.
 set(
         SOURCE_FILES
         fcpo_learning.cpp
+        bcedge.cpp
 )
 
 # Here we define the library.
