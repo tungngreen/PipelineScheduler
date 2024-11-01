@@ -531,8 +531,10 @@ void BaseBBoxCropperAugmentation::cropping() {
                         originStream,
                         getSenderHost(currReq.req_travelPath[i])
                 );
+                addToLatencyEWMA(
+                        std::chrono::duration_cast<TimePrecisionType>(currReq_recvTime - currReq.req_origGenTime[i][3]).count());
             }
-            // Clearing out data of the vector
+
             singleImageBBoxList.clear();
         }
         // // Free all the output buffers of trtengine after cropping is done.
@@ -541,6 +543,7 @@ void BaseBBoxCropperAugmentation::cropping() {
         // }
 
         msvc_batchCount++;
+        msvc_miniBatchCount++;
 
         
         spdlog::get("container_agent")->trace("{0:s} sleeps for {1:d} millisecond", msvc_name, msvc_interReqTime);

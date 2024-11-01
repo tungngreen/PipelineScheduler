@@ -55,7 +55,7 @@ target_compile_features(device_agent
 # we can have multiple versions installed at the same time.
 set(PROJECT_PREFIX device_agent)
 
-set (profiler_DIR "${CMAKE_CURRENT_BINARY_DIR}/../profiler")
+set (profiler_DIR "${CMAKE_CURRENT_BINARY_DIR}/../utils/profiler")
 find_package(profiler CONFIG REQUIRED)
 
 set(microservice_DIR "${CMAKE_CURRENT_BINARY_DIR}/../microservice")
@@ -85,21 +85,22 @@ target_include_directories(device_agent
 
 target_link_libraries(device_agent
         PUBLIC
-        device_grpc_proto
-        absl::flags
-        absl::flags_parse
-        ${CMAKE_THREAD_LIBS_INIT}
-        ${_GRPC_GRPCPP}
-        ${_REFLECTION}
-        ${_PROTOBUF_LIBPROTOBUF}
-        ${PostgreSQL_LIBRARIES}
-        ${LIBPQXX_LIBRARIES}
-        ${CMAKE_THREAD_LIBS_INIT}
-        ${CUDA_LIBRARIES}
-        profiler
-        communicator
-        microservice
-        controller
+                device_comm_grpc_proto
+                device_mess_grpc_proto
+                absl::flags
+                absl::flags_parse
+                ${CMAKE_THREAD_LIBS_INIT}
+                ${_GRPC_GRPCPP}
+                ${_REFLECTION}
+                ${_PROTOBUF_LIBPROTOBUF}
+                ${PostgreSQL_LIBRARIES}
+                ${LIBPQXX_LIBRARIES}
+                ${CMAKE_THREAD_LIBS_INIT}
+                ${CUDA_LIBRARIES}
+                profiler
+                communicator
+                microservice
+                controller
 )
 
 # Here we configure variables specifying the target directories.
