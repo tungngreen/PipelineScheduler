@@ -1,0 +1,5 @@
+To build a base container for Jetson devices.
+* r35.2.1-py3 for the orins
+* r35.1.0-py3 for the xaviers
+
+ ```docker build --build-arg JETPACK_VERSION="r35.1.0-py3" -t pipeline-scheduler:r35.1.0-py3 -f DOCKERFILE-jetson .```
