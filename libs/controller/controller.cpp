@@ -7,9 +7,6 @@ ABSL_FLAG(uint16_t, ctrl_loggingMode, 0, "Logging mode of the controller. 0:stdo
 ABSL_FLAG(std::string, ctrl_logPath, "../logs", "Path to the log dir for the controller.");
 
 
-// ======================================================================================================================================== //
-// ======================================================================================================================================== //
-// ======================================================================================================================================== //
 
 GPULane::GPULane(GPUHandle *gpu, NodeHandle *device, uint16_t laneNum) : laneNum(laneNum), gpuHandle(gpu), node(device) {
     dutyCycle = 0;
@@ -63,11 +60,6 @@ bool GPULane::removePortion(GPUPortion *portion) {
     portionList.list.erase(it);
     return true;
 }
-
-// ======================================================================================================================================== //
-// ======================================================================================================================================== //
-// ======================================================================================================================================== //
-
 
 // ============================================================ Configurations ============================================================ //
 // ======================================================================================================================================== //
@@ -283,10 +275,13 @@ Controller::Controller(int argc, char **argv) {
                       DATA_BASE_PORT + ctrl_port_offset, {});
     devices.addDevice("sink", sink_node);
 
+    ctrl_fcpo_server = new FCPOServer(ctrl_systemName + "_" + ctrl_experimentName, 5, torch::kF32);
+
     ctrl_nextSchedulingTime = std::chrono::system_clock::now();
 }
 
 Controller::~Controller() {
+    ctrl_fcpo_server->stop();
     for (auto msvc: containers.getList()) {
         StopContainer(msvc, msvc->device_agent, true);
     }
@@ -307,16 +302,6 @@ Controller::~Controller() {
     server->Shutdown();
     cq->Shutdown();
 }
-
-// ============================================================================================================================================ //
-// ============================================================================================================================================ //
-// ============================================================================================================================================ //
-
-
-
-
-
-
 
 // ============================================================ Excutor/Maintainers ============================================================ //
 // ============================================================================================================================================= //
@@ -443,7 +428,7 @@ void Controller::ApplyScheduling() {
      */
     for (auto &[pipeName, pipe]: ctrl_scheduledPipelines.getMap()) {
         for (auto &model: pipe->tk_pipelineModels) {
-            if (ctrl_systemName != "ppp" && ctrl_systemName != "jlf") {
+            if (ctrl_systemName != "ppp" && ctrl_systemName != "jlf" && ctrl_systemName != "fcpo") {
                 model->cudaDevices.emplace_back(0);
                 model->numReplicas = 1;
             }
@@ -537,7 +522,7 @@ void Controller::ApplyScheduling() {
         }
     }
 
-    if (ctrl_systemName != "ppp") {
+    if (ctrl_systemName != "ppp" && ctrl_systemName != "fcpo") {
         basicGPUScheduling(new_containers);
     } else {
         colocationTemporalScheduling();
@@ -556,7 +541,7 @@ void Controller::ApplyScheduling() {
 
     // std::uniform_int_distribution<> dis(1, 100);
     // while (numReclaims < new_containers.size() - numSinks) {
-        
+
     //     for (auto container : new_containers) {
     //         if (container->model == Sink || container->executionPortion == nullptr) {
     //             continue;
@@ -638,7 +623,7 @@ ContainerHandle *Controller::TranslateToContainer(PipelineModel *model, NodeHand
                                           ModelTypeReverseList[modelName],
                                           CheckMergable(modelName),
                                           {0},
-                                          model->task->tk_slo,
+                                          static_cast<uint64_t>(model->task->tk_slo),
                                           0.0,
                                           model->batchSize,
                                           device->next_free_port++,
@@ -753,10 +738,10 @@ void Controller::StartContainer(ContainerHandle *container, bool easy_allocation
         start_config["container"]["cont_hostDeviceType"] = ctrl_sysDeviceInfo[container->device_agent->type];
         start_config["container"]["cont_name"] = container->name;
         start_config["container"]["cont_allocationMode"] = easy_allocation ? 1 : 0;
-        if (ctrl_systemName == "ppp") {
+        if (ctrl_systemName == "ppp" || ctrl_systemName == "fcpo") {
             start_config["container"]["cont_batchMode"] = 2;
         }
-        if (ctrl_systemName == "ppp" || ctrl_systemName == "jlf") {
+        if (ctrl_systemName == "ppp" || ctrl_systemName == "fcpo" || ctrl_systemName == "jlf") {
             start_config["container"]["cont_dropMode"] = 1;
         }
         start_config["container"]["cont_pipelineSLO"] = container->task->tk_slo;
@@ -859,6 +844,18 @@ void Controller::StartContainer(ContainerHandle *container, bool easy_allocation
 
             postprocessor->at("msvc_dnstreamMicroservices").push_back(post_down);
             base_config.push_back(sender);
+            if (ctrl_systemName == "fcpo") {
+                start_config["fcpo"] = ctrl_fcpo_server->getConfig();
+                std::string deviceTypeName = getDeviceTypeName(container->device_agent->type);
+                if (container->model_file.find("yolov5") != std::string::npos) {
+                    start_config["fcpo"]["resolution_size"] =
+                            (deviceTypeName == "server" || deviceTypeName == "agx") ? 4 : 2;
+                } else {
+                    start_config["fcpo"]["resolution_size"] = 1;
+                }
+                start_config["fcpo"]["batch_size"] = container->pipelineModel->processProfiles[deviceTypeName].maxBatchSize;
+                start_config["fcpo"]["threads_size"] = (deviceTypeName == "server") ? 4 : 2;
+            }
         }
 
         start_config["container"]["cont_pipeline"] = base_config;
@@ -1108,16 +1105,6 @@ void Controller::calculateQueueSizes(ContainerHandle &container, const ModelType
     container.expectedThroughput = postprocess_thrpt;
 }
 
-// ============================================================================================================================================ //
-// ============================================================================================================================================ //
-// ============================================================================================================================================ //
-
-
-
-
-
-
-
 
 // ============================================================ Communication Handlers ============================================================ //
 // ================================================================================================================================================ //
@@ -1127,6 +1114,7 @@ void Controller::calculateQueueSizes(ContainerHandle &container, const ModelType
 void Controller::HandleRecvRpcs() {
     new DeviseAdvertisementHandler(&service, cq.get(), this);
     new DummyDataRequestHandler(&service, cq.get(), this);
+    new ForwardFLRequestHandler(&service, cq.get(), this);
     void *tag;
     bool ok;
     while (running) {
@@ -1165,6 +1153,8 @@ void Controller::DeviseAdvertisementHandler::Proceed() {
         if (node->type != SystemDeviceType::Server) {
             std::thread networkCheck(&Controller::initNetworkCheck, controller, std::ref(*(controller->devices.getDevice(deviceName))), 1000, 300000, 30);
             networkCheck.detach();
+        } else {
+            node->initialNetworkCheck = true;
         }
     } else {
         GPR_ASSERT(status == FINISH);
@@ -1191,146 +1181,26 @@ void Controller::DummyDataRequestHandler::Proceed() {
     }
 }
 
-std::string DeviceNameToType(std::string name) {
-    if (name == "server" || name == "sink") {
-        return "server";
+void Controller::ForwardFLRequestHandler::Proceed() {
+    if (status == CREATE) {
+        status = PROCESS;
+        service->RequestForwardFl(&ctx, &request, &responder, cq, cq, this);
+    } else if (status == PROCESS) {
+        new ForwardFLRequestHandler(service, cq, controller);
+        status = FINISH;
+        responder.Finish(reply, Status::OK, this);
+        //find container with name in scheduled pipelines
+        for (auto &cont: controller->containers.getList()) {
+            if (cont->name == request.name()) {
+                controller->ctrl_fcpo_server->addClient(request, cont->device_agent->stub, cont->device_agent->cq);
+                break;
+            }
+        }
     } else {
-        return name.substr(0, name.size() - 1);
+        GPR_ASSERT(status == FINISH);
+        delete this;
     }
 }
-
-// ============================================================================================================================================ //
-// ============================================================================================================================================ //
-// ============================================================================================================================================ //
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-// ============================================================ Network Conditions ============================================================ //
-
-// void Controller::optimizeBatchSizeStep(
-//         const Pipeline &models,
-//         std::map<ModelType, int> &batch_sizes, std::map<ModelType, int> &estimated_infer_times, int nObjects) {
-//     ModelType candidate;
-//     int max_saving = 0;
-//     std::vector<ModelType> blacklist;
-//     for (const auto &m: models) {
-//         int saving;
-//         if (max_saving == 0) {
-//             saving =
-//                     estimated_infer_times[m.first] - InferTimeEstimator(m.first, batch_sizes[m.first] * 2);
-//         } else {
-//             if (batch_sizes[m.first] == 64 ||
-//                 std::find(blacklist.begin(), blacklist.end(), m.first) != blacklist.end()) {
-//                 continue;
-//             }
-//             for (const auto &d: m.second) {
-//                 if (batch_sizes[d.first] > batch_sizes[m.first]) {
-//                     blacklist.push_back(d.first);
-//                 }
-//             }
-//             saving = estimated_infer_times[m.first] -
-//                      (InferTimeEstimator(m.first, batch_sizes[m.first] * 2) * (nObjects / batch_sizes[m.first] * 2));
-//         }
-//         if (saving > max_saving) {
-//             max_saving = saving;
-//             candidate = m.first;
-//         }
-//     }
-//     batch_sizes[candidate] *= 2;
-//     estimated_infer_times[candidate] -= max_saving;
-// }
-
-// double Controller::LoadTimeEstimator(const char *model_path, double input_mem_size) {
-//     // Load the pre-trained model
-//     BoosterHandle booster;
-//     int num_iterations = 1;
-//     int ret = LGBM_BoosterCreateFromModelfile(model_path, &num_iterations, &booster);
-
-//     // Prepare the input data
-//     std::vector<double> input_data = {input_mem_size};
-
-//     // Perform inference
-//     int64_t out_len;
-//     std::vector<double> out_result(1);
-//     ret = LGBM_BoosterPredictForMat(booster,
-//                                     input_data.data(),
-//                                     C_API_DTYPE_FLOAT64,
-//                                     1,  // Number of rows
-//                                     1,  // Number of columns
-//                                     1,  // Is row major
-//                                     C_API_PREDICT_NORMAL,  // Predict type
-//                                     0,  // Start iteration
-//                                     -1,  // Number of iterations, -1 means use all
-//                                     "",  // Parameter
-//                                     &out_len,
-//                                     out_result.data());
-//     if (ret != 0) {
-//         std::cout << "Failed to perform inference!" << std::endl;
-//         exit(ret);
-//     }
-
-//     // Print the predicted value
-//     std::cout << "Predicted value: " << out_result[0] << std::endl;
-
-//     // Free the booster handle
-//     LGBM_BoosterFree(booster);
-
-//     return out_result[0];
-// }
-
-
-/**
- * @brief
- *
- * @param model to specify model
- * @param batch_size for targeted batch size (binary)
- * @return int for inference time per full batch in nanoseconds
- */
-int Controller::InferTimeEstimator(ModelType model, int batch_size) {
-    return 0;
-}
-
-// std::map<ModelType, std::vector<int>> Controller::InitialRequestCount(const std::string &input, const Pipeline &models,
-//                                                                       int fps) {
-//     std::map<ModelType, std::vector<int>> request_counts = {};
-//     std::vector<int> fps_values = {fps, fps * 3, fps * 7, fps * 15, fps * 30, fps * 60};
-
-//     request_counts[models[0].first] = fps_values;
-//     json objectCount = json::parse(std::ifstream("../jsons/object_count.json"))[input];
-
-//     for (const auto &m: models) {
-//         if (m.first == ModelType::Sink) {
-//             request_counts[m.first] = std::vector<int>(6, 0);
-//             continue;
-//         }
-
-//         for (const auto &d: m.second) {
-//             if (d.second == -1) {
-//                 request_counts[d.first] = request_counts[m.first];
-//             } else {
-//                 std::vector<int> objects = (d.second == 0 ? objectCount["person"]
-//                                                           : objectCount["car"]).get<std::vector<int>>();
-
-//                 for (int j: fps_values) {
-//                     int count = std::accumulate(objects.begin(), objects.begin() + j, 0);
-//                     request_counts[d.first].push_back(request_counts[m.first][0] * count);
-//                 }
-//             }
-//         }
-//     }
-//     return request_counts;
-// }
 
 /**
  * @brief '

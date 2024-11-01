@@ -217,11 +217,14 @@ void BaseSoftmaxClassifier::classify() {
                         originStream,
                         getSenderHost(currReq.req_travelPath[i])
                 );
+                addToLatencyEWMA(
+                        std::chrono::duration_cast<TimePrecisionType>(currReq_recvTime - currReq.req_origGenTime[i][3]).count());
             }
         }
 
         
         msvc_batchCount++;
+        msvc_miniBatchCount++;
 
         spdlog::get("container_agent")->trace("{0:s} sleeps for {1:d} millisecond", msvc_name, msvc_interReqTime);
         std::this_thread::sleep_for(std::chrono::milliseconds(msvc_interReqTime));

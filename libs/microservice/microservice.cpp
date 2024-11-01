@@ -188,6 +188,25 @@ Microservice::Microservice(const Microservice &other) {
     msvc_InQueue = other.msvc_InQueue;
     msvc_OutQueue = other.msvc_OutQueue;
     classToDnstreamMap = other.classToDnstreamMap;
+//    for (auto it = dnstreamMicroserviceList.begin(); it != dnstreamMicroserviceList.end(); ++it) {
+//        msvc_OutQueue.emplace_back(new ThreadSafeFixSizedDoubleQueue(it->maxQueueSize, it->classOfInterest, it->name));
+//        if (it->commMethod == CommMethod::localGPU) {
+//            msvc_activeOutQueueIndex.emplace_back(2);
+//        } else {
+//            msvc_activeOutQueueIndex.emplace_back(1);
+//            if (it->commMethod == CommMethod::encodedCPU) {
+//                msvc_OutQueue.back()->setEncoded(true);
+//            }
+//        }
+//    }
+//
+//    for (auto it = upstreamMicroserviceList.begin(); it != upstreamMicroserviceList.end(); ++it) {
+//        if (it->commMethod == CommMethod::localGPU) {
+//            msvc_activeInQueueIndex.emplace_back(2);
+//        } else {
+//            msvc_activeInQueueIndex.emplace_back(1);
+//        }
+//    }
 
     msvc_modelDataType = other.msvc_modelDataType;
 
