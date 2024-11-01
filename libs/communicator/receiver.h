@@ -51,7 +51,7 @@ public:
      */
     inline void updateStats(ClockType &receiveTime) {
         msvc_overallTotalReqCount++;
-        msvc_totalReqCount++;
+        uint32_t totalReqCount = ++msvc_totalReqCount;
         if (msvc_totalReqCount == 1) {
             msvc_interReqTimeRunningMean.store(0);
             msvc_interReqTimeRunningVar.store(0);
@@ -66,7 +66,7 @@ public:
         int64_t var = msvc_interReqTimeRunningVar.load();
         auto oldMean = mean;
         // std::cout << "totalReqCount: " << msvc_totalReqCount.load() << " mean: " << mean << std::endl;
-        mean += ((interReqTime - oldMean) / msvc_totalReqCount);
+        mean += ((interReqTime - oldMean) / totalReqCount);
         // std::cout << " var: " << var << std::endl;
         var += ((interReqTime - oldMean) * (interReqTime - mean));
         // var /= msvc_totalReqCount;
