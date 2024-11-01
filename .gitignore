@@ -17,6 +17,7 @@ __pycache__/
 .idea
 .dotnet
 .wget-hsts
+.gk
 .pip
 *.a
 *.o

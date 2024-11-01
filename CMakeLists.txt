@@ -18,6 +18,8 @@ set(SYSTEM_NAME "PPP" CACHE STRING "System name: ")
 
 message("System name: ${SYSTEM_NAME}")
 
+set(DEVICE_ARCH "amd64" CACHE STRING "Device architecture: ")
+
 # If no build type was specified, set it to Release.
 if (NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE Release CACHE STRING
@@ -64,66 +66,106 @@ if (CMAKE_PROJECT_NAME STREQUAL PROJECT_NAME)
     endif ()
 endif ()
 
+# Threads
+find_package(Threads REQUIRED)
+
+# CUDA
+set(CUDA_TOOLKIT_ROOT_DIR /usr/local/cuda)
+find_package(CUDA REQUIRED)
+find_package(CUDAToolkit REQUIRED)
+
+#OpenCV
+find_package(OpenCV REQUIRED)
+
+# Protobuf
+option(protobuf_MODULE_COMPATIBLE TRUE)
+find_package(Protobuf CONFIG REQUIRED)
+message(STATUS "Using protobuf ${Protobuf_VERSION}")
+
+set(_PROTOBUF_LIBPROTOBUF protobuf::libprotobuf)
+set(_REFLECTION gRPC::grpc++_reflection)
+if (CMAKE_CROSSCOMPILING)
+find_program(_PROTOBUF_PROTOC protoc)
+else ()
+set(_PROTOBUF_PROTOC $<TARGET_FILE:protobuf::protoc>)
+endif ()
+
+# Manually specify the path to the protobufprotocols
+set(protobufprotocols_DIR "${CMAKE_CURRENT_BINARY_DIR}/../protobufprotocols")
+
+if (${SYSTEM_NAME} STREQUAL "FCPO")
+    set(CUDACXX /usr/local/cuda/bin/nvcc)
+    set(CMAKE_CUDA_COMPILER ${CUDACXX})
+
+    # list(APPEND CMAKE_PREFIX_PATH /libtorch)
+    execute_process(
+        COMMAND ${CUDA_TOOLKIT_ROOT_DIR}/bin/nvcc --list-gpu-arch
+        OUTPUT_VARIABLE DETECTED_ARCHITECTURE
+        ERROR_QUIET
+    )
+    # Parse the architecture from the nvcc output
+    string(REGEX MATCHALL "compute_([0-9]+)" DETECTED_ARCHITECTURE "${DETECTED_ARCHITECTURE}")
+    foreach(ARCH ${DETECTED_ARCHITECTURE})
+        string(REGEX REPLACE "compute_" "" ARCH_NUM ${ARCH})
+        list(APPEND CMAKE_CUDA_ARCHITECTURES ${ARCH_NUM})
+    endforeach()
+    if (CMAKE_CUDA_ARCHITECTURES STREQUAL "")
+        message(WARNING "No CUDA architectures detected, resorting to native")
+        set(CMAKE_CUDA_ARCHITECTURES 'native')
+    else ()
+        message(STATUS "Available CUDA architectures: ${CMAKE_CUDA_ARCHITECTURES}")
+    endif ()
+
+    # Automatically detect the CUDA architecture using nvcc
+    if (${DEVICE_ARCH} STREQUAL "amd64")
+        list(APPEND CMAKE_PREFIX_PATH /libtorch)
+    else()
+        set (Torch_DIR /home/cdsn/.local/lib/python3.8/site-packages/torch/share/cmake/Torch)
+    endif()
+    find_package(Torch REQUIRED)
+endif()
+
+# Boost
+find_package(Boost REQUIRED)
+include_directories(${Boost_INCLUDE_DIR})
+
+# gRPC
+set(gRPC_DIR /grpc/lib/cmake/grpc)
+message(${gRPC_DIR})
+find_package(gRPC CONFIG REQUIRED)
+message(STATUS "Using gRPC ${gRPC_VERSION}")
+
+set(_GRPC_GRPCPP gRPC::grpc++)
+if (CMAKE_CROSSCOMPILING)
+find_program(_GRPC_CPP_PLUGIN_EXECUTABLE grpc_cpp_plugin)
+else ()
+set(_GRPC_CPP_PLUGIN_EXECUTABLE $<TARGET_FILE:gRPC::grpc_cpp_plugin>)
+endif ()
+
+# SPDLOG logging
+find_package(spdlog REQUIRED)
+
+# PostgreSQL database
+find_package(PostgreSQL REQUIRED)
+find_package(PkgConfig REQUIRED)
+pkg_check_modules(LIBPQXX REQUIRED libpqxx)
+
+add_subdirectory(libs/misc)
+add_subdirectory(libs/profiler)
+add_subdirectory(libs/microservice)
+add_subdirectory(libs/utils/protobufprotocols)
+
+if (${SYSTEM_NAME} STREQUAL "FCPO")
+    add_subdirectory(libs/container_agent/fcpo_learning)
+endif()
+
+add_subdirectory(libs/controller)
+add_subdirectory(libs/communicator)
+
+
 if (ON_HOST STREQUAL "ON")
     message(STATUS "Building for host======================================")
 
-    # Use the correct version of CUDA
-    set(CUDA_TOOLKIT_ROOT_DIR /usr/local/cuda)
-
-    find_package(Threads REQUIRED)
-
-    find_package(CUDA REQUIRED)
-    find_package(OpenCV REQUIRED)
-    find_package(CUDAToolkit REQUIRED)
-    find_package(PythonLibs 3 REQUIRED)
-    # find_package(LightGBM REQUIRED)
-
-    # Find Protobuf installation
-    option(protobuf_MODULE_COMPATIBLE TRUE)
-    find_package(Protobuf CONFIG REQUIRED)
-    message(STATUS "Using protobuf ${Protobuf_VERSION}")
-
-    set(_PROTOBUF_LIBPROTOBUF protobuf::libprotobuf)
-    set(_REFLECTION gRPC::grpc++_reflection)
-    if (CMAKE_CROSSCOMPILING)
-    find_program(_PROTOBUF_PROTOC protoc)
-    else ()
-    set(_PROTOBUF_PROTOC $<TARGET_FILE:protobuf::protoc>)
-    endif ()
-
-    # Find Boost installation
-    find_package(Boost REQUIRED)
-    include_directories(${Boost_INCLUDE_DIR})
-
-    # Find gRPC installation
-    # Looks for gRPCConfig.cmake file installed by gRPC's cmake installation.
-    set(gRPC_DIR /grpc/lib/cmake/grpc)
-    message(${gRPC_DIR})
-    find_package(gRPC CONFIG REQUIRED)
-    message(STATUS "Using gRPC ${gRPC_VERSION}")
-
-    set(_GRPC_GRPCPP gRPC::grpc++)
-    if (CMAKE_CROSSCOMPILING)
-    find_program(_GRPC_CPP_PLUGIN_EXECUTABLE grpc_cpp_plugin)
-    else ()
-    set(_GRPC_CPP_PLUGIN_EXECUTABLE $<TARGET_FILE:gRPC::grpc_cpp_plugin>)
-    endif ()
-
-    find_package(spdlog REQUIRED)
-
-    find_package(PostgreSQL REQUIRED)
-    find_package(PkgConfig REQUIRED)
-    pkg_check_modules(LIBPQXX REQUIRED libpqxx)
-
-    # Manually specify the path to the protobufprotocols
-    set(protobufprotocols_DIR "${CMAKE_CURRENT_BINARY_DIR}/../protobufprotocols")
-
-    add_subdirectory(libs/misc)
-    add_subdirectory(libs/microservice)
-    add_subdirectory(libs/utils/protobufprotocols)
-    add_subdirectory(libs/controller)
-    add_subdirectory(libs/communicator)
-    add_subdirectory(libs/container_agent)
     add_subdirectory(libs/device_agent)
     add_subdirectory(libs/device_agent/sink_agent)
 
@@ -140,86 +182,12 @@ else()
     if (NOT TensorRT_DIR)
         set(TensorRT_DIR /TensorRT/)
     endif ()
-    # Use the correct version of CUDA
-    set(CUDA_TOOLKIT_ROOT_DIR /usr/local/cuda)
-
-    # Set LightGBM include directories
-    # set(LIGHTGBM_INCLUDE_DIR "/usr/include/LightGBM")
-    # include_directories(${LIGHTGBM_INCLUDE_DIR})
-
-    # Find LightGBM library
-    # find_library(LIGHTGBM_LIBRARY
-    # NAMES lib_lightgbm.sols /T
-    # PATHS "/usr/lib"
-    # NO_DEFAULT_PATH)
-
-    # if(NOT LIGHTGBM_LIBRARY)
-    #     message(FATAL_ERROR "LightGBM library not found.")
-    # endif()
-
-    find_package(Threads REQUIRED)
-
-    # We require CUDA, OpenCV, and TensorRT
     find_package(TensorRT REQUIRED)
-    find_package(CUDA REQUIRED)
-    find_package(OpenCV REQUIRED)
-    find_package(CUDAToolkit REQUIRED)
-    # find_package(LightGBM REQUIRED)
 
-    # Manually specify the path to Python
-    set(PYTHON_INCLUDE_DIR "/usr/include/python3.8")
-    include_directories(${PYTHON_INCLUDE_DIR})
-
-    # Find Protobuf installation
-    option(protobuf_MODULE_COMPATIBLE TRUE)
-    find_package(Protobuf CONFIG REQUIRED)
-    message(STATUS "Using protobuf ${Protobuf_VERSION}")
-
-    set(_PROTOBUF_LIBPROTOBUF protobuf::libprotobuf)
-    set(_REFLECTION gRPC::grpc++_reflection)
-    if (CMAKE_CROSSCOMPILING)
-    find_program(_PROTOBUF_PROTOC protoc)
-    else ()
-    set(_PROTOBUF_PROTOC $<TARGET_FILE:protobuf::protoc>)
-    endif ()
-
-    # Find Boost installation
-    find_package(Boost REQUIRED)
-    include_directories(${Boost_INCLUDE_DIR})
-
-
-    # Set the path to the gRPC installation
-    set(CMAKE_PREFIX_PATH "/grpc" ${CMAKE_PREFIX_PATH})
-    # Find gRPC installation
-    # Looks for gRPCConfig.cmake file installed by gRPC's cmake installation.
-    find_package(gRPC CONFIG REQUIRED)
-    message(STATUS "Using gRPC ${gRPC_VERSION}")
-
-    set(_GRPC_GRPCPP gRPC::grpc++)
-    if (CMAKE_CROSSCOMPILING)
-    find_program(_GRPC_CPP_PLUGIN_EXECUTABLE grpc_cpp_plugin)
-    else ()
-    set(_GRPC_CPP_PLUGIN_EXECUTABLE $<TARGET_FILE:gRPC::grpc_cpp_plugin>)
-    endif ()
-
-    find_package(spdlog REQUIRED)
-
-    find_package(PostgreSQL REQUIRED)
-    find_package(PkgConfig REQUIRED)
-    pkg_check_modules(LIBPQXX REQUIRED libpqxx)
-
-    # Manually specify the path to the protobufprotocols
-    set(protobufprotocols_DIR "${CMAKE_CURRENT_BINARY_DIR}/../protobufprotocols")
-
-    add_subdirectory(libs/misc)
-    add_subdirectory(libs/microservice)
-    add_subdirectory(libs/utils/protobufprotocols)
-    add_subdirectory(libs/controller)
-    add_subdirectory(libs/communicator)
-    add_subdirectory(libs/container_agent)
     add_subdirectory(libs/trtengine)
     add_subdirectory(libs/utils/onnx2trt)
     add_subdirectory(libs/baseprocessors)
+    add_subdirectory(libs/container_agent)
     add_subdirectory(libs/workloads/data_source)
     add_subdirectory(libs/workloads/yolov5)
     add_subdirectory(libs/workloads/yolov5-plate)

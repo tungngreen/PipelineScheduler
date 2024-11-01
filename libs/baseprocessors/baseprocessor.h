@@ -45,6 +45,19 @@ inline cv::cuda::GpuMat resizePadRightBottom(
     uint8_t RESIZE_INTERPOL_TYPE = 3 //INTER_AREA
 );
 
+inline bool resizeIntoFrame(
+    const cv::cuda::GpuMat &input,
+    cv::cuda::GpuMat &frame,
+    const uint16_t left,
+    const uint16_t top,
+    const uint16_t height,
+    const uint16_t width,
+    cv::cuda::Stream &stream = cv::cuda::Stream::Null(),
+    uint8_t IMG_TYPE = 16, //CV_8UC3
+    uint8_t COLOR_CVT_TYPE = 4, //CV_BGR2RGB
+    uint8_t RESIZE_INTERPOL_TYPE = 3 //INTER_AREA
+);
+
 inline cv::cuda::GpuMat normalize(
     const cv::cuda::GpuMat &input,
     cv::cuda::Stream &stream = cv::cuda::Stream::Null(),
@@ -63,7 +76,7 @@ inline cv::cuda::GpuMat cvtHWCToCHW(
  * @brief 
  * 
  */
-struct BaseReqBatcherConfigs : BaseMicroserviceConfigs{
+struct BasePreprocessorConfigs : BaseMicroserviceConfigs{
     uint8_t msvc_imgType = 16; //CV_8UC3
     uint8_t msvc_colorCvtType = 4; //CV_BGR2RGB
     uint8_t msvc_resizeInterpolType = 3; //INTER_AREA
@@ -96,48 +109,99 @@ struct BaseClassifierConfigs : BaseMicroserviceConfigs {
     uint16_t msvc_numClasses;
 };
 
+struct ConcatDims {
+    int32_t x1, y1, width, height;
+};
 
-class BaseReqBatcher : public Microservice {
+struct ConcatConfigs {
+    uint8_t numImgs = 1;
+    uint8_t currIndex = 0;
+
+    std::vector<ConcatDims> concatDims;
+};
+
+
+void concatConfigsGenerator(
+    const RequestShapeType &inferenceShapes,
+    ConcatConfigs &concat,
+    const uint8_t padding = 0
+);
+
+
+
+class BasePreprocessor : public Microservice {
 public:
-    BaseReqBatcher(const json &jsonConfigs);
-    ~BaseReqBatcher() = default;
+    BasePreprocessor(const json &jsonConfigs);
+    ~BasePreprocessor() = default;
 
-    virtual void batchRequests();
-    virtual void batchRequestsProfiling();
-    inline void executeBatch(BatchTimeType &genTime, RequestSLOType &slo, RequestPathType &path,
-                      std::vector<RequestData<LocalGPUReqDataType>> &buffer,
-                      std::vector<RequestData<LocalGPUReqDataType>> &prev);
-    
-    virtual void updateCycleTiming();
+    BasePreprocessor(const BasePreprocessor &other);
+
+    virtual void preprocess();
+    virtual void preprocessProfiling();
 
     void dispatchThread() override {
         if (msvc_RUNMODE == RUNMODE::EMPTY_PROFILING) {
-            spdlog::get("container_agent")->trace("{0:s} dispatching profiling thread.", __func__);
-            std::thread batcher(&BaseReqBatcher::batchRequestsProfiling, this);
-            batcher.detach();
+            spdlog::get("container_agent")->trace("{0:s} dispatching profiling thread.", msvc_name);
+            std::thread preprocessor(&BasePreprocessor::preprocessProfiling, this);
+            preprocessor.detach();
             return;
         }
-        spdlog::get("container_agent")->trace("{0:s} dispatching batching thread.", __func__);
-        std::thread batcher(&BaseReqBatcher::batchRequests, this);
-        batcher.detach();
+        spdlog::get("container_agent")->trace("{0:s} dispatching preprocessing thread.", msvc_name);
+        std::thread preprocessor(&BasePreprocessor::preprocess, this);
+        preprocessor.detach();
     }
 
-    BaseReqBatcherConfigs loadConfigsFromJson(const json &jsonConfigs);
+    BasePreprocessorConfigs loadConfigsFromJson(const json &jsonConfigs);
 
     virtual void loadConfigs(const json &jsonConfigs, bool isConstructing = false) override;
 
-    bool readModelProfile(const json &profile);
-
 protected:
-    BatchSizeType msvc_onBufferBatchSize = 0;
     std::vector<cv::cuda::GpuMat> msvc_batchBuffer;
-    inline bool isTimeToBatch() override;
     template <typename T>
     bool validateRequest(Request<T> &req);
 
     uint8_t msvc_imgType, msvc_colorCvtType, msvc_resizeInterpolType;
     float msvc_imgNormScale;
     std::vector<float> msvc_subVals, msvc_divVals;
+
+    ConcatConfigs msvc_concat;
+};
+
+class BaseBatcher : public Microservice {
+public:
+    BaseBatcher(const json &jsonConfigs);
+    ~BaseBatcher() = default;
+
+    virtual void batchRequests();
+
+    virtual void loadConfigs(const json &jsonConfigs, bool isConstructing = false) override;
+
+protected:
+    virtual void dispatchThread() override {
+        spdlog::get("container_agent")->trace("{0:s} dispatching batching thread.", msvc_name);
+        std::thread batcher(&BaseBatcher::batchRequests, this);
+        batcher.detach();
+    }
+
+    inline bool isTimeToBatch() override;
+
+    template <typename T>
+    bool validateRequest(Request<T> &req);
+
+    
+    inline void executeBatching(BatchTimeType &genTime, RequestSLOType &slo, RequestPathType &path,
+                             std::vector<RequestData<LocalGPUReqDataType>> &bufferData,
+                             std::vector<RequestData<LocalGPUReqDataType>> &prevData);
+
+    inline bool readModelProfile(const json &profile);
+
+    virtual void updateCycleTiming();
+
+
+    // number of concatentated and ready to be batched requests
+    BatchSizeType msvc_onBufferBatchSize = 0;
+    BatchSizeType msvc_avgBatchSize;
+
     BatchInferProfileListType msvc_batchInferProfileList;
     ClockType oldestReqTime;
     // This is the time calculated by the ideal schedule
@@ -165,12 +229,12 @@ public:
 
     void dispatchThread() override {
         if (msvc_RUNMODE == RUNMODE::EMPTY_PROFILING) {
-            spdlog::get("container_agent")->trace("{0:s} dispatching profiling thread.", __func__);
+            spdlog::get("container_agent")->trace("{0:s} dispatching profiling thread.", msvc_name);
             std::thread inferencer(&BaseBatchInferencer::inferenceProfiling, this);
             inferencer.detach();
             return;
         }
-        spdlog::get("container_agent")->trace("{0:s} dispatching inference thread.", __func__);
+        spdlog::get("container_agent")->trace("{0:s} dispatching inference thread.", msvc_name);
         std::thread inferencer(&BaseBatchInferencer::inference, this);
         inferencer.detach();
     }
@@ -186,6 +250,14 @@ protected:
     Engine* msvc_inferenceEngine = nullptr;
 };
 
+template <typename T>
+struct BoundingBox {
+    T bbox;
+    int x1, y1, x2, y2;
+    float score;
+    uint16_t classID;
+};
+
 /**
  * @brief crop from input image all bounding boxes whose coordinates are provided by `bbox_coorList`
  * 
@@ -196,15 +268,16 @@ protected:
  *                      [x1, y1, x2, y2] (e.g., [0, 266, 260, 447])
  * @return cv::cuda::GpuMat
  */
-inline void crop(
-    const cv::cuda::GpuMat &image,
+inline std::vector<std::pair<uint8_t, uint16_t>> crop(
+    const std::vector<cv::cuda::GpuMat> &images,
+    const std::vector<ConcatDims> &concatDims,
     int orig_h,
     int orig_w,
     int infer_h,
     int infer_w,
-    int numDetections,
+    uint16_t numDetections,
     const float *bbox_coorList,
-    std::vector<cv::cuda::GpuMat> &croppedBBoxes
+    std::vector<BoundingBox<cv::cuda::GpuMat>> &croppedBBoxes
 );
 
 inline void cropOneBox(
@@ -223,23 +296,46 @@ public:
     };
     ~BasePostprocessor() = default;
 
+    BasePostprocessor(const BasePostprocessor &other) : Microservice(other) {
+        std::lock(msvc_overallMutex, other.msvc_overallMutex);
+        std::lock_guard<std::mutex> lockThis(msvc_overallMutex, std::adopt_lock);
+        std::lock_guard<std::mutex> lockOther(other.msvc_overallMutex, std::adopt_lock);
+
+        msvc_inferenceShape = other.msvc_inferenceShape;
+        msvc_concat = other.msvc_concat;
+    };
+
     virtual void loadConfigs(const json &jsonConfigs, bool isConstructing = false) override {
         if (!isConstructing) {
             Microservice::loadConfigs(jsonConfigs, isConstructing);
         }
         msvc_processRecords.setKeepLength((uint64_t)jsonConfigs.at("cont_metricsScrapeIntervalMillisec") * 2);
         msvc_arrivalRecords.setKeepLength((uint64_t) jsonConfigs.at("cont_metricsScrapeIntervalMillisec") * 2);
+
+        msvc_concat.numImgs = jsonConfigs["msvc_concat"];
     };
-    virtual ProcessRecordType getProcessRecords() override {
+    virtual ProcessRecordType getProcessRecords()  {
         return msvc_processRecords.getRecords();
     }
 
-    virtual BatchInferRecordType getBatchInferRecords() override {
+    virtual void getProcessRecords(ProcessRecordType &overallRecords) {
+        msvc_processRecords.getRecords(overallRecords);
+    }
+
+    virtual BatchInferRecordType getBatchInferRecords() {
         return msvc_processRecords.getBatchInferRecords();
     }
 
-    virtual ArrivalRecordType getArrivalRecords() override {
+    virtual void getBatchInferRecords(BatchInferRecordType &overallRecords) {
+        msvc_processRecords.getBatchInferRecords(overallRecords);
+    }
+
+    virtual ArrivalRecordType getArrivalRecords() {
         return msvc_arrivalRecords.getRecords();
+    }
+
+    virtual void getArrivalRecords(ArrivalRecordType &overallRecords) {
+        msvc_arrivalRecords.getRecords(overallRecords);
     }
 
     virtual void addToPath(RequestPathType &path, uint64_t reqNum) {
@@ -281,12 +377,18 @@ protected:
         Request<LocalCPUReqDataType> cpuReq;
         Request<LocalGPUReqDataType> gpuReq;
     };
+
+    RequestShapeType msvc_inferenceShape;
+
+    ConcatConfigs msvc_concat;
 };
 
 class BaseBBoxCropper : public BasePostprocessor {
 public:
     BaseBBoxCropper(const json &jsonConfigs);
     ~BaseBBoxCropper() = default;
+
+    BaseBBoxCropper(const BaseBBoxCropper &other) : BasePostprocessor(other) {};
 
     void cropping();
 
@@ -302,12 +404,12 @@ public:
 
     void dispatchThread() override {
         if (msvc_RUNMODE == RUNMODE::EMPTY_PROFILING) {
-            spdlog::get("container_agent")->trace("{0:s} dispatching profiling thread.", __func__);
+            spdlog::get("container_agent")->trace("{0:s} dispatching profiling thread.", msvc_name);
             std::thread postprocessor(&BaseBBoxCropper::cropProfiling, this);
             postprocessor.detach();
             return;
         }
-        spdlog::get("container_agent")->trace("{0:s} dispatching cropping thread.", __func__);
+        spdlog::get("container_agent")->trace("{0:s} dispatching cropping thread.", msvc_name);
         std::thread postprocessor(&BaseBBoxCropper::cropping, this);
         postprocessor.detach();
     }
@@ -319,6 +421,8 @@ class BaseBBoxCropperAugmentation : public BasePostprocessor {
 public:
     BaseBBoxCropperAugmentation(const json &jsonConfigs);
     ~BaseBBoxCropperAugmentation() = default;
+
+    BaseBBoxCropperAugmentation(const BaseBBoxCropperAugmentation &other) : BasePostprocessor(other) {};
 
     void cropping();
 
@@ -334,12 +438,12 @@ public:
 
     void dispatchThread() override {
         if (msvc_RUNMODE == RUNMODE::EMPTY_PROFILING) {
-            spdlog::get("container_agent")->trace("{0:s} dispatching profiling thread.", __func__);
+            spdlog::get("container_agent")->trace("{0:s} dispatching profiling thread.", msvc_name);
             std::thread postprocessor(&BaseBBoxCropperAugmentation::cropProfiling, this);
             postprocessor.detach();
             return;
         }
-        spdlog::get("container_agent")->trace("{0:s} dispatching cropping thread.", __func__);
+        spdlog::get("container_agent")->trace("{0:s} dispatching cropping thread.", msvc_name);
         std::thread postprocessor(&BaseBBoxCropperAugmentation::cropping, this);
         postprocessor.detach();
     }
@@ -358,7 +462,7 @@ public:
 
     virtual void dispatchThread() override {
         if (msvc_RUNMODE == RUNMODE::EMPTY_PROFILING) {
-            spdlog::get("container_agent")->trace("{0:s} dispatching profiling thread.", __func__);
+            spdlog::get("container_agent")->trace("{0:s} dispatching profiling thread.", msvc_name);
             std::thread postprocessor(&BaseBBoxCropperVerifier::cropProfiling, this);
             postprocessor.detach();
             return;
@@ -377,11 +481,19 @@ public:
     BaseClassifier(const json &jsonConfigs);
     ~BaseClassifier() = default;
 
-    virtual void classify() ;
+    BaseClassifier(const BaseClassifier &other) : BasePostprocessor(other) {
+        std::lock(msvc_overallMutex, other.msvc_overallMutex);
+        std::lock_guard<std::mutex> lockThis(msvc_overallMutex, std::adopt_lock);
+        std::lock_guard<std::mutex> lockOther(other.msvc_overallMutex, std::adopt_lock);
+
+        msvc_numClasses = other.msvc_numClasses;
+    };
+
+    virtual void classify();
 
     virtual void dispatchThread() override {
         if (msvc_RUNMODE == RUNMODE::EMPTY_PROFILING) {
-            spdlog::get("container_agent")->trace("{0:s} dispatching profiling thread.", __func__);
+            spdlog::get("container_agent")->trace("{0:s} dispatching profiling thread.", msvc_name);
             std::thread classifier(&BaseClassifier::classifyProfiling, this);
             classifier.detach();
             return;
@@ -397,7 +509,6 @@ public:
     virtual void loadConfigs(const json &jsonConfigs, bool isConstructing = false) override;
 
 protected:
-    RequestShapeType msvc_inferenceShape;
     uint16_t msvc_numClasses;
 };
 
@@ -405,6 +516,8 @@ class BaseSoftmaxClassifier : public BaseClassifier {
 public:
     BaseSoftmaxClassifier(const json &jsonConfigs);
     ~BaseSoftmaxClassifier() = default;
+
+    BaseSoftmaxClassifier(const BaseSoftmaxClassifier &other) : BaseClassifier(other) {};
 
     virtual void classify() override;
     virtual void classifyProfiling() override;
@@ -415,11 +528,13 @@ public:
     BaseKPointExtractor(const json &jsonConfigs);
     ~BaseKPointExtractor() = default;
 
+    BaseKPointExtractor(const BaseKPointExtractor &other) : BasePostprocessor(other) {};
+
     virtual void extractor();
 
     virtual void dispatchThread() override {
         if (msvc_RUNMODE == RUNMODE::EMPTY_PROFILING) {
-            spdlog::get("container_agent")->trace("{0:s} dispatching profiling thread.", __func__);
+            spdlog::get("container_agent")->trace("{0:s} dispatching profiling thread.", msvc_name);
             std::thread extractor(&BaseKPointExtractor::extractorProfiling, this);
             extractor.detach();
             return;
@@ -444,7 +559,7 @@ public:
 
     virtual void dispatchThread() override {
         if (msvc_RUNMODE == RUNMODE::EMPTY_PROFILING) {
-            spdlog::get("container_agent")->trace("{0:s} dispatching profiling thread.", __func__);
+            spdlog::get("container_agent")->trace("{0:s} dispatching profiling thread.", msvc_name);
             std::thread sinker(&BaseSink::sink, this);
             sinker.detach();
             return;

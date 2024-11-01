@@ -3,14 +3,14 @@
 void DataSourceAgent::runService(const json &pipeConfigs, const json &configs) {
     this->dispatchMicroservices();
     if (configs["container"]["cont_allocationMode"] == 0) {
-        while (!cont_msvcsList[0]->checkReady()) {
+        while (!cont_msvcsGroups["receiver"].msvcList[0]->checkReady()) {
             std::this_thread::sleep_for(std::chrono::milliseconds(1000 / pipeConfigs[0]["msvc_idealBatchSize"].get<int>()));
         }
     } else {
         if (configs["container"]["cont_RUNMODE"] == 0) {
             std::this_thread::sleep_for(std::chrono::seconds(30));
         }
-        cont_msvcsList[0]->setReady();
+        cont_msvcsGroups["receiver"].msvcList[0]->setReady();
     }
 
     this->waitReady();
@@ -38,6 +38,7 @@ void DataSourceAgent::SetStartFrameRequestHandler::Proceed() {
 }
 
 void DataSourceAgent::HandleRecvRpcs() {
-    new SetStartFrameRequestHandler(&service, server_cq.get(), &cont_msvcsList);
+    auto msvcsList = getAllMicroservices();
+    new SetStartFrameRequestHandler(&service, server_cq.get(), &msvcsList);
     ContainerAgent::HandleRecvRpcs();
 }

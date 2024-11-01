@@ -10,8 +10,8 @@
         "cont_pipeline": [
             {
                 "msvc_name": "data_reader",
+                "msvc_numInstances": 1,
                 "msvc_idealBatchSize": 15,
-                "msvc_appLvlConfigs": "",
                 "msvc_dnstreamMicroservices": [
                     {
                         "nb_classOfInterest": -1,
@@ -32,9 +32,9 @@
                 ],
                 "msvc_dataShape": [
                     [
-                        3,
-                        640,
-                        640
+                        -1,
+                        -1,
+                        -1
                     ]
                 ],
                 "msvc_pipelineSLO": 999999,
@@ -61,8 +61,8 @@
             },
             {
                 "msvc_name": "sender",
+                "msvc_numInstances": 1,
                 "msvc_idealBatchSize": 1,
-                "msvc_appLvlConfigs": "",
                 "msvc_dnstreamMicroservices": [
                     {
                         "nb_classOfInterest": -1,
@@ -89,7 +89,7 @@
                     ]
                 ],
                 "msvc_pipelineSLO": 999999,
-                "msvc_type": 4000,
+                "msvc_type": 4002,
                 "msvc_upstreamMicroservices": [
                     {
                         "nb_classOfInterest": -2,

@@ -93,12 +93,16 @@ void DataReader::Process() {
         if (std::fmod(frameCount, skipRatio) < 1) {
             readFrames++;
             msvc_currFrameID = (int) source.get(cv::CAP_PROP_POS_FRAMES);
-            frame = resizePadRightBottom(frame, msvc_dataShape[0][1], msvc_dataShape[0][2],
-                                         {128, 128, 128}, cv::INTER_AREA);
+            if (msvc_dataShape[0][1] != -1 && msvc_dataShape[0][2] != -1) {
+                frame = resizePadRightBottom(frame, msvc_dataShape[0][1], msvc_dataShape[0][2],
+                                             {128, 128, 128}, cv::INTER_AREA);
+            }
             RequestMemSizeType frameMemSize = frame.channels() * frame.rows * frame.cols * CV_ELEM_SIZE1(frame.type());
             for (auto q: msvc_OutQueue) {
                 Request<LocalCPUReqDataType> req;
                 if (!q->getEncoded()) {
+                    // 1. The very moment request is originally generated at the beggining of the pipeline. (FIRST_TIMESTAMP)
+                    // This timestamp will remain throughout the lifetime of the request
                     ClockType time = std::chrono::system_clock::now();
                     req = {{{time, time}}, {msvc_contSLO},
                            {"[" + msvc_hostDevice + "|" + link + "|" + std::to_string(readFrames) +
