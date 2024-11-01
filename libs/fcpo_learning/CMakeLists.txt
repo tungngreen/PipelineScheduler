@@ -35,7 +35,7 @@ set(PROJECT_PREFIX fcpo_learning)
 
 find_package(Threads REQUIRED)
 
-set(misc_DIR "${CMAKE_CURRENT_BINARY_DIR}/../../misc")
+set(misc_DIR "${CMAKE_CURRENT_BINARY_DIR}/../misc")
 find_package(misc CONFIG REQUIRED)
 
 # Defines the headers for this library.
@@ -49,7 +49,7 @@ target_include_directories(fcpo_learning
         ${OpenCV_INCLUDE_DIRS}
         ${PostgreSQL_INCLUDE_DIRS}
         ${LIBPQXX_INCLUDE_DIRS}
-        $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/../../utils/protobufprotocols>
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/../utils/protobufprotocols>
         PRIVATE
         # Used only when building the library:
         src)

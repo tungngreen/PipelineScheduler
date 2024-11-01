@@ -34,7 +34,7 @@ set(PROJECT_PREFIX container_agent)
 
 find_package(Threads REQUIRED)
 
-set (profiler_DIR "${CMAKE_CURRENT_BINARY_DIR}/../profiler")
+set (profiler_DIR "${CMAKE_CURRENT_BINARY_DIR}/../utils/profiler")
 find_package(profiler CONFIG REQUIRED)
 
 set(microservice_DIR "${CMAKE_CURRENT_BINARY_DIR}/../microservice")
@@ -49,7 +49,7 @@ find_package(controller CONFIG REQUIRED)
 set(baseprocessors_DIR "${CMAKE_CURRENT_BINARY_DIR}/../baseprocessors")
 find_package(baseprocessors CONFIG REQUIRED)
 
-set(fcpo_learning_DIR "${CMAKE_CURRENT_BINARY_DIR}/fcpo_learning")
+set(fcpo_learning_DIR "${CMAKE_CURRENT_BINARY_DIR}/../fcpo_learning")
 find_package(fcpo_learning CONFIG REQUIRED)
 
 # Defines the headers for this library.
