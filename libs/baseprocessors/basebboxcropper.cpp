@@ -160,7 +160,7 @@ inline std::vector<std::pair<uint8_t, uint16_t>> crop(
         // std::cout << "Valid detection" << std::endl;
         imageIndexList.emplace_back(std::make_pair(chosenImgIdx, i));
         cv::cuda::GpuMat croppedBBox = images[chosenImgIdx](
-            cv::Range(y1, y2), 
+            cv::Range(y1, y2),
             cv::Range(x1, x2)
         ).clone();
 
@@ -472,7 +472,7 @@ void BaseBBoxCropper::cropping() {
             for (BatchSizeType j = 0; j < msvc_concat.numImgs; ++j) {
                 // the index of the image in the whole batch of multiple concatenated frames
                 uint16_t imageIndexInBatch = i * msvc_concat.numImgs + j;
-                totalInMem.emplace_back(imageList[imageIndexInBatch].data.channels() * imageList[imageIndexInBatch].data.rows * 
+                totalInMem.emplace_back(imageList[imageIndexInBatch].data.channels() * imageList[imageIndexInBatch].data.rows *
                                         imageList[imageIndexInBatch].data.cols * CV_ELEM_SIZE1(imageList[imageIndexInBatch].data.type()));
             }
 
@@ -664,15 +664,17 @@ void BaseBBoxCropper::cropping() {
                             originStream,
                             getSenderHost(currReq.req_travelPath[imageIndexInBatch])
                     );
+                    addToLatencyEWMA(
+                            std::chrono::duration_cast<TimePrecisionType>(currReq_recvTime - currReq.req_origGenTime[imageIndexInBatch][3]).count());
                 }
             }
-
 
             singleImageBBoxList.clear();
         }
 
         msvc_batchCount++;
-        
+        msvc_miniBatchCount++;
+
         spdlog::get("container_agent")->trace("{0:s} sleeps for {1:d} millisecond", msvc_name, msvc_interReqTime);
         std::this_thread::sleep_for(std::chrono::milliseconds(msvc_interReqTime));
     }

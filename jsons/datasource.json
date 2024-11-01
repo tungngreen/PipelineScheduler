@@ -1,7 +1,7 @@
 {
     "container": {
-        "cont_experimentName": "ex1",
-        "cont_systemName": "ppp",
+        "cont_experimentName": "rl1",
+        "cont_systemName": "fcpo",
         "cont_pipeName": "every",
         "cont_taskName": "dsrc",
         "cont_hostDevice": "orn",

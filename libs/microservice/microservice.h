@@ -558,8 +558,8 @@ public:
 
     /**
      * @brief Get records into a combined record from multiple microservices
-     * 
-     * @param overallRecords 
+     *
+     * @param overallRecords
      */
     void getRecords(ArrivalRecordType &overallRecords) {
         std::unique_lock<std::mutex> lock(mutex);
@@ -690,8 +690,8 @@ public:
 
     /**
      * @brief Get records into a combined record from multiple microservices
-     * 
-     * @param overallRecords 
+     *
+     * @param overallRecords
      */
     void getRecords(ProcessRecordType &overallRecords) {
         std::unique_lock<std::mutex> lock(mutex);
@@ -909,6 +909,15 @@ public:
         return msvc_totalReqCount.exchange(0);
     };
 
+    unsigned int GetMiniBatchCount() {
+        return msvc_miniBatchCount.exchange(0);
+    };
+
+    unsigned int GetAvgExecutedBatchSize() {
+        msvc_miniBatchCount = 0;
+        return msvc_avgBatchSize.exchange(0);
+    }
+
     unsigned int GetQueueDrops() {
         unsigned int val = 0;
         for (auto &queue : msvc_OutQueue) {
@@ -916,6 +925,20 @@ public:
         }
         return val;
     };
+
+    void addToLatencyEWMA(double latency) {
+        if (msvc_totalLatencyEWMA == 0) {
+            msvc_totalLatencyEWMA = latency;
+        } else if (msvc_totalLatencyEWMA < latency) {
+            msvc_totalLatencyEWMA = (msvc_totalLatencyEWMA * 0.2) + (latency * 0.8);
+        } else {
+            msvc_totalLatencyEWMA = (msvc_totalLatencyEWMA * 0.8) + (latency * 0.2);
+        }
+    }
+
+    double getLatencyEWMA() {
+        return msvc_totalLatencyEWMA.exchange(0.0);
+    }
 
     virtual PerSecondArrivalRecord getPerSecondArrivalRecord() {
         return {};
@@ -1060,6 +1083,7 @@ protected:
     std::atomic<unsigned int> msvc_avgBatchSize = 0;
     std::atomic<unsigned int> msvc_miniBatchCount = 0;
     std::atomic<unsigned int> msvc_totalReqCount = 0;
+    std::atomic<double> msvc_totalLatencyEWMA = 0.0;
 
     //
     NumMscvType nummsvc_upstreamMicroservices = 0;
@@ -1072,6 +1096,8 @@ protected:
     std::vector<RequestDataShapeType> msvc_dataShape;
 
     RequestShapeType msvc_inferenceShape;
+
+    ConcatConfigs msvc_concat;
 
     // Ideal batch size for this microservice, runtime batch size could be smaller though
     BatchSizeType msvc_idealBatchSize;

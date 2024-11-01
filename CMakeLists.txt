@@ -151,12 +151,12 @@ find_package(PkgConfig REQUIRED)
 pkg_check_modules(LIBPQXX REQUIRED libpqxx)
 
 add_subdirectory(libs/misc)
-add_subdirectory(libs/profiler)
+add_subdirectory(libs/utils/profiler)
 add_subdirectory(libs/microservice)
 add_subdirectory(libs/utils/protobufprotocols)
 
 if (${SYSTEM_NAME} STREQUAL "FCPO")
-    add_subdirectory(libs/container_agent/fcpo_learning)
+    add_subdirectory(libs/fcpo_learning)
 endif()
 
 add_subdirectory(libs/controller)

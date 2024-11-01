@@ -113,10 +113,11 @@ inline void BaseBatcher::executeBatching(BatchTimeType &genTime, RequestSLOType 
             prevData
     };
 
+    msvc_miniBatchCount++;
     msvc_batchCount++;
 
     spdlog::get("container_agent")->trace("{0:s} emplaced a request of batch size {1:d} ", msvc_name,
-                                           msvc_onBufferBatchSize);
+                                          msvc_onBufferBatchSize);
     msvc_OutQueue[0]->emplace(outReq);
     msvc_avgBatchSize += (msvc_onBufferBatchSize - msvc_avgBatchSize) / msvc_miniBatchCount;
     msvc_onBufferBatchSize = 0;
@@ -147,7 +148,7 @@ inline bool BaseBatcher::isTimeToBatch() {
     timeout = 100000;
     if ((msvc_RUNMODE == RUNMODE::PROFILING || 
          msvc_BATCH_MODE == BATCH_MODE::FIXED) && 
-        msvc_onBufferBatchSize == msvc_idealBatchSize) {
+        msvc_onBufferBatchSize >= msvc_idealBatchSize) {
         return true;
     }
 
@@ -159,7 +160,7 @@ inline bool BaseBatcher::isTimeToBatch() {
     if (msvc_onBufferBatchSize == 0) {
         return false;
     // If the batch is empty, then it doesn't really matter if it's time to batch or not
-    } else if (msvc_onBufferBatchSize == msvc_idealBatchSize) {
+    } else if (msvc_onBufferBatchSize >= msvc_idealBatchSize) {
         spdlog::get("container_agent")->trace("{0:s} got the ideal batch.", msvc_name);
         updateCycleTiming();
         return true;

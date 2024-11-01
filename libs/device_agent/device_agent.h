@@ -6,6 +6,7 @@
 #include <sys/sysinfo.h>
 #include "profiler.h"
 #include "controller.h"
+#include "bcedge.h"
 #include <arpa/inet.h>
 #include <sys/socket.h>
 #include <netdb.h>
@@ -19,7 +20,6 @@
 #include <grpcpp/health_check_service_interface.h>
 #include <google/protobuf/empty.pb.h>
 #include <pqxx/pqxx>
-#include "indevicecommunication.grpc.pb.h"
 
 using trt::TRTConfigs;
 
@@ -32,17 +32,14 @@ ABSL_DECLARE_FLAG(uint16_t, dev_loggingMode);
 ABSL_DECLARE_FLAG(std::string, dev_logPath);
 ABSL_DECLARE_FLAG(uint16_t, dev_port_offset);
 
-using grpc::Status;
-using grpc::CompletionQueue;
-using grpc::ClientContext;
-using grpc::ClientAsyncResponseReader;
 using grpc::ServerBuilder;
 using grpc::ServerContext;
 using grpc::ServerCompletionQueue;
-using indevicecommunication::InDeviceCommunication;
-using indevicecommunication::Signal;
-using indevicecommunication::Connection;
-using indevicecommunication::ProcessData;
+using indevicecommands::InDeviceCommands;
+using indevicecommands::ContainerSignal;
+using indevicecommands::Connection;
+using indevicecommands::TimeKeeping;
+using indevicemessages::ProcessData;
 using EmptyMessage = google::protobuf::Empty;
 
 typedef std::tuple<
@@ -56,7 +53,7 @@ typedef std::tuple<
 > MsvcConfigTupleType;
 
 struct DevContainerHandle {
-    std::unique_ptr<InDeviceCommunication::Stub> stub;
+    std::unique_ptr<InDeviceCommands::Stub> stub;
     CompletionQueue *cq;
     unsigned int port;
     unsigned int pid;
@@ -71,8 +68,11 @@ public:
 
     virtual ~DeviceAgent() {
         running = false;
+        ContainerSignal message;
+        message.set_forced(true);
         for (const auto &c: containers) {
-            StopContainer(c.second);
+            message.set_name(c.first);
+            StopContainer(c.second, message);
         }
 
         if (controller_server) {
@@ -138,7 +138,7 @@ protected:
         return system(command.c_str());
     };
 
-    static void StopContainer(const DevContainerHandle &container, bool forced = false);
+    static void StopContainer(const DevContainerHandle &container, ContainerSignal message);
 
     void UpdateContainerSender(int mode, const std::string &cont_name, const std::string &dwnstr, const std::string &ip,
                                const int &port);
@@ -171,26 +171,28 @@ protected:
 
     class DeviceRequestHandler : public RequestHandler {
     public:
-        DeviceRequestHandler(InDeviceCommunication::AsyncService *service, ServerCompletionQueue *cq, DeviceAgent *d)
+        DeviceRequestHandler(InDeviceMessages::AsyncService *service, ServerCompletionQueue *cq, DeviceAgent *d)
                 : RequestHandler(cq, d), service(service) {};
 
     protected:
-        InDeviceCommunication::AsyncService *service;
+        InDeviceMessages::AsyncService *service;
     };
 
     class ControlRequestHandler : public RequestHandler {
     public:
         ControlRequestHandler(ControlCommands::AsyncService *service, ServerCompletionQueue *cq, DeviceAgent *d)
-                : RequestHandler(cq, d), service(service) {};
+                : RequestHandler(cq, d), service(service), responder(&ctx) {};
 
     protected:
         ControlCommands::AsyncService *service;
+        EmptyMessage reply;
+        grpc::ServerAsyncResponseWriter<EmptyMessage> responder;
     };
 
 
     class ReportStartRequestHandler : public DeviceRequestHandler {
     public:
-        ReportStartRequestHandler(InDeviceCommunication::AsyncService *service, ServerCompletionQueue *cq,
+        ReportStartRequestHandler(InDeviceMessages::AsyncService *service, ServerCompletionQueue *cq,
                                   DeviceAgent *device)
                 : DeviceRequestHandler(service, cq, device), responder(&ctx) {
             Proceed();
@@ -204,11 +206,27 @@ protected:
         grpc::ServerAsyncResponseWriter<ProcessData> responder;
     };
 
+    class StartFederatedLearningRequestHandler : public DeviceRequestHandler {
+    public:
+        StartFederatedLearningRequestHandler(InDeviceMessages::AsyncService *service, ServerCompletionQueue *cq,
+                                             DeviceAgent *device)
+                : DeviceRequestHandler(service, cq, device), responder(&ctx) {
+            Proceed();
+        }
+
+        void Proceed() final;
+
+    private:
+        FlData request;
+        EmptyMessage reply;
+        grpc::ServerAsyncResponseWriter<EmptyMessage> responder;
+    };
+
     class ExecuteNetworkTestRequestHandler : public ControlRequestHandler {
     public:
         ExecuteNetworkTestRequestHandler(ControlCommands::AsyncService *service, ServerCompletionQueue *cq,
                                      DeviceAgent *device)
-                : ControlRequestHandler(service, cq, device), responder(&ctx) {
+                : ControlRequestHandler(service, cq, device) {
             Proceed();
         }
 
@@ -216,15 +234,13 @@ protected:
 
     private:
         LoopRange request;
-        EmptyMessage reply;
-        grpc::ServerAsyncResponseWriter<EmptyMessage> responder;
     };
 
     class StartContainerRequestHandler : public ControlRequestHandler {
     public:
         StartContainerRequestHandler(ControlCommands::AsyncService *service, ServerCompletionQueue *cq,
                                      DeviceAgent *device)
-                : ControlRequestHandler(service, cq, device), responder(&ctx) {
+                : ControlRequestHandler(service, cq, device) {
             Proceed();
         }
 
@@ -232,15 +248,13 @@ protected:
 
     private:
         ContainerConfig request;
-        EmptyMessage reply;
-        grpc::ServerAsyncResponseWriter<EmptyMessage> responder;
     };
 
     class StopContainerRequestHandler : public ControlRequestHandler {
     public:
         StopContainerRequestHandler(ControlCommands::AsyncService *service, ServerCompletionQueue *cq,
                                     DeviceAgent *device)
-                : ControlRequestHandler(service, cq, device), responder(&ctx) {
+                : ControlRequestHandler(service, cq, device) {
             Proceed();
         }
 
@@ -248,15 +262,13 @@ protected:
 
     private:
         ContainerSignal request;
-        EmptyMessage reply;
-        grpc::ServerAsyncResponseWriter<EmptyMessage> responder;
     };
 
     class UpdateDownstreamRequestHandler : public ControlRequestHandler {
     public:
         UpdateDownstreamRequestHandler(ControlCommands::AsyncService *service, ServerCompletionQueue *cq,
                                        DeviceAgent *device)
-                : ControlRequestHandler(service, cq, device), responder(&ctx) {
+                : ControlRequestHandler(service, cq, device) {
             Proceed();
         }
 
@@ -264,15 +276,13 @@ protected:
 
     private:
         ContainerLink request;
-        EmptyMessage reply;
-        grpc::ServerAsyncResponseWriter<EmptyMessage> responder;
     };
 
     class SyncDatasourceRequestHandler : public ControlRequestHandler {
     public:
         SyncDatasourceRequestHandler(ControlCommands::AsyncService *service, ServerCompletionQueue *cq,
                                        DeviceAgent *device)
-                : ControlRequestHandler(service, cq, device), responder(&ctx) {
+                : ControlRequestHandler(service, cq, device) {
             Proceed();
         }
 
@@ -280,15 +290,13 @@ protected:
 
     private:
         ContainerLink request;
-        EmptyMessage reply;
-        grpc::ServerAsyncResponseWriter<EmptyMessage> responder;
     };
 
     class UpdateBatchsizeRequestHandler : public ControlRequestHandler {
     public:
         UpdateBatchsizeRequestHandler(ControlCommands::AsyncService *service, ServerCompletionQueue *cq,
                                        DeviceAgent *device)
-                : ControlRequestHandler(service, cq, device), responder(&ctx) {
+                : ControlRequestHandler(service, cq, device) {
             Proceed();
         }
 
@@ -296,15 +304,13 @@ protected:
 
     private:
         ContainerInts request;
-        EmptyMessage reply;
-        grpc::ServerAsyncResponseWriter<EmptyMessage> responder;
     };
 
     class UpdateResolutionRequestHandler : public ControlRequestHandler {
     public:
         UpdateResolutionRequestHandler(ControlCommands::AsyncService *service, ServerCompletionQueue *cq,
                                       DeviceAgent *device)
-                : ControlRequestHandler(service, cq, device), responder(&ctx) {
+                : ControlRequestHandler(service, cq, device) {
             Proceed();
         }
 
@@ -312,15 +318,13 @@ protected:
 
     private:
         ContainerInts request;
-        EmptyMessage reply;
-        grpc::ServerAsyncResponseWriter<EmptyMessage> responder;
     };
 
     class UpdateTimeKeepingRequestHandler : public ControlRequestHandler {
     public:
         UpdateTimeKeepingRequestHandler(ControlCommands::AsyncService *service, ServerCompletionQueue *cq,
                                       DeviceAgent *device)
-                : ControlRequestHandler(service, cq, device), responder(&ctx) {
+                : ControlRequestHandler(service, cq, device) {
             Proceed();
         }
 
@@ -328,15 +332,27 @@ protected:
 
     private:
         TimeKeeping request;
-        EmptyMessage reply;
-        grpc::ServerAsyncResponseWriter<EmptyMessage> responder;
+    };
+
+    class ReturnFlRequestHandler : public ControlRequestHandler {
+    public:
+        ReturnFlRequestHandler(ControlCommands::AsyncService *service, ServerCompletionQueue *cq,
+                                        DeviceAgent *device)
+                : ControlRequestHandler(service, cq, device) {
+            Proceed();
+        }
+
+        void Proceed() final;
+
+    private:
+        FlData request;
     };
 
     class ShutdownRequestHandler : public ControlRequestHandler {
     public:
         ShutdownRequestHandler(ControlCommands::AsyncService *service, ServerCompletionQueue *cq,
                                         DeviceAgent *device)
-                : ControlRequestHandler(service, cq, device), responder(&ctx) {
+                : ControlRequestHandler(service, cq, device) {
             Proceed();
         }
 
@@ -344,8 +360,6 @@ protected:
 
     private:
         EmptyMessage request;
-        EmptyMessage reply;
-        grpc::ServerAsyncResponseWriter<EmptyMessage> responder;
     };
 
     SystemDeviceType dev_type;
@@ -369,7 +383,7 @@ protected:
     // Communication
     std::unique_ptr<ServerCompletionQueue> device_cq;
     std::unique_ptr<grpc::Server> device_server;
-    InDeviceCommunication::AsyncService device_service;
+    InDeviceMessages::AsyncService device_service;
     std::unique_ptr<ControlMessages::Stub> controller_stub;
     CompletionQueue *controller_sending_cq;
     std::unique_ptr<grpc::Server> controller_server;
