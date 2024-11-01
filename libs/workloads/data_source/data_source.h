@@ -4,7 +4,6 @@
 #include <list>
 #include <thread>
 #include "container_agent.h"
-#include "data_reader.h"
 
 class DataSourceAgent : public ContainerAgent {
 public:

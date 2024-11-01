@@ -15,7 +15,6 @@ void msvcconfigs::from_json(const json &j, msvcconfigs::BaseMicroserviceConfigs 
     j.at("msvc_contName").get_to(val.msvc_contName);
     j.at("msvc_name").get_to(val.msvc_name);
     j.at("msvc_type").get_to(val.msvc_type);
-    j.at("msvc_appLvlConfigs").get_to(val.msvc_appLvlConfigs);
     j.at("msvc_pipelineSLO").get_to(val.msvc_pipelineSLO);
     j.at("msvc_idealBatchSize").get_to(val.msvc_idealBatchSize);
     j.at("msvc_maxQueueSize").get_to(val.msvc_maxQueueSize);
@@ -73,7 +72,6 @@ void Microservice::loadConfigs(const json &jsonConfigs, bool isConstructing) {
     msvc_dataShape = configs.msvc_dataShape;
     msvc_type = configs.msvc_type;
     PAUSE_THREADS = true;
-    msvc_appLvlConfigs = configs.msvc_appLvlConfigs;
     msvc_deviceIndex = configs.msvc_deviceIndex;
     msvc_RUNMODE = configs.msvc_RUNMODE;
 
@@ -145,6 +143,67 @@ void Microservice::loadConfigs(const json &jsonConfigs, bool isConstructing) {
 Microservice::Microservice(const json &jsonConfigs) {
     Microservice::loadConfigs(jsonConfigs, true);
     msvc_configs = jsonConfigs;
+}
+
+Microservice::Microservice(const Microservice &other) {
+    // Lock other mutexes down for correctness
+    std::lock(this->msvc_overallMutex, other.msvc_overallMutex);
+    std::lock_guard<std::mutex> lock1(other.msvc_overallMutex, std::adopt_lock);
+    std::lock_guard<std::mutex> lock2(this->msvc_overallMutex, std::adopt_lock);
+
+    // identifiers
+    msvc_name = other.msvc_name;
+    msvc_experimentName = other.msvc_experimentName;
+    msvc_pipelineName = other.msvc_pipelineName;
+    msvc_containerName = other.msvc_containerName;
+    msvc_taskName = other.msvc_taskName;
+    msvc_hostDevice = other.msvc_hostDevice;
+    msvc_systemName = other.msvc_systemName;
+    msvc_type = other.msvc_type;
+
+    // Modes
+    msvc_RUNMODE = other.msvc_RUNMODE;
+    msvc_DROP_MODE = other.msvc_DROP_MODE;
+    msvc_DROP_MODE = other.msvc_DROP_MODE;
+    msvc_allocationMode = other.msvc_allocationMode;
+
+    // Batching and Timing
+    msvc_idealBatchSize = other.msvc_idealBatchSize;
+    msvc_timeBudgetLeft = other.msvc_timeBudgetLeft;
+    msvc_pipelineSLO = other.msvc_pipelineSLO;
+    msvc_contStartTime = other.msvc_contStartTime;
+    msvc_contEndTime = other.msvc_contEndTime;
+    msvc_contSLO = other.msvc_contSLO;
+    msvc_localDutyCycle = other.msvc_localDutyCycle;
+    msvc_cycleStartTime = other.msvc_cycleStartTime;
+    msvc_maxBatchSize = other.msvc_maxBatchSize;
+
+    // IOs
+    msvc_dataShape = other.msvc_dataShape;
+    msvc_outReqShape = other.msvc_outReqShape;
+    msvc_activeInQueueIndex = other.msvc_activeInQueueIndex;
+    msvc_activeOutQueueIndex = other.msvc_activeOutQueueIndex;
+    upstreamMicroserviceList = other.upstreamMicroserviceList;
+    dnstreamMicroserviceList = other.dnstreamMicroserviceList;
+    msvc_InQueue = other.msvc_InQueue;
+    msvc_OutQueue = other.msvc_OutQueue;
+    classToDnstreamMap = other.classToDnstreamMap;
+
+    msvc_modelDataType = other.msvc_modelDataType;
+
+    // logging
+    msvc_microserviceLogPath = other.msvc_microserviceLogPath;
+
+    // GPU
+    msvc_deviceIndex = other.msvc_deviceIndex;
+
+    // Current status
+    msvc_currFrameID = other.msvc_currFrameID;
+
+    // Profiling and Warmup
+    msvc_numWarmupBatches = other.msvc_numWarmupBatches;
+    msvc_profWarmupCompleted = other.msvc_profWarmupCompleted;
+    msvc_numWarmupBatches = other.msvc_numWarmupBatches;
 }
 
 /**

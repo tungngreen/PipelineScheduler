@@ -45,7 +45,7 @@ int main(int argc, char **argv) {
 
     json receiver_json = json::parse(std::string("{\"msvc_contName\": \"dataSink\", \"msvc_deviceIndex\": 0, "
                                                  "\"msvc_RUNMODE\": 0, \"msvc_name\": \"receiver\", \"msvc_type\": 0, "
-                                                 "\"msvc_appLvlConfigs\":\"\", \"msvc_svcLevelObjLatency\": 1, "
+                                                 "\"msvc_svcLevelObjLatency\": 1, "
                                                  "\"msvc_idealBatchSize\": 1, \"msvc_dataShape\": [[0, 0]], "
                                                  "\"msvc_maxQueueSize\": 100, \"msvc_dnstreamMicroservices\": [{"
                                                  "\"nb_name\": \"::data_sink\", \"nb_commMethod\": 4, \"nb_link\": [\"\"], "
@@ -65,7 +65,7 @@ int main(int argc, char **argv) {
     Microservice *receiver = new Receiver(receiver_json);
     json sink_json = json::parse(std::string("{\"msvc_contName\": \"dataSink\", \"msvc_deviceIndex\": 0, "
                                              "\"msvc_RUNMODE\": 0, \"msvc_name\": \"data_sink\", \"msvc_type\": 502, "
-                                             "\"msvc_appLvlConfigs\":\"\", \"msvc_svcLevelObjLatency\": 1, "
+                                             "\"msvc_svcLevelObjLatency\": 1, "
                                              "\"msvc_idealBatchSize\": 1, \"msvc_dataShape\": [[0, 0]], "
                                              "\"msvc_maxQueueSize\": 100, \"msvc_dnstreamMicroservices\": [], "
                                              "\"msvc_upstreamMicroservices\": [{\"nb_name\": \"::receiver\", "

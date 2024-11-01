@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.18)
 
-project(data_source)
+project(profiler)
 
 # This include defines standard install locations.
 # https://cmake.org/cmake/help/v3.11/module/GNUInstallDirs.html
@@ -27,66 +27,55 @@ endif(CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
 # Only public header files go here.
 set(
         HEADER_FILES
-        data_source.h
+        profiler.h
 )
 
 # All source files and private header files go here.
 set(
         SOURCE_FILES
-        data_source.cpp
+        profiler.cpp
 )
 
 # Here we define the library.
-add_library(data_source
+add_library(profiler
         ${HEADER_FILES}
         ${SOURCE_FILES})
 
 # We also add an alias definition so that we shadown
 # the export namespace when using add_subdirectory() instead.
-add_library(data_source::data_source ALIAS data_source)
+add_library(profiler::profiler ALIAS profiler)
 
 
 # Required compiler features.
 # https://cmake.org/cmake/help/v3.1/manual/cmake-compile-features.7.html
-target_compile_features(data_source
+target_compile_features(profiler
         # Features required to compile the library itself.
         PRIVATE cxx_std_11)
 # By prefixing the installation paths with our name and version
 # we can have multiple versions installed at the same time.
-set(PROJECT_PREFIX data_source)
-
-set(microservice_DIR "${CMAKE_CURRENT_BINARY_DIR}/../../microservice")
-find_package(microservice CONFIG REQUIRED)
-
-set(communicator_DIR "${CMAKE_CURRENT_BINARY_DIR}/../../communicator")
-find_package(communicator CONFIG REQUIRED)
-
-set(container_agent_DIR "${CMAKE_CURRENT_BINARY_DIR}/../../container_agent")
-find_package(container_agent CONFIG REQUIRED)
+set(PROJECT_PREFIX profiler)
 
 # Defines the headers for this library.
 # https://cmake.org/cmake/help/v3.11/command/target_include_directories.html
-target_include_directories(data_source
+target_include_directories(profiler
         PUBLIC
             # Used when building the library:
-            $<BUILD_INTERFACE:${data_source_SOURCE_DIR}/>
+            $<BUILD_INTERFACE:${profiler_SOURCE_DIR}/>
             # Used when installing the library:
             $<INSTALL_INTERFACE:${PROJECT_PREFIX}>
-            ${OpenCV_INCLUDE_DIRS}
+            ${CUDA_INCLUDE_DIRS} 
         PRIVATE
             # Used only when building the library:
             src)
 
-target_link_libraries(data_source
+target_link_libraries(profiler
         PUBLIC
-        ${OpenCV_LIBS}
-        ${_GRPC_GRPCPP}
-        ${_REFLECTION}
-        ${_PROTOBUF_LIBPROTOBUF}
+        absl::flags
+        absl::flags_parse
         ${CMAKE_THREAD_LIBS_INIT}
-        microservice
-        communicator
-        container_agent
+        ${CUDA_LIBRARIES}
+        CUDA::nvml
+        cuda
 )
 
 # Here we configure variables specifying the target directories.
@@ -94,21 +83,21 @@ set(INSTALL_RUNTIME_DIR ${CMAKE_INSTALL_BINDIR})
 set(INSTALL_CONFIG_DIR  ${CMAKE_INSTALL_LIBDIR}/${PROJECT_PREFIX}/cmake)
 set(INSTALL_LIBRARY_DIR ${CMAKE_INSTALL_LIBDIR}/${PROJECT_PREFIX}/${CMAKE_BUILD_TYPE})
 set(INSTALL_ARCHIVE_DIR ${CMAKE_INSTALL_LIBDIR}/${PROJECT_PREFIX}/${CMAKE_BUILD_TYPE}/static)
-set(INSTALL_INCLUDE_DIR ${CMAKE_INSTALL_INCLUDEDIR}/${PROJECT_PREFIX}/data_source)
+set(INSTALL_INCLUDE_DIR ${CMAKE_INSTALL_INCLUDEDIR}/${PROJECT_PREFIX}/profiler)
 
 # Define the configuration file locations.
-set(PROJECT_CONFIG_VERSION_FILE "${PROJECT_BINARY_DIR}/data_source-config-version.cmake")
-set(PROJECT_CONFIG_FILE         "${PROJECT_BINARY_DIR}/data_source-config.cmake")
+set(PROJECT_CONFIG_VERSION_FILE "${PROJECT_BINARY_DIR}/profiler-config-version.cmake")
+set(PROJECT_CONFIG_FILE         "${PROJECT_BINARY_DIR}/profiler-config.cmake")
 
-configure_package_config_file(cmake/data_source-config.cmake.in
+configure_package_config_file(cmake/profiler-config.cmake.in
         ${PROJECT_CONFIG_FILE}
         INSTALL_DESTINATION ${INSTALL_CONFIG_DIR})
 
 
 # The INSTALL(TARGET) command specifies where to install specific targets.
 # By specifying EXPORT here, we add these targets to an export group.
-install(TARGETS data_source
-        EXPORT data_source-targets
+install(TARGETS profiler
+        EXPORT profiler-targets
         RUNTIME DESTINATION ${INSTALL_RUNTIME_DIR}
         LIBRARY DESTINATION ${INSTALL_LIBRARY_DIR}
         ARCHIVE DESTINATION ${INSTALL_ARCHIVE_DIR})
@@ -124,15 +113,15 @@ install(FILES
         DESTINATION ${INSTALL_CONFIG_DIR})
 
 # The INSTALL(EXPORT) command installs a previously defined export group to a script.
-install(EXPORT data_source-targets
-        FILE data_source-targets.cmake
-        NAMESPACE data_source::
+install(EXPORT profiler-targets
+        FILE profiler-targets.cmake
+        NAMESPACE profiler::
         DESTINATION ${INSTALL_CONFIG_DIR})
 
-export(EXPORT data_source-targets
-       FILE ${CMAKE_CURRENT_BINARY_DIR}/data_source-targets.cmake
-       NAMESPACE data_source::)
+export(EXPORT profiler-targets
+       FILE ${CMAKE_CURRENT_BINARY_DIR}/profiler-targets.cmake
+       NAMESPACE profiler::)
 
 # Register the package in the user's package registry.
 # https://cmake.org/cmake/help/v3.11/command/export.html
-export(PACKAGE data_source)
+export(PACKAGE profiler)

@@ -55,11 +55,14 @@ target_compile_features(device_agent
 # we can have multiple versions installed at the same time.
 set(PROJECT_PREFIX device_agent)
 
+set (profiler_DIR "${CMAKE_CURRENT_BINARY_DIR}/../profiler")
+find_package(profiler CONFIG REQUIRED)
+
 set(microservice_DIR "${CMAKE_CURRENT_BINARY_DIR}/../microservice")
 find_package(microservice CONFIG REQUIRED)
 
-set(container_agent_DIR "${CMAKE_CURRENT_BINARY_DIR}/../container_agent")
-find_package(container_agent CONFIG REQUIRED)
+set(communicator_DIR "${CMAKE_CURRENT_BINARY_DIR}/../communicator")
+find_package(communicator CONFIG REQUIRED)
 
 set(controller_DIR "${CMAKE_CURRENT_BINARY_DIR}/../controller")
 find_package(controller CONFIG REQUIRED)
@@ -72,6 +75,9 @@ target_include_directories(device_agent
             $<BUILD_INTERFACE:${device_agent_SOURCE_DIR}/>
             # Used when installing the library:
             $<INSTALL_INTERFACE:${PROJECT_PREFIX}>
+            ${OpenCV_INCLUDE_DIRS}
+            ${PostgreSQL_INCLUDE_DIRS}
+            ${LIBPQXX_INCLUDE_DIRS}
             $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/../utils/protobufprotocols>
         PRIVATE
             # Used only when building the library:
@@ -79,11 +85,20 @@ target_include_directories(device_agent
 
 target_link_libraries(device_agent
         PUBLIC
+        device_grpc_proto
         absl::flags
         absl::flags_parse
         ${CMAKE_THREAD_LIBS_INIT}
+        ${_GRPC_GRPCPP}
+        ${_REFLECTION}
+        ${_PROTOBUF_LIBPROTOBUF}
+        ${PostgreSQL_LIBRARIES}
+        ${LIBPQXX_LIBRARIES}
+        ${CMAKE_THREAD_LIBS_INIT}
+        ${CUDA_LIBRARIES}
+        profiler
+        communicator
         microservice
-        container_agent
         controller
 )
 

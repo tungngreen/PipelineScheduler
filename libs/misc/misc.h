@@ -43,6 +43,14 @@ typedef cv::Mat LocalCPUReqDataType;
 typedef uint16_t BatchSizeType;
 typedef uint32_t RequestMemSizeType;
 
+const int DATA_BASE_PORT = 55001;
+const int CONTROLLER_BASE_PORT = 60001;
+const int DEVICE_CONTROL_PORT = 60002;
+const int INDEVICE_CONTROL_PORT = 60003;
+
+std::chrono::time_point<std::chrono::_V2::system_clock, std::chrono::milliseconds> timePointCastMillisecond(
+    std::chrono::system_clock::time_point tp);
+
 const NumQueuesType MAX_NUM_QUEUES = std::numeric_limits<NumQueuesType>::max();
 const uint64_t MAX_PORTION_SIZE = std::numeric_limits<uint64_t>::max();
 
@@ -94,7 +102,7 @@ struct PercentilesArrivalRecord {
 struct ArrivalRecord : public Record {
     std::vector<uint64_t> outQueueingDuration; //prevPostProcTime - postproc's outqueue time
     std::vector<uint64_t> transferDuration; //arrivalTime - prevSenderTime
-    std::vector<uint64_t> queueingDuration; //batcher's pop time - arrivalTime
+    std::vector<uint64_t> queueingDuration; //preprocessor's pop time - arrivalTime
     std::vector<ClockType> arrivalTime;
     std::vector<uint32_t> totalPkgSize;
     std::vector<uint32_t> reqSize;
@@ -273,7 +281,7 @@ uint64_t estimateNetworkLatency(const NetworkEntryType& res, const uint32_t &tot
 struct NetworkProfile {
     uint64_t p95OutQueueingDuration; // out queue before sender of the last container
     uint64_t p95TransferDuration;
-    uint64_t p95QueueingDuration; // in queue of batcher of this container
+    uint64_t p95QueueingDuration; // in queue of preprocessor of this container
     uint32_t p95PackageSize;
 };
 
