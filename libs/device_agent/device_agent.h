@@ -4,20 +4,24 @@
 #include <cstdlib>
 #include <misc.h>
 #include <sys/sysinfo.h>
-#include "container_agent.h"
 #include "profiler.h"
 #include "controller.h"
-#include "indevicecommunication.grpc.pb.h"
 #include <arpa/inet.h>
 #include <sys/socket.h>
 #include <netdb.h>
 #include <ifaddrs.h>
 
-using trt::TRTConfigs;
+#include "absl/strings/str_format.h"
+#include "absl/flags/parse.h"
+#include "absl/flags/flag.h"
+#include <grpcpp/grpcpp.h>
+#include <grpcpp/ext/proto_server_reflection_plugin.h>
+#include <grpcpp/health_check_service_interface.h>
+#include <google/protobuf/empty.pb.h>
+#include <pqxx/pqxx>
+#include "indevicecommunication.grpc.pb.h"
 
-const int CONTROLLER_BASE_PORT = 60001;
-const int DEVICE_CONTROL_PORT = 60002;
-const int INDEVICE_CONTROL_PORT = 60003;
+using trt::TRTConfigs;
 
 ABSL_DECLARE_FLAG(std::string, name);
 ABSL_DECLARE_FLAG(std::string, device_type);
@@ -27,6 +31,19 @@ ABSL_DECLARE_FLAG(uint16_t, dev_verbose);
 ABSL_DECLARE_FLAG(uint16_t, dev_loggingMode);
 ABSL_DECLARE_FLAG(std::string, dev_logPath);
 ABSL_DECLARE_FLAG(uint16_t, dev_port_offset);
+
+using grpc::Status;
+using grpc::CompletionQueue;
+using grpc::ClientContext;
+using grpc::ClientAsyncResponseReader;
+using grpc::ServerBuilder;
+using grpc::ServerContext;
+using grpc::ServerCompletionQueue;
+using indevicecommunication::InDeviceCommunication;
+using indevicecommunication::Signal;
+using indevicecommunication::Connection;
+using indevicecommunication::ProcessData;
+using EmptyMessage = google::protobuf::Empty;
 
 typedef std::tuple<
     std::string, // container name

@@ -81,6 +81,7 @@ void Sender::Process() {
         );
     }
     msvc_logFile.close();
+    STOPPED = true;
 }
 
 GPUSender::GPUSender(const json &jsonConfigs) : Sender(jsonConfigs) {
@@ -137,6 +138,7 @@ void GPUSender::Process() {
         );
     }
     msvc_logFile.close();
+    STOPPED = true;
 }
 
 std::string GPUSender::SendData(std::vector<RequestData<LocalGPUReqDataType>> &elements, std::vector<RequestTimeType> &timestamp,
