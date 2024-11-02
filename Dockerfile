@@ -1,5 +1,7 @@
 # Builder Image
-FROM pipeline-scheduler-nx
+ARG JETPACK_VERSION="r35.2.1-py3"
+
+FROM pipeline-scheduler:${JETPACK_VERSION}
 
 USER root
 RUN pip install -U jetson-stats --force
