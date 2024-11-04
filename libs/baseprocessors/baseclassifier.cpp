@@ -110,12 +110,11 @@ void BaseClassifier::classify() {
             continue;
         }
 
-        // The generated time of this incoming request will be used to determine the rate with which the microservice should
-        // check its incoming queue.
-        currReq_recvTime = std::chrono::high_resolution_clock::now();
-        // if (msvc_inReqCount > 1) {
-        //     updateReqRate(currReq_genTime);
-        // }
+        // 10. The moment the batch is received at the cropper (TENTH_TIMESTAMP)
+        auto timeNow = std::chrono::high_resolution_clock::now();
+        for (auto& req_genTime : currReq.req_origGenTime) {
+            req_genTime.emplace_back(timeNow);
+        }
 
         currReq_batchSize = currReq.req_batchSize;
         spdlog::get("container_agent")->trace("{0:s} popped a request of batch size {1:d}", msvc_name, currReq_batchSize);
@@ -134,12 +133,12 @@ void BaseClassifier::classify() {
             cudaMemcpyDeviceToHost,
             postProcStream
         ), __func__);
-
         cudaStreamSynchronize(postProcStream);
+
 
         for (uint8_t i = 0; i < currReq_batchSize; ++i) {
             msvc_overallTotalReqCount++;
-            // We consider this when the request was received by the postprocessor
+            // 11. The moment the request starts to be processed by the postprocessor (ELEVENTH_TIMESTAMP)
             currReq.req_origGenTime[i].emplace_back(std::chrono::high_resolution_clock::now());
 
             predictedClass[i] = maxIndex(predictedProbs + i * msvc_numClasses, msvc_numClasses);
@@ -185,20 +184,9 @@ void BaseClassifier::classify() {
             }
 
             uint32_t totalOutMem = totalInMem;
-            
-            /**
-             * @brief There are 8 important timestamps to be recorded:
-             * 1. When the request was generated
-             * 2. When the request was received by the preprocessor
-             * 3. When the request was done preprocessing by the preprocessor
-             * 4. When the request, along with all others in the batch, was batched together and sent to the inferencer
-             * 5. When the batch inferencer popped the batch sent from batcher
-             * 6. When the batch inference was completed by the inferencer 
-             * 7. When the request was received by the postprocessor
-             * 8. When each request was completed by the postprocessor
-             */
-            // If the number of warmup batches has been passed, we start to record the latency
+
             if (warmupCompleted()) {
+                // 12. When the request was completed by the postprocessor (TWELFTH_TIMESTAMP)
                 currReq.req_origGenTime[i].emplace_back(std::chrono::high_resolution_clock::now());
                 std::string originStream = getOriginStream(currReq.req_travelPath[i]);
                 // TODO: Add the request number

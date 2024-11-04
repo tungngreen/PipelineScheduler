@@ -1,7 +1,7 @@
 {
     "container" : {
         "cont_experimentName": "prof",
-        "cont_systemName": "fcpo",
+        "cont_systemName": "ppp",
         "cont_pipeName": "traffic",
         "cont_taskName": "retina1face",
         "cont_hostDevice": "server",
@@ -33,7 +33,7 @@
                 "msvc_dataShape": [
                     [
                         3,
-                        640,
+                        576,
                         640
                     ]
                 ],
@@ -44,7 +44,7 @@
                         "nb_classOfInterest": -2,
                         "nb_commMethod": 2,
                         "nb_link": [
-                            "0.0.0.0:55014"
+                            "0.0.0.0:55011"
                         ],
                         "nb_maxQueueSize": 100,
                         "nb_name": "yolov5",
@@ -77,8 +77,8 @@
                         "nb_expectedShape": [
                             [
                                 3,
-                                288,
-                                320
+                                576,
+                                640
                             ]
                         ]
                     }
@@ -168,8 +168,8 @@
                         "nb_expectedShape": [
                             [
                                 3,
-                                288,
-                                320
+                                576,
+                                640
                             ]
                         ]
                     }
@@ -195,14 +195,14 @@
                                 1
                             ],
                             [
-                                5,
+                                100,
                                 4
                             ],
                             [
-                                5
+                                100
                             ],
                             [
-                                5
+                                100
                             ]
                         ]
                     }
@@ -227,8 +227,8 @@
                         "nb_expectedShape": [
                             [
                                 3,
-                                288,
-                                320
+                                576,
+                                640
                             ]
                         ]
                     }
@@ -241,7 +241,7 @@
                 "cbs":1, 
                 "normalize": true,
                 "obs": 1,
-                "path": "../models/retina1face_3090_fp32_64_1.engine",
+                "path": "../models/retina_multiface_640_3090_fp32_32_1.engine",
                 "prec": 4,
                 "msvc_imgNormScale": "1/1",
                 "msvc_subVals": [
@@ -281,14 +281,14 @@
                         1
                     ],
                     [
-                        5,
+                        100,
                         4
                     ],
                     [
-                        5
+                        100
                     ],
                     [
-                        5
+                        100
                     ]
                 ],
                 "msvc_pipelineSLO": 999999,
@@ -304,16 +304,17 @@
                         "nb_name": "inference",
                         "nb_expectedShape": [
                             [
-                                0,
-                                0
+                                3,
+                                576,
+                                640
                             ]
                         ]
                     }
                 ],
                 "msvc_maxQueueSize": 100,
                 "=========================================Here ends the common part of the microservice configuration": "The following are the specific configurations for each microservice.",
-                "msvc_confThreshold": 0.4,
-                "msvc_augment": true
+                "msvc_confThreshold": 0.3,
+                "msvc_augment": false
             },
             {
                 "msvc_name": "sender",
@@ -388,19 +389,5 @@
         "profile_numWarmUpBatches": 10,
         "profile_numProfileBatches": 100,
         "profile_numProfileReqs": 1800
-    },
-    "fcpo": {
-        "state_size": 5,
-        "resolution_size": 1,
-        "batch_size": 64,
-        "threads_size": 4,
-        "lambda": 0.95,
-        "gamma": 0.99,
-        "clip_epsilon": 0.2,
-        "penalty_weight": 0.1,
-        "precision": "float",
-        "update_steps": 60,
-        "update_step_incs": 5,
-        "federated_steps": 5
     }
 }

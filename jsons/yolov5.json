@@ -312,7 +312,9 @@
                     }
                 ],
                 "msvc_maxQueueSize": 100,
-                "=========================================Here ends the common part of the microservice configuration": "The following are the specific configurations for each microservice."
+                "=========================================Here ends the common part of the microservice configuration": "The following are the specific configurations for each microservice.",
+                "msvc_confThreshold": 0.25,
+                "msvc_augment": false
             },
             {
                 "msvc_name": "sender",

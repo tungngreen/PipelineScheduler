@@ -44,7 +44,7 @@
                         "nb_classOfInterest": -2,
                         "nb_commMethod": 4,
                         "nb_link": [
-                            "../data/preview/traffic_profiling.mp4"
+                            "../data/preview/zoom_profiling.mp4"
                         ],
                         "nb_maxQueueSize": 100,
                         "nb_name": "video_source",

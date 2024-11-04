@@ -96,6 +96,7 @@ void BaseBatcher::updateCycleTiming() {
  */
 inline void BaseBatcher::executeBatching(BatchTimeType &genTime, RequestSLOType &slo, RequestPathType &path,
                                   std::vector<RequestData<LocalGPUReqDataType>> &bufferData,
+                                  BatchConcatInfo &concatInfo,
                                   std::vector<RequestData<LocalGPUReqDataType>> &prevData) {
     // 7. The moment the request is batched (SEVENTH_TIMESTAMP)
     ClockType timeNow = std::chrono::high_resolution_clock::now();
@@ -110,6 +111,7 @@ inline void BaseBatcher::executeBatching(BatchTimeType &genTime, RequestSLOType 
             path,
             msvc_onBufferBatchSize,
             bufferData,
+            concatInfo,
             prevData
     };
 
@@ -119,12 +121,14 @@ inline void BaseBatcher::executeBatching(BatchTimeType &genTime, RequestSLOType 
     spdlog::get("container_agent")->trace("{0:s} emplaced a request of batch size {1:d} ", msvc_name,
                                           msvc_onBufferBatchSize);
     msvc_OutQueue[0]->emplace(outReq);
-    msvc_avgBatchSize += (msvc_onBufferBatchSize - msvc_avgBatchSize) / msvc_miniBatchCount;
+    // msvc_avgBatchSize += (msvc_onBufferBatchSize - msvc_avgBatchSize) / msvc_miniBatchCount;
     msvc_onBufferBatchSize = 0;
+    msvc_numImagesInBatch = 0;
     genTime.clear();
     path.clear();
     slo.clear();
     bufferData.clear();
+    concatInfo.clear();
     prevData.clear();
     oldestReqTime = std::chrono::high_resolution_clock::time_point::max();
 
@@ -234,6 +238,8 @@ void BaseBatcher::batchRequests() {
     // Buffer memory for each batch
     std::vector<RequestData<LocalGPUReqDataType>> bufferData;
 
+    BatchConcatInfo batchConcatInfo;
+
     // Data carried from upstream microservice to be processed at a downstream
     std::vector<RequestData<LocalGPUReqDataType>> prevData;
 
@@ -258,7 +264,10 @@ void BaseBatcher::batchRequests() {
                 outReq_path.clear();
                 outBatch_slo.clear();
                 bufferData.clear();
+                batchConcatInfo.clear();
                 prevData.clear();
+                
+                msvc_numImagesInBatch = 0;
 
                 spdlog::get("container_agent")->info("{0:s} is RELOADED.", msvc_name);
 
@@ -312,10 +321,14 @@ void BaseBatcher::batchRequests() {
         outBatch_slo.insert(outBatch_slo.end(), currReq.req_e2eSLOLatency.begin(), currReq.req_e2eSLOLatency.end());
         outBatch_path.insert(outBatch_path.end(), currReq.req_travelPath.begin(), currReq.req_travelPath.end());
         bufferData.insert(bufferData.end(), currReq.req_data.begin(), currReq.req_data.end());
+        batchConcatInfo.emplace_back(currReq.req_concatInfo[0]);
+        batchConcatInfo.back().firstImageIndex = msvc_numImagesInBatch;
+        msvc_numImagesInBatch += currReq.req_concatInfo[0].numImages;
+
         prevData.insert(prevData.end(), currReq.upstreamReq_data.begin(), currReq.upstreamReq_data.end());
 
         if (isTimeToBatch()) {
-            executeBatching(outBatch_genTime, outBatch_slo, outBatch_path, bufferData, prevData);
+            executeBatching(outBatch_genTime, outBatch_slo, outBatch_path, bufferData, batchConcatInfo, prevData);
         }
     }
     msvc_logFile.close();

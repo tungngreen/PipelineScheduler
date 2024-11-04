@@ -23,7 +23,6 @@
 
 using json = nlohmann::ordered_json;
 
-
 template<typename DataType>
 struct RequestData {
     RequestDataShapeType shape;
@@ -40,6 +39,21 @@ struct RequestData {
         shape.clear();
     }
 };
+
+ 
+/**
+ * @brief Multiple of images can be resized and added into a single frame to improve throughput.
+ * And it is possible that each frame is not always filled with the same number of images.
+ */
+
+struct RequestConcatInfo {
+    // Added by 1 every time a new image is added to the frame.
+    uint8_t numImages = 0;
+    // The index of the first image of the frame in the batch.
+    uint16_t firstImageIndex = 0;
+};
+
+typedef std::vector<RequestConcatInfo> BatchConcatInfo;
 
 /**
  * @brief 
@@ -66,6 +80,10 @@ struct Request {
 
     // The Inter-container GPU data of that this request carries.
     std::vector<RequestData<DataType>> req_data = {};
+
+    // The information use to track each image in the frames of the batch
+    BatchConcatInfo req_concatInfo;
+
     // To carry the data of the upstream microservice in case we need them for further processing.
     // For instance, for cropping we need both the original image (`upstreamReq_data`) and the output
     // of the inference engine, which is a result of `req_data`.
@@ -80,12 +98,14 @@ struct Request {
             RequestPathType path,
             BatchSizeType batchSize,
             std::vector<RequestData<DataType>> data,
+            BatchConcatInfo concatInfo,
             std::vector<RequestData<DataType>> upstream_data
 
     ) : req_origGenTime(genTime),
         req_e2eSLOLatency(latency),
         req_travelPath(std::move(path)),
-        req_batchSize(batchSize) {
+        req_batchSize(batchSize),
+        req_concatInfo(concatInfo) {
         req_data = data;
         upstreamReq_data = upstream_data;
     }
@@ -118,6 +138,7 @@ struct Request {
             req_batchSize = other.req_batchSize;
             req_data = other.req_data;
             upstreamReq_data = other.upstreamReq_data;
+            req_concatInfo = other.req_concatInfo;
         }
         return *this;
     }
@@ -125,6 +146,7 @@ struct Request {
     ~Request() {
         req_data.clear();
         upstreamReq_data.clear();
+        req_concatInfo.clear();
     }
 };
 
@@ -1156,6 +1178,7 @@ protected:
                         {},
                         {"WARMUP_COMPLETED"},
                         0,
+                        {},
                         {},
                         {}
                 }

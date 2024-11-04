@@ -370,6 +370,8 @@ void BasePreprocessor::preprocess() {
                                                        msvc_imgType);
             outReq.req_data[0].shape = RequestDataShapeType({(msvc_outReqShape.at(0))[0][0], (msvc_outReqShape.at(0))[0][1],
                                                              (msvc_outReqShape.at(0))[0][2]});
+
+            outReq.req_concatInfo = {RequestConcatInfo{}};
             outReq.upstreamReq_data = {};
         }
 
@@ -419,6 +421,7 @@ void BasePreprocessor::preprocess() {
             // 6. The moment the request's preprocessing is completed (SIXTH_TIMESTAMP)
             timeNow = std::chrono::high_resolution_clock::now();
             outReq.req_origGenTime.back().emplace_back(timeNow);
+            outReq.req_concatInfo[0].numImages++;
             msvc_concat.currIndex = (++msvc_concat.currIndex % msvc_concat.numImgs);
 
             // If the buffer frame is full, then send the frame to the batcher
@@ -446,6 +449,7 @@ void BasePreprocessor::preprocess() {
                             {},
                             {"STOP_PROFILING"},
                             0,
+                            {},
                             {},
                             {}
                     }
