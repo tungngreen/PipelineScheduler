@@ -289,7 +289,11 @@ void BaseBatcher::batchRequests() {
         // Meaning the the timeout in pop() has been reached and no request was actually popped
         if (strcmp(currReq.req_travelPath[0].c_str(), "empty") == 0) {
             continue;
-        
+        } else if (strcmp(currReq.req_travelPath[0].c_str(), "flush") == 0) {
+            if (msvc_onBufferBatchSize > 0) {
+                executeBatching(outBatch_genTime, outBatch_slo, outBatch_path, bufferData, batchConcatInfo, prevData);
+            }
+            continue;
         /**
          * @brief ONLY IN PROFILING MODE
          * Check if the profiling is to be stopped, if true, then send a signal to the downstream microservice to stop profiling

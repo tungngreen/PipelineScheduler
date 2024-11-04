@@ -312,7 +312,7 @@ void BasePreprocessor::preprocess() {
     std::vector<Request<LocalGPUReqDataType>> outBatch;
 
     // Incoming request
-    Request<LocalGPUReqDataType> currReq, outReq;
+    Request<LocalGPUReqDataType> currReq;
 
     Request<LocalCPUReqDataType> currCPUReq;
 
@@ -459,6 +459,14 @@ void BasePreprocessor::preprocess() {
     }
     msvc_logFile.close();
     STOPPED = true;
+}
+
+void BasePreprocessor::flushBuffers() {
+    msvc_OutQueue[0]->emplace(outReq);
+    msvc_concat.currIndex = 0;
+    outReq = {};
+    outReq.req_travelPath.push_back("flush");
+    msvc_OutQueue[0]->emplace(outReq);
 }
 
 // inline void BasePreprocessor::executeBatch(BatchTimeType &genTime, RequestSLOType &slo, RequestPathType &path,

@@ -1113,7 +1113,10 @@ void ContainerAgent::collectRuntimeMetrics() {
 
 void ContainerAgent::applyResolution(int resolutionConfig) {
     for (auto preproc : cont_msvcsGroups["preprocessor"].msvcList) {
-        preproc->msvc_concat.numImgs = resolutionConfig;
+        if (preproc->msvc_concat.numImgs != resolutionConfig){
+            preproc->flushBuffers();
+            preproc->msvc_concat.numImgs = resolutionConfig;
+        }
     }
 }
 
