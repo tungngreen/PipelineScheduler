@@ -1023,6 +1023,7 @@ void ContainerAgent::collectRuntimeMetrics() {
                                       cont_msvcsGroups["preprocessor"].msvcList[0]->msvc_concat.numImgs,
                                       avgRequestRate, pre_queueDrops, inf_queueDrops);
             auto [targetRes, newBS, scaling] = cont_fcpo_agent->runStep();
+            std::cout << "New Resolution: " << targetRes << ", New Batch Size: " << newBS << ", Scaling: " << scaling << std::endl;
             applyResolution(targetRes);
             applyBatchSize(newBS);
             applyMultiThreading(scaling);
