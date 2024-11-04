@@ -3,6 +3,44 @@
 #ifndef PIPEPLUSPLUS_BCEDGE_H
 #define PIPEPLUSPLUS_BCEDGE_H
 
+struct BCEdgeNet: torch::nn::Module {
+    BCEdgeNet(int state_size, int action1_size, int action2_size, int action3_size) {
+        shared_layer1 = register_module("shared_layer", torch::nn::Linear(state_size, 256));
+        shared_layer2 = register_module("shared_layer2", torch::nn::Linear(256, 128));
+        policy_layer1 = register_module("policy_layer1", torch::nn::Linear(128, 64));
+        policy_head1 = register_module("policy_head1", torch::nn::Linear(64, action1_size));
+        policy_layer2 = register_module("policy_layer2", torch::nn::Linear(128, 64));
+        policy_head2 = register_module("policy_head2", torch::nn::Linear(64, action1_size));
+        policy_layer3 = register_module("policy_layer3", torch::nn::Linear(128, 64));
+        policy_head3 = register_module("policy_head3", torch::nn::Linear(64, action1_size));
+        value_layer = register_module("value_layer", torch::nn::Linear(128, 64));
+        value_head = register_module("value_head", torch::nn::Linear(64, 1));
+    }
+
+    std::tuple<T, T, T, T> forward(T state) {
+        T x = torch::relu(shared_layer1->forward(state));
+        x = torch::relu(shared_layer2->forward(x));
+        T policy1_output = torch::relu(policy_head1->forward(torch::relu(policy_layer1->forward(x))));
+        policy1_output = torch::softmax(policy_head1->forward(policy1_output), -1);
+        T policy2_output = torch::relu(policy_head2->forward(torch::relu(policy_layer2->forward(x))));
+        policy2_output = torch::softmax(policy_head2->forward(policy2_output), -1);
+        T policy3_output = torch::relu(policy_head3->forward(torch::relu(policy_layer3->forward(x))));
+        policy3_output = torch::softmax(policy_head3->forward(policy3_output), -1);
+        T value = value_head->forward(torch::relu(value_layer->forward(x)));
+        return std::make_tuple(policy1_output, policy2_output, policy3_output, value);
+    }
+
+    torch::nn::Linear shared_layer1{nullptr};
+    torch::nn::Linear shared_layer2{nullptr};
+    torch::nn::Linear policy_layer1{nullptr};
+    torch::nn::Linear policy_head1{nullptr};
+    torch::nn::Linear policy_layer2{nullptr};
+    torch::nn::Linear policy_head2{nullptr};
+    torch::nn::Linear policy_layer3{nullptr};
+    torch::nn::Linear policy_head3{nullptr};
+    torch::nn::Linear value_layer{nullptr};
+    torch::nn::Linear value_head{nullptr};
+};
 
 class BCEdgeAgent {
 public:
