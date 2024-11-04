@@ -31,7 +31,6 @@ FCPOAgent::FCPOAgent(std::string& cont_name, uint state_size, uint resolution_si
 }
 
 void FCPOAgent::update() {
-    steps_counter = 0;
     if (federated_steps_counter == 0) {
         spdlog::get("container_agent")->trace("Waiting for federated update, cancel !");
         return;
@@ -74,6 +73,7 @@ void FCPOAgent::update() {
 
     std::cout << "Training: " << sw.elapsed_microseconds() << std::endl;
     out << "episodeEnd," << sw.elapsed_microseconds() << "," << federated_steps_counter << "," << steps_counter << "," << cumu_reward << "," << cumu_reward / (double) steps_counter << std::endl;
+    steps_counter = 0;
 
     if (federated_steps_counter++ % federated_steps == 0) {
         spdlog::get("container_agent")->info("Federated training RL agent!");
