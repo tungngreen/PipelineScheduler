@@ -77,7 +77,8 @@ inline void scaleBBox(
  */
 inline std::vector<std::pair<uint8_t, uint16_t>> crop(
     const std::vector<cv::cuda::GpuMat> &images,
-    const std::vector<ConcatDims> &concatDims,
+    const std::vector<ConcatConfig> &allConcatConfigs,
+    const RequestConcatInfo &reqsConcatInfo,
     int orig_h,
     int orig_w,
     int infer_h,
@@ -89,6 +90,7 @@ inline std::vector<std::pair<uint8_t, uint16_t>> crop(
     std::vector<BoundingBox<cv::cuda::GpuMat>> &croppedBBoxes
 ) {
     std::vector<std::pair<uint8_t, uint16_t>> imageIndexList = {};
+    const ConcatConfig& concatDims = allConcatConfigs[reqsConcatInfo.totalNumImages];
     int orig_bboxCoors[4];
     uint16_t numInvalidDets = 0;
     for (uint16_t i = 0; i < numDetections; ++i) {
@@ -412,7 +414,7 @@ void BaseBBoxCropper::cropping() {
 
         // Doing post processing for the whole batch
         for (BatchSizeType i = 0; i < currReq_batchSize; ++i) {
-            auto numImagesInFrame = currReq.req_concatInfo[i].numImages;
+            auto numImagesInFrame = currReq.req_concatInfo[i].numImagesAdded;
             std::vector<MemUsageType> totalInMem, totalOutMem(numImagesInFrame, 0), totalEncodedOutMem(numImagesInFrame, 0);
             msvc_overallTotalReqCount++;
 
@@ -482,7 +484,8 @@ void BaseBBoxCropper::cropping() {
             //      (c) the score of the bounding box 
             //      (d) the class of the bounding box
             std::vector<std::pair<uint8_t, uint16_t>> indexLists = crop(concatImageList,
-                                                                        msvc_concat.concatDims,
+                                                                        msvc_concat.list,
+                                                                        currReq.req_concatInfo[i],
                                                                         orig_h,
                                                                         orig_w,
                                                                         infer_h,

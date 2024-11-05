@@ -47,8 +47,11 @@ struct RequestData {
  */
 
 struct RequestConcatInfo {
+    // The total number of images that can be added to the frame.
+    uint8_t totalNumImages = 0;
+    // The number of images that have been added to the frame.
     // Added by 1 every time a new image is added to the frame.
-    uint8_t numImages = 0;
+    uint8_t numImagesAdded = 0;
     // The index of the first image of the frame in the batch.
     uint16_t firstImageIndex = 0;
 };

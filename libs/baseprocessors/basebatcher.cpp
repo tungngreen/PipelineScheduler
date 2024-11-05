@@ -119,7 +119,7 @@ inline void BaseBatcher::executeBatching(BatchTimeType &genTime, RequestSLOType 
     msvc_batchCount++;
 
     spdlog::get("container_agent")->trace("{0:s} emplaced a request of batch size {1:d} ", msvc_name,
-                                          msvc_onBufferBatchSize);
+                                           msvc_onBufferBatchSize);
     msvc_OutQueue[0]->emplace(outReq);
     // msvc_avgBatchSize += (msvc_onBufferBatchSize - msvc_avgBatchSize) / msvc_miniBatchCount;
     msvc_onBufferBatchSize = 0;
@@ -289,7 +289,11 @@ void BaseBatcher::batchRequests() {
         // Meaning the the timeout in pop() has been reached and no request was actually popped
         if (strcmp(currReq.req_travelPath[0].c_str(), "empty") == 0) {
             continue;
-
+        } else if (strcmp(currReq.req_travelPath[0].c_str(), "flush") == 0) {
+            if (msvc_onBufferBatchSize > 0) {
+                executeBatching(outBatch_genTime, outBatch_slo, outBatch_path, bufferData, batchConcatInfo, prevData);
+            }
+            continue;
         /**
          * @brief ONLY IN PROFILING MODE
          * Check if the profiling is to be stopped, if true, then send a signal to the downstream microservice to stop profiling
@@ -323,7 +327,7 @@ void BaseBatcher::batchRequests() {
         bufferData.insert(bufferData.end(), currReq.req_data.begin(), currReq.req_data.end());
         batchConcatInfo.emplace_back(currReq.req_concatInfo[0]);
         batchConcatInfo.back().firstImageIndex = msvc_numImagesInBatch;
-        msvc_numImagesInBatch += currReq.req_concatInfo[0].numImages;
+        msvc_numImagesInBatch += currReq.req_concatInfo[0].numImagesAdded;
 
         prevData.insert(prevData.end(), currReq.upstreamReq_data.begin(), currReq.upstreamReq_data.end());
 

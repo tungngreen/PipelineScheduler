@@ -216,7 +216,7 @@ void BaseBBoxCropperVerifier::cropping() {
 
         // Doing post processing for the whole batch
         for (BatchSizeType i = 0; i < currReq_batchSize; ++i) {
-            auto numImagesInFrame = currReq.req_concatInfo[i].numImages;
+            auto numImagesInFrame = currReq.req_concatInfo[i].numImagesAdded;
             std::vector<MemUsageType> totalInMem(numImagesInFrame, 0), totalOutMem(numImagesInFrame, 0), totalEncodedOutMem(numImagesInFrame, 0);
             msvc_overallTotalReqCount++;
 
