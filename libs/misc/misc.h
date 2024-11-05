@@ -69,11 +69,13 @@ struct ConcatDims {
     int32_t x1, y1, width, height;
 };
 
+typedef std::vector<ConcatDims> ConcatConfig;
+
 struct ConcatConfigs {
     uint8_t numImgs = 1;
     uint8_t currIndex = 0;
 
-    std::vector<ConcatDims> concatDims;
+    std::vector<ConcatConfig> list;
 };
 
 struct BatchInferProfile {
