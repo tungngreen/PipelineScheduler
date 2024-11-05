@@ -158,6 +158,7 @@ public:
         torch::save(model, path + "/latest_model.pt");
         out.close();
     }
+
     std::tuple<int, int, int> runStep();
     void rewardCallback(double throughput, double drops, double latency_penalty, double oversize_penalty);
     void setState(double curr_batch, double curr_resolution_choice,  double arrival, double pre_queue_size,
@@ -195,8 +196,6 @@ private:
     std::vector<double> rewards;
 
     bool first = true;
-    std::mt19937 re;
-    std::uniform_real_distribution<double> unif;
     std::ofstream out;
     std::string path;
     std::string cont_name;

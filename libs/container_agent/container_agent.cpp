@@ -550,10 +550,8 @@ ContainerAgent::ContainerAgent(const json& configs) {
     run = true;
     reportHwMetrics = false;
     profiler = nullptr;
-    std::thread receiver(&ContainerAgent::HandleRecvRpcs, this);
-    receiver.detach();
-
     initiateMicroservices(configs);
+
     hasDataReader = cont_msvcsGroups["receiver"].msvcList[0]->msvc_type == MicroserviceType::DataReader;
     isDataSource = hasDataReader && (cont_msvcsGroups["inference"].msvcList.size() == 0);
     if (cont_systemName == "fcpo" && !isDataSource) {
@@ -564,6 +562,9 @@ ContainerAgent::ContainerAgent(const json& configs) {
                                         rl_conf["update_step_incs"], rl_conf["federated_steps"], rl_conf["lambda"],
                                         rl_conf["gamma"], rl_conf["clip_epsilon"], rl_conf["penalty_weight"]);
     }
+
+    std::thread receiver(&ContainerAgent::HandleRecvRpcs, this);
+    receiver.detach();
 }
 
 void ContainerAgent::initiateMicroservices(const json &configs) {
