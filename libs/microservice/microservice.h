@@ -846,7 +846,6 @@ public:
 
     virtual ~Microservice() {
         waitStop();
-        spdlog::get("container_agent")->info("Microservice {} has stopped", msvc_name);
     }
 
     void waitStop () {

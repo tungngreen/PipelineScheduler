@@ -55,6 +55,11 @@ class GPUSender : public Sender {
 public:
     explicit GPUSender(const json &jsonConfigs);
 
+    ~GPUSender() {
+        waitStop();
+        spdlog::get("container_agent")->info("{0:s} has stopped", msvc_name);
+    }
+
     void Process();
 
     void dispatchThread() {
@@ -79,6 +84,11 @@ class LocalCPUSender : public Sender {
 public:
     LocalCPUSender(const json &jsonConfigs);
 
+    ~LocalCPUSender() {
+        waitStop();
+        spdlog::get("container_agent")->info("{0:s} has stopped", msvc_name);
+    }
+
     void dispatchThread() final {
         std::thread sender(&LocalCPUSender::Process, this);
         sender.detach();
@@ -91,6 +101,11 @@ public:
 class RemoteCPUSender : public Sender {
 public:
     RemoteCPUSender(const json &jsonConfigs);
+
+    ~RemoteCPUSender() {
+        waitStop();
+        spdlog::get("container_agent")->info("{0:s} has stopped", msvc_name);
+    }
 
     void dispatchThread() final {
         std::thread sender(&RemoteCPUSender::Process, this);

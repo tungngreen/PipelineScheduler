@@ -380,7 +380,7 @@ void BasePreprocessor::preprocess() {
         outReq.req_travelPath.emplace_back(currReq.req_travelPath[0] + "[" + msvc_hostDevice + "|" + msvc_containerName + "|" +
                                            std::to_string(msvc_overallTotalReqCount));
         outReq.upstreamReq_data.emplace_back(currReq.req_data[0]);
-        spdlog::get("container_agent")->trace("{0:s} popped a request. In queue size is {2:d}.",
+        spdlog::get("container_agent")->trace("{0:s} popped a request. In queue size is {1:d}.",
                                               msvc_name, msvc_InQueue.at(0)->size());
 
         // Resize the incoming request image the padd with the grey color
@@ -428,7 +428,7 @@ void BasePreprocessor::preprocess() {
             // TODO: Set daedline
             if (msvc_concat.currIndex == 0) {
                 msvc_OutQueue[0]->emplace(outReq);
-                spdlog::get("container_agent")->trace("{0:s} emplaced a request of batch size {1:d} ", msvc_name);
+                spdlog::get("container_agent")->trace("{0:s} emplaced a frame of {1:d} images", msvc_name, msvc_concat.currIndex + 1);
             }
 
             // if (msvc_concat.currIndex == 0) {
