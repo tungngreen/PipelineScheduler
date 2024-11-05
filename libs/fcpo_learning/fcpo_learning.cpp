@@ -1,18 +1,18 @@
 #include "fcpo_learning.h"
 
-FCPOAgent::FCPOAgent(std::string& cont_name, uint state_size, uint resolution_size, uint max_batch,  uint threading_size,
+FCPOAgent::FCPOAgent(std::string& cont_name, uint state_size, uint resolution_size, uint max_batch,  uint scaling_size,
                    CompletionQueue *cq, std::shared_ptr<InDeviceMessages::Stub> stub, torch::Dtype precision, 
                    uint update_steps, uint update_steps_inc, uint federated_steps, double lambda, double gamma,
                    double clip_epsilon, double penalty_weight)
                    : precision(precision), cont_name(cont_name), cq(cq), stub(stub), lambda(lambda), gamma(gamma),
                      clip_epsilon(clip_epsilon), penalty_weight(penalty_weight), state_size(state_size),
-                     resolution_size(resolution_size), max_batch(max_batch), threading_size(threading_size),
+                     resolution_size(resolution_size), max_batch(max_batch), scaling_size(scaling_size),
                      update_steps(update_steps), update_steps_inc(update_steps_inc), federated_steps(federated_steps) {
     path = "../models/fcpo_learning/" + cont_name;
     std::filesystem::create_directories(std::filesystem::path(path));
     out.open(path + "/latest_log.csv");
 
-    model = std::make_shared<MultiPolicyNet>(state_size, resolution_size, max_batch, threading_size);
+    model = std::make_shared<MultiPolicyNet>(state_size, resolution_size, max_batch, scaling_size);
     std::string model_save = path + "/latest_model.pt";
     if (std::filesystem::exists(model_save)) torch::load(model, model_save);
     model->to(precision);
@@ -91,7 +91,7 @@ void FCPOAgent::federatedUpdate() {
     request.set_state_size(state_size);
     request.set_resolution_size(resolution_size);
     request.set_max_batch(max_batch);
-    request.set_threading_size(threading_size);
+    request.set_threading_size(scaling_size);
     torch::save(model, oss);
     request.set_network(oss.str());
     oss.str("");
