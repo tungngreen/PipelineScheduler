@@ -44,10 +44,47 @@ struct BCEdgeNet: torch::nn::Module {
 
 class BCEdgeAgent {
 public:
-    BCEdgeAgent();
-    ~BCEdgeAgent();
+    BCEdgeAgent(std::string& dev_name, uint state_size, uint max_batch, uint scaling_size, uint memory_size,
+                CompletionQueue *cq, std::shared_ptr<InDeviceMessages::Stub> stub, torch::Dtype precision = torch::kF64,
+                uint update_steps = 60, double lambda = 0.95, double gamma = 0.99, double clip_epsilon = 0.2);
+
+    ~BCEdgeAgent(){
+        torch::save(model, path + "/latest_model.pt");
+        out.close();
+    }
+
+    std::tuple<int, int, int> runStep();
 private:
     void update();
+    void selectAction();
+
+    std::mutex model_mutex;
+    std::shared_ptr<BCEdgeNet> model;
+    std::unique_ptr<torch::optim::Optimizer> optimizer;
+    torch::Dtype precision;
+    T state, log_prob, value;
+    std::vector<T> states, log_probs, values;
+    int batching, scaling, memory;
+    std::vector<int> batching_actions;
+    std::vector<int> scaling_actions;
+    std::vector<int> memory_actions;
+    std::vector<double> rewards;
+
+    std::ofstream out;
+    std::string path;
+    std::string dev_name;
+
+    double lambda;
+    double gamma;
+    double clip_epsilon;
+    double cumu_reward;
+    uint state_size;
+    uint max_batch;
+    uint scaling_size;
+    uint memory_size;
+
+    uint steps_counter = 0;
+    uint update_steps;
 };
 
 #endif //PIPEPLUSPLUS_BCEDGE_H
