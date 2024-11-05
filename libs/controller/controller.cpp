@@ -765,6 +765,7 @@ void Controller::StartContainer(ContainerHandle *container, bool easy_allocation
                 spdlog::get("container_agent")->warn("Model profile not found for container: {0:s}", container->name);
             }
             start_config["container"]["cont_modelProfile"] = modelProfile;
+            ctrl_fcpo_server->incrementClientCounter();
         }
 
         json base_config = start_config["container"]["cont_pipeline"];
@@ -1028,6 +1029,10 @@ void Controller::StopContainer(ContainerHandle *container, NodeHandle *device, b
     if (container->device_agent->cq != nullptr) GPR_ASSERT(container->device_agent->cq->Next(&got_tag, &ok));
     if (container->gpuHandle != nullptr)
         container->gpuHandle->removeContainer(container);
+    if (container->model != DataSource &&
+        container->model != Sink) {
+        ctrl_fcpo_server->decrementClientCounter();
+    }
     if (!forced) { //not forced means the container is stopped during scheduling and should be removed
         containers.removeContainer(container->name);
         container->device_agent->containers.erase(container->name);
