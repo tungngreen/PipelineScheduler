@@ -178,7 +178,7 @@ private:
         rewards.clear();
         log_probs.clear();
     }
-    std::tuple<int, int, int> selectAction();
+    void selectAction();
     T computeCumuRewards() const;
     T computeGae() const;
 
@@ -188,7 +188,7 @@ private:
     torch::Dtype precision;
     T state, log_prob, value;
     std::vector<T> states, log_probs, values;
-    std::tuple<int, int, int> actions;
+    int resolution, batching, scaling;
     std::vector<int> resolution_actions;
     std::vector<int> batching_actions;
     std::vector<int> scaling_actions;
@@ -196,6 +196,7 @@ private:
 
     bool first = true;
     std::mt19937 re;
+    std::uniform_real_distribution<double> unif;
     std::ofstream out;
     std::string path;
     std::string cont_name;
@@ -229,6 +230,14 @@ public:
 
     void addClient(FlData &data, std::shared_ptr<ControlCommands::Stub> stub, CompletionQueue *cq);
 
+    void incrementClientCounter() {
+        client_counter++;
+    }
+
+    void decrementClientCounter() {
+        client_counter--;
+    }
+
     void stop() { run = false; }
 
     nlohmann::json getConfig() {
@@ -242,7 +251,7 @@ public:
                 {"precision", boost::algorithm::to_lower_copy(p)},
                 {"update_steps", 60},
                 {"update_step_incs", 5},
-                {"federated_steps", 5}
+                {"federated_steps", 2}
         };
     }
 
