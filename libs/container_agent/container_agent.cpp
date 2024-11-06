@@ -1003,10 +1003,9 @@ void ContainerAgent::collectRuntimeMetrics() {
                 for (auto &recv: cont_msvcsGroups["receiver"].msvcList) pre_queueDrops += recv->GetQueueDrops();
                 inf_queueDrops = 0;
                 for (auto &pre: cont_msvcsGroups["preprocessor"].msvcList) inf_queueDrops += pre->GetQueueDrops();
-                queueDrops += pre_queueDrops + inf_queueDrops;
                 post_queueDrops = 0;
                 for (auto &inf: cont_msvcsGroups["inference"].msvcList) post_queueDrops += inf->GetQueueDrops();
-                queueDrops += post_queueDrops;
+                queueDrops += pre_queueDrops + inf_queueDrops + post_queueDrops;
 
 
                 avgExecutedBatchSize = 0.1;

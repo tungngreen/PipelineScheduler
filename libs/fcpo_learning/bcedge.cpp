@@ -7,7 +7,7 @@ BCEdgeAgent::BCEdgeAgent(std::string& dev_name, uint state_size, uint max_batch,
                            clip_epsilon(clip_epsilon), update_steps(update_steps) {
     path = "../models/bcedge/" + dev_name;
     std::filesystem::create_directories(std::filesystem::path(path));
-    out.open(path + "/latest_log.csv");
+    out.open(path + "/latest_log_" + getTimestampString() + ".csv");
 
     model = std::make_shared<BCEdgeNet>(state_size, max_batch, scaling_size, memory_size);
     std::string model_save = path + "/latest_model.pt";
