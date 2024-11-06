@@ -908,7 +908,7 @@ std::vector<float> getThrptsInPeriods(const std::vector<ClockType> &timestamps, 
 
 
 void ContainerAgent::collectRuntimeMetrics() {
-    unsigned int tmp_lateCount, lateCount = 0, queueDrops = 0, pre_queueDrops, inf_queueDrops, miniBatchCount, oldReqCount;
+    unsigned int tmp_lateCount, lateCount = 0, queueDrops = 0, pre_queueDrops, inf_queueDrops, post_queueDrops, miniBatchCount, oldReqCount;
     double avgRequestRate, avgExecutedBatchSize, latencyEWMA, avgLatency = 0;
     ArrivalRecordType arrivalRecords;
     ProcessRecordType processRecords;
@@ -1004,6 +1004,10 @@ void ContainerAgent::collectRuntimeMetrics() {
                 inf_queueDrops = 0;
                 for (auto &pre: cont_msvcsGroups["preprocessor"].msvcList) inf_queueDrops += pre->GetQueueDrops();
                 queueDrops += pre_queueDrops + inf_queueDrops;
+                post_queueDrops = 0;
+                for (auto &inf: cont_msvcsGroups["inference"].msvcList) post_queueDrops += inf->GetQueueDrops();
+                queueDrops += post_queueDrops;
+
 
                 avgExecutedBatchSize = 0.1;
                 for (auto &bat: cont_msvcsGroups["batcher"].msvcList) avgExecutedBatchSize += bat->GetAvgExecutedBatchSize();
@@ -1020,9 +1024,9 @@ void ContainerAgent::collectRuntimeMetrics() {
                                          latencyEWMA / TIME_PRECISION_TO_SEC,
                                          (double) cont_msvcsGroups["batcher"].msvcList[0]->msvc_idealBatchSize / avgExecutedBatchSize);
             }
-            cont_fcpo_agent->setState(cont_msvcsGroups["batcher"].msvcList[0]->msvc_idealBatchSize,
-                                      cont_msvcsGroups["preprocessor"].msvcList[0]->msvc_concat.numImgs,
-                                      avgRequestRate, pre_queueDrops, inf_queueDrops);
+            cont_fcpo_agent->setState(cont_msvcsGroups["preprocessor"].msvcList[0]->msvc_concat.numImgs,
+                                      cont_msvcsGroups["batcher"].msvcList[0]->msvc_idealBatchSize,cont_threadingAction,
+                                      avgRequestRate, pre_queueDrops, inf_queueDrops, post_queueDrops);
             auto [targetRes, newBS, scaling] = cont_fcpo_agent->runStep();
             std::cout << "New Resolution: " << targetRes << ", New Batch Size: " << newBS << ", Scaling: " << scaling << std::endl;
             applyResolution(targetRes);
@@ -1132,6 +1136,7 @@ void ContainerAgent::applyBatchSize(int batchSize) {
 };
 
 void ContainerAgent::applyMultiThreading(int multiThreadingConfig) {
+    cont_threadingAction = static_cast<threadingAction>(multiThreadingConfig);
     int current_pre_count = cont_msvcsGroups["preprocessor"].msvcList.size();
     int current_post_count = cont_msvcsGroups["postprocessor"].msvcList.size();
     switch (multiThreadingConfig) {
