@@ -53,10 +53,23 @@ public:
         out.close();
     }
 
+
     std::tuple<int, int, int> runStep();
 private:
     void update();
+    void reset() {
+        cumu_reward = 0.0;
+        states.clear();
+        values.clear();
+        batching_actions.clear();
+        scaling_actions.clear();
+        memory_actions.clear();
+        rewards.clear();
+        log_probs.clear();
+    }
     void selectAction();
+    T computeCumuRewards() const;
+    T computeGae() const;
 
     std::mutex model_mutex;
     std::shared_ptr<BCEdgeNet> model;
