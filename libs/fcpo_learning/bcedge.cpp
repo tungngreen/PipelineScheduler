@@ -70,6 +70,10 @@ void BCEdgeAgent::update() {
     reset();
 }
 
+void BCEdgeAgent::setState(ModelType model_type, std::vector<int> data_shape, MsvcSLOType slo) {
+    state = torch::tensor({model_type, data_shape[0], data_shape[1], data_shape[2], (double) slo}, precision);
+}
+
 void BCEdgeAgent::selectAction() {
     std::unique_lock<std::mutex> lock(model_mutex);
     auto [policy1, policy2, policy3, val] = model->forward(state);
