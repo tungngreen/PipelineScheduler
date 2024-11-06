@@ -206,6 +206,7 @@ private:
     double gamma;
     double clip_epsilon;
     double cumu_reward;
+    double last_avg_reward = 0.0;
     double penalty_weight;
     uint state_size;
     uint resolution_size;

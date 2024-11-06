@@ -10,7 +10,7 @@ FCPOAgent::FCPOAgent(std::string& cont_name, uint state_size, uint resolution_si
                      update_steps(update_steps), update_steps_inc(update_steps_inc), federated_steps(federated_steps) {
     path = "../models/fcpo_learning/" + cont_name;
     std::filesystem::create_directories(std::filesystem::path(path));
-    out.open(path + "/latest_log.csv");
+    out.open(path + "/latest_log_" + getTimestampString() + ".csv");
 
     model = std::make_shared<MultiPolicyNet>(state_size, resolution_size, max_batch, scaling_size);
     std::string model_save = path + "/latest_model.pt";
@@ -29,6 +29,7 @@ FCPOAgent::FCPOAgent(std::string& cont_name, uint state_size, uint resolution_si
 }
 
 void FCPOAgent::update() {
+    steps_counter = 0;
     if (federated_steps_counter == 0) {
         spdlog::get("container_agent")->trace("Waiting for federated update, cancel !");
         return;
@@ -72,8 +73,12 @@ void FCPOAgent::update() {
     sw.stop();
 
     std::cout << "Training: " << sw.elapsed_microseconds() << std::endl;
-    out << "episodeEnd," << sw.elapsed_microseconds() << "," << federated_steps_counter << "," << steps_counter << "," << cumu_reward << "," << cumu_reward / (double) steps_counter << std::endl;
-    steps_counter = 0;
+    double avg_reward = cumu_reward / (double) update_steps;
+    out << "episodeEnd," << sw.elapsed_microseconds() << "," << federated_steps_counter << "," << steps_counter << "," << cumu_reward << "," << avg_reward << std::endl;
+    if (last_avg_reward < avg_reward) {
+        last_avg_reward = avg_reward;
+        torch::save(model, path + "/latest_model.pt");
+    }
 
     if (federated_steps_counter++ % federated_steps == 0) {
         spdlog::get("container_agent")->info("Federated training RL agent!");
