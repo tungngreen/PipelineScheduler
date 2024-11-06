@@ -4,8 +4,7 @@ BCEdgeAgent::BCEdgeAgent(std::string& dev_name, uint state_size, uint max_batch,
                          CompletionQueue *cq, std::shared_ptr<InDeviceMessages::Stub> stub, torch::Dtype precision,
                          uint update_steps, double lambda, double gamma, double clip_epsilon)
                          : precision(precision), dev_name(dev_name), lambda(lambda), gamma(gamma),
-                           clip_epsilon(clip_epsilon), state_size(state_size), max_batch(max_batch),
-                           scaling_size(scaling_size), memory_size(memory_size), update_steps(update_steps) {
+                           clip_epsilon(clip_epsilon), update_steps(update_steps) {
     path = "../models/bcedge/" + dev_name;
     std::filesystem::create_directories(std::filesystem::path(path));
     out.open(path + "/latest_log.csv");

@@ -92,10 +92,6 @@ private:
     double gamma;
     double clip_epsilon;
     double cumu_reward;
-    uint state_size;
-    uint max_batch;
-    uint scaling_size;
-    uint memory_size;
 
     uint steps_counter = 0;
     uint update_steps;
