@@ -10,9 +10,9 @@ struct BCEdgeNet: torch::nn::Module {
         policy_layer1 = register_module("policy_layer1", torch::nn::Linear(128, 64));
         policy_head1 = register_module("policy_head1", torch::nn::Linear(64, action1_size));
         policy_layer2 = register_module("policy_layer2", torch::nn::Linear(128, 64));
-        policy_head2 = register_module("policy_head2", torch::nn::Linear(64, action1_size));
+        policy_head2 = register_module("policy_head2", torch::nn::Linear(64, action2_size));
         policy_layer3 = register_module("policy_layer3", torch::nn::Linear(128, 64));
-        policy_head3 = register_module("policy_head3", torch::nn::Linear(64, action1_size));
+        policy_head3 = register_module("policy_head3", torch::nn::Linear(64, action3_size));
         value_layer = register_module("value_layer", torch::nn::Linear(128, 64));
         value_head = register_module("value_head", torch::nn::Linear(64, 1));
     }
@@ -52,7 +52,6 @@ public:
         torch::save(model, path + "/latest_model.pt");
         out.close();
     }
-
 
     std::tuple<int, int, int> runStep();
     void rewardCallback(double throughput, double latency, MsvcSLOType slo, double memory_usage);
