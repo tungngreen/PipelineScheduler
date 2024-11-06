@@ -8,6 +8,7 @@ from natsort import natsorted
 from objectcount import objectcount
 from run_log_analyzes import full_analysis
 from final_figures import create_figures
+from rl_analyzes import reward_plot, total_performance
 
 
 def batch(files):
@@ -136,3 +137,6 @@ if __name__ == '__main__':
         full_analysis(args, files)
     elif args.mode == 'final':
         create_figures(args, files)
+    elif args.mode == 'fcpo':
+        reward_plot(args.directory)
+        total_performance(args.directory)
