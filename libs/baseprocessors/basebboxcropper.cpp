@@ -454,50 +454,49 @@ void BaseBBoxCropper::cropping() {
                 } else {
                     continue;
                 }
-            } else {
-                // Otherwise, we need to do some cropping.
-
-                // First we need to set the infer_h,w and the original h,w of the image.
-                // infer_h,w are given in the last dimension of the request data from the inferencer
-                infer_h = currReq.req_data.back().shape[1];
-                infer_w = currReq.req_data.back().shape[2];
-                // orig_h,w are given in the shape of the image in the image list, which is carried from the preprocessor
-                // TODO: For now, we assume that all images in the concatenated frame have the same shape
-                orig_h = imageList[i].shape[1];
-                orig_w = imageList[i].shape[2];
-
-                // List of the images in the concatenated frame to be cropped from
-                std::vector<cv::cuda::GpuMat> concatImageList;
-                for (uint8_t concatInd = 0; concatInd < numImagesInFrame; concatInd++) {
-                    uint16_t imageIndexInBatch = currReq.req_concatInfo[i].firstImageIndex + concatInd;
-                    concatImageList.emplace_back(imageList[imageIndexInBatch].data);
-                }
-
-                // Cropping the detected bounding boxes from the original images and returns:
-                // 1/ in `concatIndexList`, the list of the indices of
-                //      (a) the images in the concatenated frame from which the bounding box is cropped
-                //      (b) the bounding boxes in the detected list of the whole frame to retrieve the scores and classes
-                // 2/ the list of the cropped bounding boxes in `singleImageBBoxList`, each object in this list contains:
-                //      (a) the cropped bounding box
-                //      (b) the coordinates of the bounding box in the original image
-                //      (c) the score of the bounding box
-                //      (d) the class of the bounding box
-                std::vector<std::pair<uint8_t, uint16_t>> indexLists = crop(concatImageList,
-                                                                            msvc_concat.list,
-                                                                            currReq.req_concatInfo[i],
-                                                                            orig_h,
-                                                                            orig_w,
-                                                                            infer_h,
-                                                                            infer_w,
-                                                                            numDetsInFrame,
-                                                                            nmsed_boxes + i * maxNumDets * 4,
-                                                                            nmsed_scores + i * maxNumDets,
-                                                                            msvc_confThreshold,
-                                                                            singleImageBBoxList);
-                // After cropping, due to some invalid detections,
-                // we need to update the number of detections in the frame
-                numDetsInFrame = indexLists.size();
             }
+            // Otherwise, we need to do some cropping.
+
+            // First we need to set the infer_h,w and the original h,w of the image.
+            // infer_h,w are given in the last dimension of the request data from the inferencer
+            infer_h = currReq.req_data.back().shape[1];
+            infer_w = currReq.req_data.back().shape[2];
+            // orig_h,w are given in the shape of the image in the image list, which is carried from the preprocessor
+            // TODO: For now, we assume that all images in the concatenated frame have the same shape
+            orig_h = imageList[i].shape[1];
+            orig_w = imageList[i].shape[2];
+
+            // List of the images in the concatenated frame to be cropped from
+            std::vector<cv::cuda::GpuMat> concatImageList;
+            for (uint8_t concatInd = 0; concatInd < numImagesInFrame; concatInd++) {
+                uint16_t imageIndexInBatch = currReq.req_concatInfo[i].firstImageIndex + concatInd;
+                concatImageList.emplace_back(imageList[imageIndexInBatch].data);
+            }
+
+            // Cropping the detected bounding boxes from the original images and returns:
+            // 1/ in `concatIndexList`, the list of the indices of
+            //      (a) the images in the concatenated frame from which the bounding box is cropped
+            //      (b) the bounding boxes in the detected list of the whole frame to retrieve the scores and classes
+            // 2/ the list of the cropped bounding boxes in `singleImageBBoxList`, each object in this list contains:
+            //      (a) the cropped bounding box
+            //      (b) the coordinates of the bounding box in the original image
+            //      (c) the score of the bounding box
+            //      (d) the class of the bounding box
+            std::vector<std::pair<uint8_t, uint16_t>> indexLists = crop(concatImageList,
+                                                                        msvc_concat.list,
+                                                                        currReq.req_concatInfo[i],
+                                                                        orig_h,
+                                                                        orig_w,
+                                                                        infer_h,
+                                                                        infer_w,
+                                                                        numDetsInFrame,
+                                                                        nmsed_boxes + i * maxNumDets * 4,
+                                                                        nmsed_scores + i * maxNumDets,
+                                                                        msvc_confThreshold,
+                                                                        singleImageBBoxList);
+            // After cropping, due to some invalid detections,
+            // we need to update the number of detections in the frame
+            numDetsInFrame = indexLists.size();
             spdlog::get("container_agent")->trace("{0:s} cropped {1:d} bboxes in image {2:d}", msvc_name, numDetsInFrame, i);
 
             std::vector<PerQueueOutRequest> outReqList(msvc_OutQueue.size());
