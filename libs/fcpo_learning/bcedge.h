@@ -55,6 +55,7 @@ public:
 
 
     std::tuple<int, int, int> runStep();
+    void rewardCallback(double throughput, double latency, MsvcSLOType slo, double memory_usage);
     void setState(ModelType model_type, std::vector<int> data_shape, MsvcSLOType slo);
 private:
     void update();

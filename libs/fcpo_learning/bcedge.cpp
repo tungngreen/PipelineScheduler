@@ -70,6 +70,14 @@ void BCEdgeAgent::update() {
     reset();
 }
 
+void BCEdgeAgent::rewardCallback(double throughput, double latency, MsvcSLOType slo, double memory_usage) {
+    if (latency <= slo) {
+        rewards.push_back(log(throughput/(latency/slo)));
+    } else {
+        rewards.push_back(exp(latency * memory_usage));
+    }
+}
+
 void BCEdgeAgent::setState(ModelType model_type, std::vector<int> data_shape, MsvcSLOType slo) {
     state = torch::tensor({model_type, data_shape[0], data_shape[1], data_shape[2], (double) slo}, precision);
 }
