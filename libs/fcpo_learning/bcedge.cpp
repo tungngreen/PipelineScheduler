@@ -26,6 +26,50 @@ BCEdgeAgent::BCEdgeAgent(std::string& dev_name, uint state_size, uint max_batch,
     values = {};
 }
 
+void BCEdgeAgent::update() {
+    spdlog::get("container_agent")->info("Locally training RL agent at cumulative Reward {}!", cumu_reward);
+    Stopwatch sw;
+    sw.start();
+
+    std::cout << "Sizes: " << states.size() << " " << batching_actions.size() << " " << scaling_actions.size() << " " << memory_actions.size() << " " << rewards.size() << values.size() << log_probs.size() << std::endl;
+
+    auto [policy1, policy2, policy3, val] = model->forward(torch::stack(states));
+    T action1_probs = torch::softmax(policy1, -1);
+    T action1_log_probs = torch::log(action1_probs.gather(-1, torch::tensor(batching_actions).reshape({-1, 1})).squeeze(-1));
+    T action2_probs = torch::softmax(policy2, -1);
+    T action2_log_probs = torch::log(action2_probs.gather(-1, torch::tensor(scaling_actions).reshape({-1, 1})).squeeze(-1));
+    T action3_probs = torch::softmax(policy3, -1);
+    T action3_log_probs = torch::log(action3_probs.gather(-1, torch::tensor(memory_actions).reshape({-1, 1})).squeeze(-1));
+    T new_log_probs = (action1_log_probs + action2_log_probs + action3_log_probs).squeeze(-1);
+
+    T ratio = torch::exp(new_log_probs - torch::stack(log_probs));
+
+    if (rewards.size() < states.size()) {
+        ratio = ratio.slice(0, 1, ratio.size(0), 1);
+        val = val.slice(0, 1, val.size(0), 1);
+    }
+
+    T clipped_ratio = torch::clamp(ratio, 1 - clip_epsilon, 1 + clip_epsilon);
+    T advantages = computeGae();
+    T policy_loss = -torch::min(ratio * advantages, clipped_ratio * advantages).to(precision).mean();
+
+    T value_loss = torch::mse_loss(val.squeeze(), computeCumuRewards());
+    T loss = (policy_loss + 0.5 * value_loss);
+
+    // Backpropagation
+    optimizer->zero_grad();
+    loss.backward();
+    std::unique_lock<std::mutex> lock(model_mutex);
+    optimizer->step();
+    sw.stop();
+
+    std::cout << "Training: " << sw.elapsed_microseconds() << std::endl;
+    out << "episodeEnd," << sw.elapsed_microseconds() << "," << 0 << "," << steps_counter << "," << cumu_reward << "," << cumu_reward / (double) steps_counter << std::endl;
+    steps_counter = 0;
+
+    reset();
+}
+
 void BCEdgeAgent::selectAction() {
     std::unique_lock<std::mutex> lock(model_mutex);
     auto [policy1, policy2, policy3, val] = model->forward(state);
@@ -68,4 +112,21 @@ T BCEdgeAgent::computeGae() const {
         next_value = values[t].item<double>();
     }
     return torch::tensor(advantages).to(precision);
+}
+
+std::tuple<int, int, int> BCEdgeAgent::runStep() {
+    Stopwatch sw;
+    sw.start();
+    selectAction();
+    cumu_reward += (steps_counter) ? rewards[steps_counter - 1] : 0;
+
+    steps_counter++;
+    sw.stop();
+    out << "step," << sw.elapsed_microseconds() << "," << 0 << "," << steps_counter << "," << cumu_reward  << "," << batching << "," << scaling << "," << memory << std::endl;
+
+    if (steps_counter%update_steps == 0) {
+        std::thread t(&BCEdgeAgent::update, this);
+        t.detach();
+    }
+    return std::make_tuple(batching + 1, scaling + 1, memory);
 }
