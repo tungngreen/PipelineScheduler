@@ -44,9 +44,8 @@ struct BCEdgeNet: torch::nn::Module {
 
 class BCEdgeAgent {
 public:
-    BCEdgeAgent(std::string& dev_name, uint state_size, uint max_batch, uint scaling_size, uint memory_size,
-                CompletionQueue *cq, std::shared_ptr<InDeviceMessages::Stub> stub, torch::Dtype precision = torch::kF64,
-                uint update_steps = 60, double lambda = 0.95, double gamma = 0.99, double clip_epsilon = 0.2);
+    BCEdgeAgent(std::string& dev_name, torch::Dtype precision = torch::kF64, uint update_steps = 60,
+                double lambda = 0.95, double gamma = 0.99, double clip_epsilon = 0.2);
 
     ~BCEdgeAgent(){
         torch::save(model, path + "/latest_model.pt");

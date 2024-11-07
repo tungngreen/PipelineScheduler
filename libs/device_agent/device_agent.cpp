@@ -144,8 +144,7 @@ DeviceAgent::DeviceAgent(const std::string &controller_url) : DeviceAgent() {
             sql += "gpu_" + std::to_string(i) + "_usage INT," // percentage (1-100)
                    "gpu_" + std::to_string(i) + "_mem_usage INT,"; // Megabytes
         };
-        sql += "   PRIMARY KEY (timestamps)"
-                                                                                    ");";
+        sql += "   PRIMARY KEY (timestamps));";
         pushSQL(*dev_metricsServerConn, sql);
 
         sql = "GRANT ALL PRIVILEGES ON " + dev_hwMetricsTableName + " TO " + "controller, container_agent" + ";";
@@ -156,6 +155,10 @@ DeviceAgent::DeviceAgent(const std::string &controller_url) : DeviceAgent() {
 
         sql = "CREATE INDEX ON " + dev_hwMetricsTableName + " (timestamps);";
         pushSQL(*dev_metricsServerConn, sql);
+    }
+
+    if (dev_system_name == "BCE") {
+        dev_bcedge_agent = new BCEdgeAgent(dev_name, torch::kF32);
     }
 
     running = true;
@@ -338,6 +341,10 @@ void DeviceAgent::ContainersLifeCheck() {
         ClientContext context;
         Status status;
         CompletionQueue *cq = container.second.cq;
+        if (!cq) {
+            spdlog::get("container_agent")->error("Container {}'s cq is null!", container.first);
+            continue;
+        }
         std::unique_ptr<ClientAsyncResponseReader<EmptyMessage>> rpc(
                 container.second.stub->AsyncKeepAlive(&context, request, cq));
 
