@@ -53,7 +53,7 @@ void BaseBBoxCropperVerifier::cropping() {
 
 
     cudaStream_t postProcStream;
-    cv::cuda::Stream postProcCVStream;
+    cv::cuda::Stream *postProcCVStream;
 
     // Height and width of the image used for inference
     int orig_h, orig_w, infer_h, infer_w;
@@ -111,7 +111,7 @@ void BaseBBoxCropperVerifier::cropping() {
 
                 setDevice();
                 checkCudaErrorCode(cudaStreamCreate(&postProcStream), __func__);
-                postProcCVStream = cv::cuda::StreamAccessor::wrapStream(postProcStream);
+                postProcCVStream = new cv::cuda::Stream();
 
 
                 msvc_inferenceShape = upstreamMicroserviceList.at(0).expectedShape;
@@ -245,8 +245,8 @@ void BaseBBoxCropperVerifier::cropping() {
 
                 if (msvc_activeOutQueueIndex.at(0) == 1) { //Local CPU
                     cv::Mat out;
-                    imageList[imageIndexInBatch].data.download(out, postProcCVStream);
-                    postProcCVStream.waitForCompletion();
+                    imageList[imageIndexInBatch].data.download(out, *postProcCVStream);
+                    postProcCVStream->waitForCompletion();
                     if (msvc_OutQueue.at(0)->getEncoded()) {
                         out = encodeResults(out);
                         totalEncodedOutMem[j] = out.channels() * out.rows * out.cols * CV_ELEM_SIZE1(out.type());
@@ -319,8 +319,11 @@ void BaseBBoxCropperVerifier::cropping() {
         // Synchronize the cuda stream
     }
 
-
     checkCudaErrorCode(cudaStreamDestroy(postProcStream), __func__);
+    if (postProcCVStream) {
+        delete postProcCVStream;
+        postProcCVStream = nullptr; // Avoid dangling pointer
+    }
     msvc_logFile.close();
     STOPPED = true;
 }

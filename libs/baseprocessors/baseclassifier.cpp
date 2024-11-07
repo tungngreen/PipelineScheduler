@@ -46,7 +46,7 @@ void BaseClassifier::classify() {
 
 
     cudaStream_t postProcStream;
-    cv::cuda::Stream postProcCVStream;
+    cv::cuda::Stream *postProcCVStream = nullptr;
 
     NumQueuesType queueIndex = 0;
 
@@ -77,7 +77,7 @@ void BaseClassifier::classify() {
 
                 setDevice();
                 checkCudaErrorCode(cudaStreamCreate(&postProcStream), __func__);
-                postProcCVStream = cv::cuda::StreamAccessor::wrapStream(postProcStream);
+                postProcCVStream = new cv::cuda::Stream();
                 
                 BatchSizeType batchSize = msvc_allocationMode == AllocationMode::Conservative ? msvc_idealBatchSize : msvc_maxBatchSize;
                 predictedProbs = new float[batchSize * msvc_numClasses];
@@ -148,8 +148,8 @@ void BaseClassifier::classify() {
 
             if (msvc_activeOutQueueIndex.at(queueIndex) == 1) { //Local CPU
                 cv::Mat out;
-                currReq.upstreamReq_data[i].data.download(out, postProcCVStream);
-                postProcCVStream.waitForCompletion();
+                currReq.upstreamReq_data[i].data.download(out, *postProcCVStream);
+                postProcCVStream->waitForCompletion();
                 if (msvc_OutQueue.at(queueIndex)->getEncoded()) {
                     out = encodeResults(out);
                     totalEncodedOutMem = out.channels() * out.rows * out.cols * CV_ELEM_SIZE1(out.type());
@@ -213,6 +213,10 @@ void BaseClassifier::classify() {
 
     }
     checkCudaErrorCode(cudaStreamDestroy(postProcStream), __func__);
+    if (postProcCVStream) {
+        delete postProcCVStream;
+        postProcCVStream = nullptr; // Avoid dangling pointer
+    }
     msvc_logFile.close();
     STOPPED = true;
 }
