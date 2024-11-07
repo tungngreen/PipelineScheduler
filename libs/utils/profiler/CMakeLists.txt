@@ -55,6 +55,7 @@ target_compile_features(profiler
 # we can have multiple versions installed at the same time.
 set(PROJECT_PREFIX profiler)
 
+
 # Defines the headers for this library.
 # https://cmake.org/cmake/help/v3.11/command/target_include_directories.html
 target_include_directories(profiler
@@ -63,7 +64,7 @@ target_include_directories(profiler
             $<BUILD_INTERFACE:${profiler_SOURCE_DIR}/>
             # Used when installing the library:
             $<INSTALL_INTERFACE:${PROJECT_PREFIX}>
-            ${CUDA_INCLUDE_DIRS} 
+            ${CUDA_INCLUDE_DIRS}
         PRIVATE
             # Used only when building the library:
             src)

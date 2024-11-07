@@ -299,6 +299,7 @@ BasePreprocessor::BasePreprocessor(const BasePreprocessor &other) : Microservice
     msvc_subVals = other.msvc_subVals;
     msvc_divVals = other.msvc_divVals;
     msvc_toReloadConfigs = other.msvc_toReloadConfigs;
+    msvc_concat = other.msvc_concat;
 }
 
 
@@ -312,7 +313,7 @@ void BasePreprocessor::preprocess() {
     std::vector<Request<LocalGPUReqDataType>> outBatch;
 
     // Incoming request
-    Request<LocalGPUReqDataType> currReq, outReq;
+    Request<LocalGPUReqDataType> currReq;
 
     Request<LocalCPUReqDataType> currCPUReq;
 
@@ -370,6 +371,8 @@ void BasePreprocessor::preprocess() {
                                                        msvc_imgType);
             outReq.req_data[0].shape = RequestDataShapeType({(msvc_outReqShape.at(0))[0][0], (msvc_outReqShape.at(0))[0][1],
                                                              (msvc_outReqShape.at(0))[0][2]});
+
+            outReq.req_concatInfo = {RequestConcatInfo{msvc_concat.numImgs, 0, 0}};
             outReq.upstreamReq_data = {};
         }
 
@@ -378,7 +381,7 @@ void BasePreprocessor::preprocess() {
         outReq.req_travelPath.emplace_back(currReq.req_travelPath[0] + "[" + msvc_hostDevice + "|" + msvc_containerName + "|" +
                                            std::to_string(msvc_overallTotalReqCount));
         outReq.upstreamReq_data.emplace_back(currReq.req_data[0]);
-        spdlog::get("container_agent")->trace("{0:s} popped a request. In queue size is {2:d}.",
+        spdlog::get("container_agent")->trace("{0:s} popped a request. In queue size is {1:d}.",
                                               msvc_name, msvc_InQueue.at(0)->size());
 
         // Resize the incoming request image the padd with the grey color
@@ -389,13 +392,15 @@ void BasePreprocessor::preprocess() {
                                  msvc_colorCvtType,
                                  *preProcStream);
 
+        ConcatConfig &currConcatConfig = msvc_concat.list[msvc_concat.numImgs];
+
         bool success = resizeIntoFrame(
             data.data,
             outReq.req_data[0].data,
-            msvc_concat.concatDims[msvc_concat.currIndex].x1,
-            msvc_concat.concatDims[msvc_concat.currIndex].y1,
-            msvc_concat.concatDims[msvc_concat.currIndex].height,
-            msvc_concat.concatDims[msvc_concat.currIndex].width,
+            currConcatConfig[msvc_concat.currIndex].x1,
+            currConcatConfig[msvc_concat.currIndex].y1,
+            currConcatConfig[msvc_concat.currIndex].height,
+            currConcatConfig[msvc_concat.currIndex].width,
             *preProcStream,
             msvc_imgType,
             msvc_colorCvtType,
@@ -407,25 +412,26 @@ void BasePreprocessor::preprocess() {
             continue;
         } else {
             spdlog::get("container_agent")->trace("{0:s} resized an image of [{1:d}, {2:d}] -> "
-                                                  "[{3:d}, {4:d}] and put into frame at index {5:d}.",
+                                                  "[{3:d}, {4:d}] and put into frame at index {5:d}/{6:d}.",
                                                   msvc_name,
                                                   currReq.req_data[0].data.rows,
                                                   currReq.req_data[0].data.cols,
                                                   (this->msvc_outReqShape.at(0))[0][1],
                                                   (this->msvc_outReqShape.at(0))[0][2],
-                                                  msvc_concat.currIndex);
+                                                  msvc_concat.currIndex, msvc_concat.numImgs);
 
             // Consider this the moment the request preprocessed and is waiting to be batched
             // 6. The moment the request's preprocessing is completed (SIXTH_TIMESTAMP)
             timeNow = std::chrono::high_resolution_clock::now();
             outReq.req_origGenTime.back().emplace_back(timeNow);
+            outReq.req_concatInfo[0].numImagesAdded++;
             msvc_concat.currIndex = (++msvc_concat.currIndex % msvc_concat.numImgs);
 
             // If the buffer frame is full, then send the frame to the batcher
             // TODO: Set daedline
             if (msvc_concat.currIndex == 0) {
                 msvc_OutQueue[0]->emplace(outReq);
-                spdlog::get("container_agent")->trace("{0:s} emplaced a request of batch size {1:d} ", msvc_name);
+                spdlog::get("container_agent")->trace("{0:s} emplaced a frame of {1:d} images", msvc_name, msvc_concat.currIndex + 1);
             }
 
             // if (msvc_concat.currIndex == 0) {
@@ -447,14 +453,25 @@ void BasePreprocessor::preprocess() {
                             {"STOP_PROFILING"},
                             0,
                             {},
+                            {},
                             {}
                     }
             );
             continue;
         }
     }
+    if (preProcStream) {
+        delete preProcStream;
+        preProcStream = nullptr;
+    }
     msvc_logFile.close();
     STOPPED = true;
+}
+
+void BasePreprocessor::flushBuffers() {
+    if (msvc_concat.currIndex == 0) return;
+    msvc_OutQueue[0]->emplace(outReq);
+    msvc_concat.currIndex = 0;
 }
 
 // inline void BasePreprocessor::executeBatch(BatchTimeType &genTime, RequestSLOType &slo, RequestPathType &path,

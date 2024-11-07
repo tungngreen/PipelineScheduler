@@ -129,4 +129,5 @@ void DataReader::Process() {
         }
         frameCount++;
     }
+    STOPPED = true;
 };
