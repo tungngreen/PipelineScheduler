@@ -1,17 +1,17 @@
 {
-    "container": {
-        "cont_experimentName": "rl1",
-        "cont_systemName": "fcpo",
+    "container" : {
+        "cont_experimentName": "prof",
+        "cont_systemName": "ppp",
         "cont_pipeName": "traffic",
-        "cont_taskName": "yolov5",
-        "cont_hostDevice": "nx",
-        "cont_hostDeviceType": "nx",
-        "cont_name": "yolov5_0",
+        "cont_taskName": "retina1face",
+        "cont_hostDevice": "server",
+        "cont_hostDeviceType": "server",
+        "cont_name": "retinaface_0",
         "cont_pipeline": [
             {
                 "msvc_name": "receiver",
                 "msvc_numInstances": 1,
-                "msvc_idealBatchSize": 1,
+                "msvc_idealBatchSize": 2,
                 "msvc_dnstreamMicroservices": [
                     {
                         "nb_classOfInterest": -1,
@@ -33,8 +33,8 @@
                 "msvc_dataShape": [
                     [
                         3,
-                        1280,
-                        720
+                        576,
+                        640
                     ]
                 ],
                 "msvc_pipelineSLO": 999999,
@@ -47,7 +47,7 @@
                             "0.0.0.0:55011"
                         ],
                         "nb_maxQueueSize": 100,
-                        "nb_name": "datasource",
+                        "nb_name": "yolov5",
                         "nb_expectedShape": [
                             [
                                 -1,
@@ -77,7 +77,7 @@
                         "nb_expectedShape": [
                             [
                                 3,
-                                640,
+                                576,
                                 640
                             ]
                         ]
@@ -113,17 +113,18 @@
                 "msvc_imgType": 16,
                 "msvc_colorCvtType": 4,
                 "msvc_resizeInterpolType": 3,
-                "msvc_imgNormScale": "1/255",
+                "msvc_imgNormScale": "1/1",
                 "msvc_subVals": [
-                    0,
-                    0,
-                    0
+                    104,
+                    117,
+                    123
                 ],
                 "msvc_divVals": [
                     1,
                     1,
                     1
                 ]
+
             },
             {
                 "msvc_name": "batcher",
@@ -167,7 +168,7 @@
                         "nb_expectedShape": [
                             [
                                 3,
-                                640,
+                                576,
                                 640
                             ]
                         ]
@@ -191,7 +192,7 @@
                         "nb_name": "postprocessor",
                         "nb_expectedShape": [
                             [
-                                1 
+                                1
                             ],
                             [
                                 100,
@@ -226,7 +227,7 @@
                         "nb_expectedShape": [
                             [
                                 3,
-                                640,
+                                576,
                                 640
                             ]
                         ]
@@ -237,17 +238,16 @@
                 "calibration": "",
                 "di": 0,
                 "mbs": 1,
-                "cbs":1,
+                "cbs":1, 
                 "normalize": true,
                 "obs": 1,
-                "path": "../models/yolov5n_dynamic_nms_nx_fp32_8_1.engine",
+                "path": "../models/retina_multiface_640_3090_fp32_32_1.engine",
                 "prec": 4,
-                "device": 0,
-                "msvc_imgNormScale": "1/255",
+                "msvc_imgNormScale": "1/1",
                 "msvc_subVals": [
-                    0,
-                    0,
-                    0
+                    104,
+                    117,
+                    123
                 ],
                 "msvc_divVals": [
                     1,
@@ -258,10 +258,10 @@
             {
                 "msvc_name": "postprocessor",
                 "msvc_numInstances": 1,
-                "msvc_idealBatchSize": 1,
+                "msvc_idealBatchSize": 2,
                 "msvc_dnstreamMicroservices": [
                     {
-                        "nb_classOfInterest": 2,
+                        "nb_classOfInterest": -1,
                         "nb_commMethod": 4,
                         "nb_link": [
                             ""
@@ -305,7 +305,7 @@
                         "nb_expectedShape": [
                             [
                                 3,
-                                640,
+                                576,
                                 640
                             ]
                         ]
@@ -313,22 +313,22 @@
                 ],
                 "msvc_maxQueueSize": 100,
                 "=========================================Here ends the common part of the microservice configuration": "The following are the specific configurations for each microservice.",
-                "msvc_confThreshold": 0.25,
+                "msvc_confThreshold": 0.3,
                 "msvc_augment": false
             },
             {
                 "msvc_name": "sender",
                 "msvc_numInstances": 1,
-                "msvc_idealBatchSize": 20,
+                "msvc_idealBatchSize": 4,
                 "msvc_dnstreamMicroservices": [
                     {
                         "nb_classOfInterest": -1,
                         "nb_commMethod": 2,
                         "nb_link": [
-                            "localhost:55055"
+                            "143.248.57.132:55055"
                         ],
                         "nb_maxQueueSize": 100,
-                        "nb_name": "name",
+                        "nb_name": "dummy_receiver_0",
                         "nb_expectedShape": [
                             [
                                 -1,
@@ -344,7 +344,7 @@
                     ]
                 ],
                 "msvc_pipelineSLO": 999999,
-                "msvc_type": 4002,
+                "msvc_type": 4001,
                 "msvc_upstreamMicroservices": [
                     {
                         "nb_classOfInterest": -2,
@@ -356,8 +356,8 @@
                         "nb_name": "postprocessor",
                         "nb_expectedShape": [
                             [
-                                -1,
-                                -1
+                                0,
+                                0
                             ]
                         ]
                     }
@@ -381,27 +381,13 @@
     },
     "profiling": {
         "profile_minBatch": 1,
-        "profile_maxBatch": 8,
+        "profile_maxBatch": 64,
         "profile_stepMode": 1,
         "profile_step": 1,
-        "profile_templateModelPath": "../models/yolov5n_dynamic_nms_nx_fp32_16_1.engine",
+        "profile_templateModelPath": "../models/retina_single_face_3090_fp32_[batch]_1.engine",
         "profile_inputRandomizeScheme": 0,
         "profile_numWarmUpBatches": 10,
         "profile_numProfileBatches": 100,
         "profile_numProfileReqs": 1800
-    },
-    "fcpo": {
-        "state_size": 5,
-        "resolution_size": 4,
-        "batch_size": 16,
-        "threads_size": 4,
-        "lambda": 0.95,
-        "gamma": 0.99,
-        "clip_epsilon": 0.2,
-        "penalty_weight": 0.1,
-        "precision": "float",
-        "update_steps": 60,
-        "update_step_incs": 5,
-        "federated_steps": 5
     }
 }

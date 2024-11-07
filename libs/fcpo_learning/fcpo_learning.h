@@ -149,7 +149,7 @@ struct MultiPolicyNet: torch::nn::Module {
 
 class FCPOAgent {
 public:
-    FCPOAgent(std::string& cont_name, uint state_size, uint resolution_size, uint max_batch, uint threading_size,
+    FCPOAgent(std::string& cont_name, uint state_size, uint resolution_size, uint max_batch, uint scaling_size,
              CompletionQueue *cq, std::shared_ptr<InDeviceMessages::Stub> stub, torch::Dtype precision = torch::kF64,
              uint update_steps = 60, uint update_steps_inc = 5, uint federated_steps = 5, double lambda = 0.95,
              double gamma = 0.99, double clip_epsilon = 0.2, double penalty_weight = 0.1);
@@ -158,10 +158,11 @@ public:
         torch::save(model, path + "/latest_model.pt");
         out.close();
     }
+
     std::tuple<int, int, int> runStep();
     void rewardCallback(double throughput, double drops, double latency_penalty, double oversize_penalty);
-    void setState(double curr_batch, double curr_resolution_choice,  double arrival, double pre_queue_size,
-                  double inf_queue_size);
+    void setState(double curr_resolution, double curr_batch, double curr_scaling,  double arrival, double pre_queue_size,
+                  double inf_queue_size, double post_queue_size);
     void federatedUpdateCallback(FlData &response);
 
 private:
@@ -178,7 +179,7 @@ private:
         rewards.clear();
         log_probs.clear();
     }
-    std::tuple<int, int, int> selectAction();
+    void selectAction();
     T computeCumuRewards() const;
     T computeGae() const;
 
@@ -188,14 +189,13 @@ private:
     torch::Dtype precision;
     T state, log_prob, value;
     std::vector<T> states, log_probs, values;
-    std::tuple<int, int, int> actions;
+    int resolution, batching, scaling;
     std::vector<int> resolution_actions;
     std::vector<int> batching_actions;
     std::vector<int> scaling_actions;
     std::vector<double> rewards;
 
     bool first = true;
-    std::mt19937 re;
     std::ofstream out;
     std::string path;
     std::string cont_name;
@@ -206,11 +206,12 @@ private:
     double gamma;
     double clip_epsilon;
     double cumu_reward;
+    double last_avg_reward = 0.0;
     double penalty_weight;
     uint state_size;
     uint resolution_size;
     uint max_batch;
-    uint threading_size;
+    uint scaling_size;
 
     uint steps_counter = 0;
     uint update_steps;
@@ -229,6 +230,14 @@ public:
 
     void addClient(FlData &data, std::shared_ptr<ControlCommands::Stub> stub, CompletionQueue *cq);
 
+    void incrementClientCounter() {
+        client_counter++;
+    }
+
+    void decrementClientCounter() {
+        client_counter--;
+    }
+
     void stop() { run = false; }
 
     nlohmann::json getConfig() {
@@ -242,7 +251,7 @@ public:
                 {"precision", boost::algorithm::to_lower_copy(p)},
                 {"update_steps", 60},
                 {"update_step_incs", 5},
-                {"federated_steps", 5}
+                {"federated_steps", 2}
         };
     }
 

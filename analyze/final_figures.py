@@ -15,6 +15,65 @@ algorithm_names = ['OURS', 'dis', 'jlf', 'rim']
 colors = ['#0072B2', '#E69F00', '#009E73', '#CC79A7', '#56B4E9', '#F0E442']
 label_map = {'ppp': 'OctopInf', 'OURS': 'OctopInf', 'dis': 'Distream', 'jlf': 'Jellyfish', 'rim': 'Rim'}
 
+def plot_over_time(directory, inlcude_people = True, schema = '', missed = True, memory = True, stepless = True):
+    fig, axs = plt.subplots(1, 1, figsize=(8, 3), gridspec_kw={'height_ratios': [1], 'width_ratios': [1]})
+    ax1 = axs
+    if memory: ax2 = ax1.twinx()
+    cars = []
+    if inlcude_people: people = []
+    # if the csvs do not exist, create them
+    if not os.path.exists(os.path.join(directory, 'df_cars.csv')) or not os.path.exists(
+            os.path.join(directory, 'df_people.csv')):
+        for f in natsorted(os.listdir(os.path.join(directory, 'OURS'))):
+            c, p, _, _ = read_file(os.path.join(directory, 'OURS', f))
+            if inlcude_people: people.extend(p)
+            cars.extend(c)
+        df_cars = pd.DataFrame(cars, columns=['path', 'latency', 'timestamps'])
+        df_cars.to_csv(os.path.join(directory, 'df_cars.csv'), index=False)
+        if inlcude_people:
+            df_people = pd.DataFrame(people, columns=['path', 'latency', 'timestamps'])
+            df_people.to_csv(os.path.join(directory, 'df_people.csv'), index=False)
+    else:
+        df_cars = pd.read_csv(os.path.join(directory, 'df_cars.csv'))
+        if inlcude_people: df_people = pd.read_csv(os.path.join(directory, 'df_people.csv'))
+    lables = ['Traffic Throughput', 'Surveillance Throughput']
+    for j, df in enumerate([df_cars, df_people] if inlcude_people else [df_cars]):
+        df['timestamps'] = df['timestamps'].apply(lambda x: int(x))
+        df['latency'] = df['latency'].apply(lambda x: int(x))
+        df['aligned_timestamp'] = (df['timestamps'] // 1e6).astype(int) * 1e6
+        df['throughput'] = df.groupby('aligned_timestamp')['latency'].transform('size')
+        df['aligned_timestamp'] = (df['aligned_timestamp'] - df['aligned_timestamp'].iloc[0]) / (60 * 1e6)
+        df = df.groupby('aligned_timestamp').agg({'throughput': 'mean'}).reset_index()
+        df = bucket_and_average(df, ['throughput'], num_buckets=780 if stepless else 80)
+        ax1.plot(df['aligned_timestamp'], df['throughput'], label=lables[j], color=colors[j], linewidth=3)
+    if missed:
+        if not os.path.exists(os.path.join(directory, 'missed.csv')):
+            missed = bucket_and_average(arrival_query(schema), ['queue_drops', 'late_requests'], num_buckets=780)
+            missed.to_csv(os.path.join(directory, 'missed.csv'), index=False)
+        else:
+            missed = pd.read_csv(os.path.join(directory, 'missed.csv'))
+        ax1.plot(missed['aligned_timestamp'], missed['queue_drops'], label='Dropped in Queues', color=colors[2],
+                 linewidth=2)
+        ax1.plot(missed['aligned_timestamp'], missed['late_requests'], label='Late Requests', color=colors[5], linewidth=2)
+        ax1.set_title('Throughput and Missed Requests over 13h', size=12)
+        ax1.set_ylabel('Throughput / Missed (objects / s)', size=12)
+    else:
+        ax1.set_title('Throughput over 13h', size=12)
+        ax1.set_ylabel('Throughput (objects / s)', size=12)
+    ax1.set_xlabel('Minutes Passed since Start (min)', size=12)
+    ax1.set_xlim([0, 780])
+    ax1.legend(loc='lower left', fontsize=12)
+    if memory:
+        ax1.plot(0, 0, label='Memory Usage', color='black', linestyle='--', linewidth=2)
+        if not os.path.exists(os.path.join(directory, 'memory.csv')):
+            memory = full_memory(schema, 780)
+            memory.to_csv(os.path.join(directory, 'memory.csv'), index=False)
+        else:
+            memory = pd.read_csv(os.path.join(directory, 'memory.csv'))
+        ax2.plot(memory['bucket'], memory['total_gpu_mem'] / 1024, label='Memory Usage', color='black', linestyle='--', linewidth=3)
+        ax2.set_ylabel('Memory Usage (GB)', size=12)
+    plt.tight_layout()
+    plt.show()
 
 def base_plot(data, ax, title):
     for j, a in enumerate(algorithm_names):
@@ -237,54 +296,5 @@ def create_figures(args, dirs):
     ########################################################################################################################
 
     if 'long' in figs:
-        fig, axs = plt.subplots(1, 1, figsize=(8, 3), gridspec_kw={'height_ratios': [1], 'width_ratios': [1]})
-        ax1 = axs
-        # ax2 = ax1.twinx()
-        cars = []
-        people = []
-        # if the csvs do not exist, create them
-        if not os.path.exists(os.path.join(args.directory, 'long', 'df_cars.csv')) or not os.path.exists(os.path.join(args.directory, 'long', 'df_people.csv')):
-            for f in natsorted(os.listdir(os.path.join(args.directory, 'long', 'OURS'))):
-                c, p, _, _ = read_file(os.path.join(args.directory, 'long', 'OURS', f))
-                cars.extend(c)
-                people.extend(p)
-            df_cars = pd.DataFrame(cars, columns=['path', 'latency', 'timestamps'])
-            df_cars.to_csv(os.path.join(args.directory, 'long', 'df_cars.csv'), index=False)
-            df_people = pd.DataFrame(people, columns=['path', 'latency', 'timestamps'])
-            df_people.to_csv(os.path.join(args.directory, 'long', 'df_people.csv'), index=False)
-        else:
-            df_cars = pd.read_csv(os.path.join(args.directory, 'long', 'df_cars.csv'))
-            df_people = pd.read_csv(os.path.join(args.directory, 'long', 'df_people.csv'))
-        lables = ['Traffic Throughput', 'Surveillance Throughput']
-        for j, df in enumerate([df_cars, df_people]):
-            df['timestamps'] = df['timestamps'].apply(lambda x: int(x))
-            df['latency'] = df['latency'].apply(lambda x: int(x))
-            df['aligned_timestamp'] = (df['timestamps'] // 1e6).astype(int) * 1e6
-            df['throughput'] = df.groupby('aligned_timestamp')['latency'].transform('size')
-            df['aligned_timestamp'] = (df['aligned_timestamp'] - df['aligned_timestamp'].iloc[0]) / (60 * 1e6)
-            df = df.groupby('aligned_timestamp').agg({'throughput': 'mean'}).reset_index()
-            df = bucket_and_average(df, ['throughput'], num_buckets=780)
-            ax1.plot(df['aligned_timestamp'], df['throughput'], label=lables[j], color=colors[j], linewidth=3)
-        # ax1.plot(0, 0, label='Memory Usage', color='black', linestyle='--', linewidth=2)
-        if not os.path.exists(os.path.join(args.directory, 'long', 'missed.csv')):
-            missed = bucket_and_average(arrival_query('long_ppp'), ['queue_drops', 'late_requests'], num_buckets=780)
-            missed.to_csv(os.path.join(args.directory, 'long', 'missed.csv'), index=False)
-        else:
-            missed = pd.read_csv(os.path.join(args.directory, 'long', 'missed.csv'))
-        ax1.plot(missed['aligned_timestamp'], missed['queue_drops'], label='Dropped in Queues', color=colors[2], linewidth=2)
-        ax1.plot(missed['aligned_timestamp'], missed['late_requests'], label='Late Requests', color=colors[5], linewidth=2)
-        ax1.set_title('Throughput and Missed Requests over 13h', size=12)
-        ax1.set_xlabel('Minutes Passed since Start (min)', size=12)
-        ax1.set_xlim([0, 780])
-        ax1.set_ylabel('Throughput / Missed (objects / s)', size=12)
-        ax1.legend(loc='lower left', fontsize=12)
-        # if not os.path.exists(os.path.join(args.directory, 'long', 'memory.csv')):
-        #     memory = full_memory('long_ppp', 780)
-        #     memory.to_csv(os.path.join(args.directory, 'long', 'memory.csv'), index=False)
-        # else:
-        #     memory = pd.read_csv(os.path.join(args.directory, 'long', 'memory.csv'))
-        # ax2.plot(memory['bucket'], memory['total_gpu_mem'] / 1024, label='Memory Usage', color='black', linestyle='--', linewidth=3)
-        # ax2.set_ylabel('Memory Usage (GB)', size=12)
-        plt.tight_layout()
-        plt.savefig('long_runtime.svg')
+        plot_over_time(os.path.join(args.directory, 'long'), schema='long_ppp', memory=False)
 

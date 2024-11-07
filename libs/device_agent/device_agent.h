@@ -404,6 +404,8 @@ protected:
     std::string dev_networkTableName;
 
     uint16_t dev_numCudaDevices{};
+
+    BCEdgeAgent *dev_bcedge_agent;
 };
 
 #endif //DEVICE_AGENT_H

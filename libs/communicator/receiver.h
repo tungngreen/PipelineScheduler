@@ -22,8 +22,10 @@ public:
     Receiver(const json &jsonConfigs);
 
     ~Receiver() override {
+        waitStop();
         server->Shutdown();
         cq->Shutdown();
+        spdlog::get("container_agent")->info("{0:s} has stopped", msvc_name);
     }
 
     template<typename ReqDataType>

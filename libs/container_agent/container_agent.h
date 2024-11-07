@@ -412,6 +412,7 @@ protected:
     std::map<std::string, MicroserviceGroup> cont_msvcsGroups;
 
     FCPOAgent *cont_fcpo_agent;
+    threadingAction cont_threadingAction = NoMultiThreads;
     uint64_t cont_rlIntervalMillisec = 1000;
     ClockType cont_nextRLDecisionTime = std::chrono::system_clock::now();
 };
