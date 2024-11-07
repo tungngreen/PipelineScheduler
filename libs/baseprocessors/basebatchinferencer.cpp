@@ -204,6 +204,7 @@ void BaseBatchInferencer::inference() {
             currReq.req_travelPath,
             currReq_batchSize,
             outReqData, //req_data
+            currReq.req_concatInfo,
             currReq.upstreamReq_data // upstreamReq_data
         };
         // // After inference, the gpumat inside `inbuffer` is no longer used and can be freed.
