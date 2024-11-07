@@ -120,7 +120,10 @@ void concatConfigsGenerator(
 class BasePreprocessor : public Microservice {
 public:
     BasePreprocessor(const json &jsonConfigs);
-    ~BasePreprocessor() = default;
+    ~BasePreprocessor() {
+        waitStop();
+        spdlog::get("container_agent")->info("{0:s} has stopped", msvc_name);
+    }
 
     BasePreprocessor(const BasePreprocessor &other);
 
@@ -139,12 +142,14 @@ public:
         preprocessor.detach();
     }
 
+    void flushBuffers() override;
+
     BasePreprocessorConfigs loadConfigsFromJson(const json &jsonConfigs);
 
     virtual void loadConfigs(const json &jsonConfigs, bool isConstructing = false) override;
 
 protected:
-    std::vector<cv::cuda::GpuMat> msvc_batchBuffer;
+    Request<LocalGPUReqDataType> outReq;
     template <typename T>
     bool validateRequest(Request<T> &req);
 
@@ -158,7 +163,10 @@ protected:
 class BaseBatcher : public Microservice {
 public:
     BaseBatcher(const json &jsonConfigs);
-    ~BaseBatcher() = default;
+    ~BaseBatcher() {
+        waitStop();
+        spdlog::get("container_agent")->info("{0:s} has stopped", msvc_name);
+    }
 
     virtual void batchRequests();
 
@@ -173,12 +181,9 @@ protected:
 
     inline bool isTimeToBatch() override;
 
-    template <typename T>
-    bool validateRequest(Request<T> &req);
-
-
     inline void executeBatching(BatchTimeType &genTime, RequestSLOType &slo, RequestPathType &path,
                              std::vector<RequestData<LocalGPUReqDataType>> &bufferData,
+                             BatchConcatInfo &concatInfo,
                              std::vector<RequestData<LocalGPUReqDataType>> &prevData);
 
     inline bool readModelProfile(const json &profile);
@@ -189,6 +194,7 @@ protected:
     // number of concatentated and ready to be batched requests
     BatchSizeType msvc_onBufferBatchSize = 0;
     BatchSizeType msvc_avgBatchSize;
+    uint16_t msvc_numImagesInBatch = 0;
 
     BatchInferProfileListType msvc_batchInferProfileList;
     ClockType oldestReqTime;
@@ -208,7 +214,10 @@ typedef uint16_t BatchSizeType;
 class BaseBatchInferencer : public Microservice {
 public:
     BaseBatchInferencer(const json &jsonConfigs);
-    ~BaseBatchInferencer() = default;
+    ~BaseBatchInferencer() {
+        waitStop();
+        spdlog::get("container_agent")->info("{0:s} has stopped", msvc_name);
+    }
     virtual void inference();
     virtual void inferenceProfiling();
 
@@ -258,13 +267,16 @@ struct BoundingBox {
  */
 inline std::vector<std::pair<uint8_t, uint16_t>> crop(
     const std::vector<cv::cuda::GpuMat> &images,
-    const std::vector<ConcatDims> &concatDims,
+    const std::vector<ConcatConfig> &allConcatConfigs,
+    const RequestConcatInfo &reqConcatInfo,
     int orig_h,
     int orig_w,
     int infer_h,
     int infer_w,
     uint16_t numDetections,
     const float *bbox_coorList,
+    const float *nmsed_scores,
+    const float confidenceThreshold,
     std::vector<BoundingBox<cv::cuda::GpuMat>> &croppedBBoxes
 );
 
@@ -282,7 +294,10 @@ public:
     BasePostprocessor(const json &jsonConfigs) : Microservice(jsonConfigs) {
         loadConfigs(jsonConfigs, true);
     };
-    ~BasePostprocessor() = default;
+    ~BasePostprocessor() {
+        waitStop();
+        spdlog::get("container_agent")->info("{0:s} has stopped", msvc_name);
+    }
 
     BasePostprocessor(const BasePostprocessor &other) : Microservice(other) {
         std::lock(msvc_overallMutex, other.msvc_overallMutex);
@@ -375,7 +390,10 @@ protected:
 class BaseBBoxCropper : public BasePostprocessor {
 public:
     BaseBBoxCropper(const json &jsonConfigs);
-    ~BaseBBoxCropper() = default;
+    ~BaseBBoxCropper() {
+        waitStop();
+        spdlog::get("container_agent")->info("{0:s} has stopped", msvc_name);
+    }
 
     BaseBBoxCropper(const BaseBBoxCropper &other) : BasePostprocessor(other) {};
 
@@ -404,12 +422,18 @@ public:
     }
 
     virtual void loadConfigs(const json &jsonConfigs, bool isConstructing = false) override;
+
+    bool msvc_augment = false;
+    float msvc_confThreshold = 0.5;
 };
 
 class BaseBBoxCropperAugmentation : public BasePostprocessor {
 public:
     BaseBBoxCropperAugmentation(const json &jsonConfigs);
-    ~BaseBBoxCropperAugmentation() = default;
+    ~BaseBBoxCropperAugmentation() {
+        waitStop();
+        spdlog::get("container_agent")->info("{0:s} has stopped", msvc_name);
+    }
 
     BaseBBoxCropperAugmentation(const BaseBBoxCropperAugmentation &other) : BasePostprocessor(other) {};
 
@@ -443,7 +467,10 @@ public:
 class BaseBBoxCropperVerifier : public BasePostprocessor {
 public:
     BaseBBoxCropperVerifier(const json& jsonConfigs);
-    ~BaseBBoxCropperVerifier() = default;
+    ~BaseBBoxCropperVerifier() {
+        waitStop();
+        spdlog::get("container_agent")->info("{0:s} has stopped", msvc_name);
+    }
 
     void cropping();
 
@@ -468,7 +495,10 @@ public:
 class BaseClassifier : public BasePostprocessor {
 public:
     BaseClassifier(const json &jsonConfigs);
-    ~BaseClassifier() = default;
+    ~BaseClassifier() {
+        waitStop();
+        spdlog::get("container_agent")->info("{0:s} has stopped", msvc_name);
+    }
 
     BaseClassifier(const BaseClassifier &other) : BasePostprocessor(other) {
         std::lock(msvc_overallMutex, other.msvc_overallMutex);
@@ -504,7 +534,10 @@ protected:
 class BaseSoftmaxClassifier : public BaseClassifier {
 public:
     BaseSoftmaxClassifier(const json &jsonConfigs);
-    ~BaseSoftmaxClassifier() = default;
+    ~BaseSoftmaxClassifier() {
+        waitStop();
+        spdlog::get("container_agent")->info("{0:s} has stopped", msvc_name);
+    }
 
     BaseSoftmaxClassifier(const BaseSoftmaxClassifier &other) : BaseClassifier(other) {};
 
@@ -515,7 +548,10 @@ public:
 class BaseKPointExtractor : public BasePostprocessor {
 public:
     BaseKPointExtractor(const json &jsonConfigs);
-    ~BaseKPointExtractor() = default;
+    ~BaseKPointExtractor() {
+        waitStop();
+        spdlog::get("container_agent")->info("{0:s} has stopped", msvc_name);
+    }
 
     BaseKPointExtractor(const BaseKPointExtractor &other) : BasePostprocessor(other) {};
 

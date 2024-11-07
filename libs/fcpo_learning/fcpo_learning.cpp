@@ -1,20 +1,18 @@
 #include "fcpo_learning.h"
 
-FCPOAgent::FCPOAgent(std::string& cont_name, uint state_size, uint resolution_size, uint max_batch,  uint threading_size,
+FCPOAgent::FCPOAgent(std::string& cont_name, uint state_size, uint resolution_size, uint max_batch,  uint scaling_size,
                    CompletionQueue *cq, std::shared_ptr<InDeviceMessages::Stub> stub, torch::Dtype precision, 
                    uint update_steps, uint update_steps_inc, uint federated_steps, double lambda, double gamma,
                    double clip_epsilon, double penalty_weight)
                    : precision(precision), cont_name(cont_name), cq(cq), stub(stub), lambda(lambda), gamma(gamma),
                      clip_epsilon(clip_epsilon), penalty_weight(penalty_weight), state_size(state_size),
-                     resolution_size(resolution_size), max_batch(max_batch), threading_size(threading_size),
+                     resolution_size(resolution_size), max_batch(max_batch), scaling_size(scaling_size),
                      update_steps(update_steps), update_steps_inc(update_steps_inc), federated_steps(federated_steps) {
     path = "../models/fcpo_learning/" + cont_name;
     std::filesystem::create_directories(std::filesystem::path(path));
-    out.open(path + "/latest_log.csv");
+    out.open(path + "/latest_log_" + getTimestampString() + ".csv");
 
-    std::random_device rd;
-    re = std::mt19937(rd());
-    model = std::make_shared<MultiPolicyNet>(state_size, resolution_size, max_batch, threading_size);
+    model = std::make_shared<MultiPolicyNet>(state_size, resolution_size, max_batch, scaling_size);
     std::string model_save = path + "/latest_model.pt";
     if (std::filesystem::exists(model_save)) torch::load(model, model_save);
     model->to(precision);
@@ -39,6 +37,8 @@ void FCPOAgent::update() {
     spdlog::get("container_agent")->info("Locally training RL agent at cumulative Reward {}!", cumu_reward);
     Stopwatch sw;
     sw.start();
+
+    std::cout << "Sizes: " << states.size() << " " << resolution_actions.size() << " " << batching_actions.size() << " " << scaling_actions.size() << " " << rewards.size() << values.size() << log_probs.size() << std::endl;
 
     auto [policy1, policy2, policy3, val] = model->forward(torch::stack(states));
     T action1_probs = torch::softmax(policy1, -1);
@@ -68,12 +68,17 @@ void FCPOAgent::update() {
     // Backpropagation
     optimizer->zero_grad();
     loss.backward();
-    std::lock_guard<std::mutex> lock(model_mutex);
+    std::unique_lock<std::mutex> lock(model_mutex);
     optimizer->step();
     sw.stop();
 
     std::cout << "Training: " << sw.elapsed_microseconds() << std::endl;
-    out << "episodeEnd," << sw.elapsed_microseconds() << "," << federated_steps_counter << "," << steps_counter << "," << cumu_reward << "," << cumu_reward / (double) steps_counter << std::endl;
+    double avg_reward = cumu_reward / (double) update_steps;
+    out << "episodeEnd," << sw.elapsed_microseconds() << "," << federated_steps_counter << "," << steps_counter << "," << cumu_reward << "," << avg_reward << std::endl;
+    if (last_avg_reward < avg_reward) {
+        last_avg_reward = avg_reward;
+        torch::save(model, path + "/latest_model.pt");
+    }
 
     if (federated_steps_counter++ % federated_steps == 0) {
         spdlog::get("container_agent")->info("Federated training RL agent!");
@@ -91,7 +96,7 @@ void FCPOAgent::federatedUpdate() {
     request.set_state_size(state_size);
     request.set_resolution_size(resolution_size);
     request.set_max_batch(max_batch);
-    request.set_threading_size(threading_size);
+    request.set_threading_size(scaling_size);
     torch::save(model, oss);
     request.set_network(oss.str());
     oss.str("");
@@ -124,11 +129,11 @@ void FCPOAgent::federatedUpdate() {
 
 void FCPOAgent::federatedUpdateCallback(FlData &response) {
     std::istringstream iss(response.network());
-    std::lock_guard<std::mutex> lock(model_mutex);
+    std::unique_lock<std::mutex> lock(model_mutex);
     torch::load(model, iss);
     steps_counter = 0;
-    update_steps += update_steps_inc; // Increase the number of steps for the next updates every time we finish federation
     federated_steps_counter = 1; // 1 means that we are starting local updates again until the next federation
+    if (update_steps < 300) update_steps += update_steps_inc; // Increase the number of steps for the next updates every time we finish federation
     reset();
 }
 
@@ -140,20 +145,21 @@ void FCPOAgent::rewardCallback(double throughput, double drops, double latency_p
     rewards.push_back(2 * throughput - drops - latency_penalty + (1 - oversize_penalty));
 }
 
-void FCPOAgent::setState(double curr_batch, double curr_resolution_choice, double arrival, double pre_queue_size, double inf_queue_size) {
-    state = torch::tensor({curr_batch / max_batch, curr_resolution_choice, arrival, pre_queue_size, inf_queue_size}, precision);
+void FCPOAgent::setState(double curr_resolution, double curr_batch, double curr_scaling,  double arrival,
+                         double pre_queue_size, double inf_queue_size, double post_queue_size) {
+    state = torch::tensor({curr_resolution, curr_batch / max_batch, curr_scaling, arrival, pre_queue_size, inf_queue_size, post_queue_size}, precision);
 }
 
-std::tuple<int, int, int> FCPOAgent::selectAction() {
-    std::lock_guard<std::mutex> lock(model_mutex);
+void FCPOAgent::selectAction() {
+    std::unique_lock<std::mutex> lock(model_mutex);
     auto [policy1, policy2, policy3, val] = model->forward(state);
 
     T action_dist = torch::multinomial(policy1, 1);  // Sample from policy (discrete distribution)
-    int resolution = action_dist.item<int>();  // Convert tensor to int action
+    resolution = action_dist.item<int>();  // Convert tensor to int action
     action_dist = torch::multinomial(policy2, 1);
-    int batching = action_dist.item<int>();
+    batching = action_dist.item<int>();
     action_dist = torch::multinomial(policy3, 1);
-    int scaling = action_dist.item<int>();
+    scaling = action_dist.item<int>();
 
 
     log_prob = torch::log(policy1[resolution]) + torch::log(policy2[batching]) + torch::log(policy3[scaling]);
@@ -163,7 +169,6 @@ std::tuple<int, int, int> FCPOAgent::selectAction() {
     resolution_actions.push_back(resolution);
     batching_actions.push_back(batching);
     scaling_actions.push_back(scaling);
-    return std::make_tuple(resolution, batching, scaling);
 }
 
 T FCPOAgent::computeCumuRewards() const {
@@ -192,18 +197,18 @@ T FCPOAgent::computeGae() const {
 std::tuple<int, int, int> FCPOAgent::runStep() {
     Stopwatch sw;
     sw.start();
-    actions = selectAction();
+    selectAction();
     cumu_reward += (steps_counter) ? rewards[steps_counter - 1] : 0;
 
     steps_counter++;
     sw.stop();
-    out << "step," << sw.elapsed_microseconds() << "," << federated_steps_counter << "," << steps_counter << "," << cumu_reward  << "," << std::get<0>(actions) << "," << std::get<1>(actions) << "," << std::get<2>(actions) << std::endl;
+    out << "step," << sw.elapsed_microseconds() << "," << federated_steps_counter << "," << steps_counter << "," << cumu_reward  << "," << resolution << "," << batching << "," << scaling << std::endl;
 
     if (steps_counter%update_steps == 0) {
         std::thread t(&FCPOAgent::update, this);
         t.detach();
     }
-    return std::make_tuple(std::get<0>(actions) + 1, std::get<1>(actions) + 1, std::get<2>(actions));
+    return std::make_tuple(resolution + 1, batching + 1, scaling);
 }
 
 
@@ -223,8 +228,8 @@ FCPOServer::FCPOServer(std::string run_name, uint state_size, torch::Dtype preci
 
     lambda = 0.95;
     gamma = 0.99;
-    penalty_weight = 0.1;
     clip_epsilon = 0.2;
+    penalty_weight = 0.1;
     federated_clients = {};
     run = true;
     std::thread t(&FCPOServer::proceed, this);
@@ -254,35 +259,40 @@ void FCPOServer::proceed() {
             aggregated_params.push_back(param);
         }
         for (auto client: federated_clients) {
-            aggregated_params[0] += client.model->shared_layer1->weight;
-            aggregated_params[1] += client.model->shared_layer1->bias;
-            aggregated_params[2] += client.model->shared_layer2->weight;
-            aggregated_params[3] += client.model->shared_layer2->bias;
-            aggregated_params[4] += client.model->value_head->weight;
-            aggregated_params[5] += client.model->value_head->bias;
+            aggregated_params[0] = aggregated_params[0] + client.model->shared_layer1->weight;
+            aggregated_params[1] = aggregated_params[1] + client.model->shared_layer1->bias;
+            aggregated_params[2] = aggregated_params[2] + client.model->shared_layer2->weight;
+            aggregated_params[3] = aggregated_params[3] + client.model->shared_layer2->bias;
+            aggregated_params[4] = aggregated_params[4] + client.model->value_head->weight;
+            aggregated_params[5] = aggregated_params[5] + client.model->value_head->bias;
         }
         for (auto& param : aggregated_params) {
           param /= static_cast<int64_t>(federated_clients.size() + 1);
         }
 
-        const std::vector<torch::Tensor> new_params = aggregated_params;
-        T states, resolution_actions, batching_actions, scaling_actions, rewards, values;
+        T states, resolution_actions, batching_actions, scaling_actions;
         for (auto client: federated_clients) {
-            client.model->shared_layer1->weight.copy_(new_params[0]);
-            client.model->shared_layer1->bias.copy_(new_params[1]);
-            client.model->shared_layer2->weight.copy_(new_params[2]);
-            client.model->shared_layer2->bias.copy_(new_params[3]);
-            client.model->value_head->weight.copy_(new_params[4]);
-            client.model->value_head->bias.copy_(new_params[5]);
+            client.model->shared_layer1->weight = aggregated_params[0].clone();
+            client.model->shared_layer1->bias = aggregated_params[1].clone();
+            client.model->shared_layer2->weight = aggregated_params[2].clone();
+            client.model->shared_layer2->bias = aggregated_params[3].clone();
+            client.model->value_head->weight = aggregated_params[4].clone();
+            client.model->value_head->bias = aggregated_params[5].clone();
             client.model->train();
             optimizer->zero_grad();
             std::istringstream iss(client.data.states());
             torch::load(states, iss);
-            auto [policy1_output, policy2_output, policy3_output, value] = client.model->forward(states);
+            auto [policy1_output, policy2_output, policy3_output, value] = client.model->forward(states.to(precision));
 
-            auto policy1_loss = torch::nn::functional::nll_loss(policy1_output, resolution_actions);
-            auto policy2_loss = torch::nn::functional::nll_loss(policy2_output, batching_actions);
-            auto policy3_loss = torch::nn::functional::nll_loss(policy3_output, scaling_actions);
+            iss.str(client.data.resolution_actions());
+            torch::load(resolution_actions, iss);
+            auto policy1_loss = torch::nll_loss(policy1_output, resolution_actions.to(torch::kLong));
+            iss.str(client.data.batching_actions());
+            torch::load(batching_actions, iss);
+            auto policy2_loss = torch::nll_loss(policy2_output, batching_actions.to(torch::kLong));
+            iss.str(client.data.scaling_actions());
+            torch::load(scaling_actions, iss);
+            auto policy3_loss = torch::nll_loss(policy3_output, scaling_actions.to(torch::kLong));
 
             auto loss = policy1_loss + policy2_loss + policy3_loss;
             loss.to(precision).backward();
@@ -291,12 +301,12 @@ void FCPOServer::proceed() {
             returnFLModel(client);
         }
         federated_clients.clear();
-        model->shared_layer1->weight.copy_(new_params[0]);
-        model->shared_layer1->bias.copy_(new_params[1]);
-        model->shared_layer2->weight.copy_(new_params[2]);
-        model->shared_layer2->bias.copy_(new_params[3]);
-        model->value_head->weight.copy_(new_params[4]);
-        model->value_head->bias.copy_(new_params[5]);
+        model->shared_layer1->weight = aggregated_params[0].clone();
+        model->shared_layer1->bias = aggregated_params[1].clone();
+        model->shared_layer2->weight = aggregated_params[2].clone();
+        model->shared_layer2->bias = aggregated_params[3].clone();
+        model->value_head->weight = aggregated_params[4].clone();
+        model->value_head->bias = aggregated_params[5].clone();
     }
 }
 

@@ -13,7 +13,9 @@ public:
     DataReader(const json &jsonConfigs);
 
     ~DataReader() override {
+        waitStop();
         source.release();
+        spdlog::get("container_agent")->info("{0:s} has stopped", msvc_name);
     };
 
     void dispatchThread() override {
