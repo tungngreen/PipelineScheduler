@@ -73,6 +73,7 @@ find_package(Threads REQUIRED)
 set(CUDA_TOOLKIT_ROOT_DIR /usr/local/cuda)
 find_package(CUDA REQUIRED)
 find_package(CUDAToolkit REQUIRED)
+find_package(PythonLibs 3 REQUIRED)
 
 #OpenCV
 find_package(OpenCV REQUIRED)
