@@ -5,7 +5,7 @@ FROM pipeline-scheduler:${JETPACK_VERSION}
 
 USER root
 RUN pip install -U jetson-stats --force
-WORKDIR /home/soulsaver/PipelineScheduler/build
+WORKDIR /home/soulsaver/FCPO/build
 
 ENV TZ=Asia/Seoul
 RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
