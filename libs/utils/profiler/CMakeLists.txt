@@ -62,6 +62,7 @@ target_include_directories(profiler
         PUBLIC
             # Used when building the library:
             $<BUILD_INTERFACE:${profiler_SOURCE_DIR}/>
+            ${PYTHON_INCLUDE_DIRS}
             # Used when installing the library:
             $<INSTALL_INTERFACE:${PROJECT_PREFIX}>
             ${CUDA_INCLUDE_DIRS}
