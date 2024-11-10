@@ -117,7 +117,7 @@ protected:
                 "-v /run/jtop.sock:/run/jtop.sock  -v /usr/bin/tegrastats:/usr/bin/tegrastats "
                 "-d --rm --runtime nvidia --gpus all --name " +
                 absl::StrFormat(
-                        R"(%s pipeline-scheduler-nx %s --json '%s' --device %i --port %i --port_offset %i)",
+                        R"(%s pipeline-scheduler-nx:trt-libtorch %s --json '%s' --device %i --port %i --port_offset %i)",
                         cont_name, executable, start_string, device, port, dev_port_offset) +
                 " --log_dir ../logs";
         command += deploy_mode? " --logging_mode 1" : " --verbose 0 --logging_mode 2";
