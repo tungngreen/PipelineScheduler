@@ -17,43 +17,69 @@
             "pipeline_name": "traffic1",
             "pipeline_target_slo": 200000,
             "pipeline_type": 0,
-            "video_source": "../data/traffic/traffic1.mp4",
-            "pipeline_source_device": "server"
-        },
-        {
+            "video_source": "../data/traffic1.mp4",
+            "pipeline_source_device": "nxavier1"
+        }, {
+            "pipeline_name": "traffic1",
+            "pipeline_target_slo": 200000,
+            "pipeline_type": 0,
+            "video_source": "../data/traffic1.mp4",
+            "pipeline_source_device": "nxavier4"
+        }, {
             "pipeline_name": "traffic2",
             "pipeline_target_slo": 200000,
             "pipeline_type": 0,
-            "video_source": "../data/traffic/traffic2.mp4",
-            "pipeline_source_device": "server"
-        },
-        {
+            "video_source": "../data/traffic2.mp4",
+            "pipeline_source_device": "orinano3"
+        }, {
+            "pipeline_name": "traffic2",
+            "pipeline_target_slo": 200000,
+            "pipeline_type": 0,
+            "video_source": "../data/traffic2.mp4",
+            "pipeline_source_device": "nxavier5"
+        }, {
             "pipeline_name": "traffic3",
             "pipeline_target_slo": 200000,
             "pipeline_type": 0,
-            "video_source": "../data/traffic/traffic3.mp4",
-            "pipeline_source_device": "server"
-        },
-        {
+            "video_source": "../data/traffic3.mp4",
+            "pipeline_source_device": "nxavier2"
+        }, {
+            "pipeline_name": "traffic3",
+            "pipeline_target_slo": 200000,
+            "pipeline_type": 0,
+            "video_source": "../data/traffic3.mp4",
+            "pipeline_source_device": "orinano1"
+        }, {
             "pipeline_name": "traffic4",
             "pipeline_target_slo": 200000,
             "pipeline_type": 0,
-            "video_source": "../data/traffic/traffic4.mp4",
-            "pipeline_source_device": "server"
-        },
-        {
+            "video_source": "../data/traffic4.mp4",
+            "pipeline_source_device": "agxavier2"
+        }, {
             "pipeline_name": "traffic5",
             "pipeline_target_slo": 200000,
             "pipeline_type": 0,
-            "video_source": "../data/traffic/traffic5.mp4",
-            "pipeline_source_device": "server"
+            "video_source": "../data/traffic5.mp4",
+            "pipeline_source_device": "agxavier1"
+        }, {
+            "pipeline_name": "traffic6",
+            "pipeline_target_slo": 200000,
+            "pipeline_type": 0,
+            "video_source": "../data/traffic6.mp4",
+            "pipeline_source_device": "nxavier3"
         },
         {
             "pipeline_name": "traffic6",
             "pipeline_target_slo": 200000,
             "pipeline_type": 0,
-            "video_source": "../data/traffic/traffic6.mp4",
-            "pipeline_source_device": "server"
+            "video_source": "../data/traffic4.mp4",
+            "pipeline_source_device": "orinano2"
+        }, {
+            "pipeline_name": "traffic7",
+            "pipeline_target_slo": 200000,
+            "pipeline_type": 0,
+            "video_source": "../data/traffic7.mp4",
+            "pipeline_source_device": "agxavier3"
         }
     ]
 }
