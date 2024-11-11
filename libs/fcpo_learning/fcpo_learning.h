@@ -41,62 +41,126 @@ const std::unordered_map<std::string, torch::Dtype> DTYPE_MAP = {
         {"bool", torch::kBool}
 };
 
-template <typename Experience>
 class ExperienceBuffer {
 public:
 
+    ExperienceBuffer() = default;
+
     ExperienceBuffer(size_t capacity)
-        : buffer(capacity), capacity(capacity), current_index(0), is_full(false) {}
+        :  timestamps(capacity), states(capacity), log_probs(capacity), values(capacity),
+          resolutions(capacity), batchings(capacity), scalings(capacity), rewards(capacity),
+          capacity(capacity), current_index(0), await_reward(false), is_full(false) {}
 
-    size_t add(const Experience& experience, float (*distance_metric)(const Experience&, const Experience&)) {
-        if (!is_full) {
-            size_t inserted_index = current_index;
-            add(experience);
-            return inserted_index;
-        }
-
-        auto min_it = std::min_element(buffer.begin(), buffer.end(),
-                                       [&experience, &distance_metric](const Experience& a, const Experience& b) {
-                                           return distance_metric(experience, a) < distance_metric(experience, b);
-                                       });
-
-        size_t removed_index = std::distance(buffer.begin(), min_it);
-
-        if (distance_metric(experience, *min_it) > 0.1) {
-            *min_it = experience;
-        }
-
-        return removed_index;
-    }
-
-    void add_at(const Experience& experience, size_t index) {
-        if (index >= capacity) {
-            throw std::out_of_range("Index out of range.");
-        }
-        buffer[index] = experience;
-    }
-
-    // Retrieve all experiences (for debugging or analysis)
-    std::vector<Experience> get_all() const {
+    void add(const T& state, const T& log_prob, const T& value,
+             int resolution_action, int batching_action, int scaling_action) {
         if (is_full) {
-            std::vector<Experience> ordered(buffer.begin() + current_index, buffer.end());
-            ordered.insert(ordered.end(), buffer.begin(), buffer.begin() + current_index);
-            return ordered;
+            double distance = distance_metric(state, states[current_index]);
+
+            if (distance > 0.5) {
+                spdlog::trace("Distance: {}", distance);
+                //set current index to the index of the oldest timestamp
+                current_index = std::distance(timestamps.begin(),
+                                              std::min_element(timestamps.begin(), timestamps.end()));
+                await_reward = true;
+            } else {
+                return;
+            }
         }
-        return std::vector<Experience>(buffer.begin(), buffer.begin() + current_index);
+        timestamps[current_index] = std::chrono::system_clock::now();
+        states[current_index] = state;
+
+        log_probs[current_index] = log_prob;
+        values[current_index] = value;
+        resolutions[current_index] = resolution_action;
+        batchings[current_index] = batching_action;
+        scalings[current_index] = scaling_action;
+        valid_history = false;
+    }
+
+    void add_reward(const double x){
+        if (!is_full) {
+            rewards[current_index] = x;
+            current_index = (current_index + 1) % capacity;
+            if (current_index == 0) is_full = true;
+        }
+
+        if (await_reward) {
+            rewards[current_index] = x;
+            await_reward = false;
+        }
+    }
+
+    [[nodiscard]] std::vector<T> get_states() const {
+        if (is_full)  return states;
+        return {states.begin(), states.begin() + current_index};
+    }
+
+    [[nodiscard]] std::vector<T> get_log_probs() const {
+        if (is_full) return log_probs;
+        return {log_probs.begin(), log_probs.begin() + current_index};
+    }
+
+    [[nodiscard]] std::vector<T> get_values() const {
+        if (is_full) return values;
+        return {values.begin(), values.begin() + current_index};
+    }
+
+    [[nodiscard]] std::vector<int> get_resolution() const {
+        if (is_full) return resolutions;
+        return {resolutions.begin(), resolutions.begin() + current_index};
+    }
+
+    [[nodiscard]] std::vector<int> get_batching() const {
+        if (is_full)  return batchings;
+        return {batchings.begin(), batchings.begin() + current_index};
+    }
+
+    [[nodiscard]] std::vector<int> get_scaling() const {
+        if (is_full)  return scalings;
+        return {scalings.begin(), scalings.begin() + current_index};
+    }
+
+    [[nodiscard]] std::vector<double> get_rewards() const {
+        if (is_full) return rewards;
+        return {rewards.begin(), rewards.begin() + current_index};
+    }
+
+    void clear() {
+        current_index = 0;
+        is_full = false;
     }
 
 private:
 
-    void add(const Experience& experience) {
-        buffer[current_index] = experience;
-        current_index = (current_index + 1) % capacity;
-        if (current_index == 0) is_full = true;
+    double distance_metric(const T& state, const T& log_probs) {
+        if (!valid_history) {
+            historical_states = torch::stack(states);
+            T mean = historical_states.mean(0);
+            T centered_states = historical_states - mean;
+            T covariance_matrix = (centered_states.transpose(0, 1).mm(centered_states))
+                                  / (static_cast<int64_t>(states.size()) - 1);
+            T epsilon = torch::eye(covariance_matrix.size(0)) * 1e-6; // Small value added to the diagonal
+            covariance_inv = torch::inverse(covariance_matrix + epsilon);
+        }
+
+        T diff = historical_states - state;
+        T mahalanobis_distances = torch::sqrt((diff.matmul(covariance_inv).mul(diff)).sum(1));
+
+        T kl_divergences = torch::kl_div(log_probs, torch::stack(log_probs), torch::Reduction::None);
+
+        return 0.5 * mahalanobis_distances.mean().item<double>() + 0.5 * kl_divergences.mean().item<double>();
     }
 
-    std::vector<Experience> buffer;
+    std::vector<ClockType> timestamps;
+    std::vector<T> states, log_probs, values;
+    T historical_states, covariance_inv;
+    std::vector<int> resolutions, batchings, scalings;
+    std::vector<double> rewards;
+
     size_t capacity;
     size_t current_index;
+    bool await_reward;
+    bool valid_history;
     bool is_full;
 };
 
@@ -171,13 +235,7 @@ private:
     void reset() {
         cumu_reward = 0.0;
         first = true;
-        states.clear();
-        values.clear();
-        resolution_actions.clear();
-        batching_actions.clear();
-        scaling_actions.clear();
-        rewards.clear();
-        log_probs.clear();
+        experiences.clear();
     }
     void selectAction();
     T computeCumuRewards() const;
@@ -188,12 +246,8 @@ private:
     std::unique_ptr<torch::optim::Optimizer> optimizer;
     torch::Dtype precision;
     T state, log_prob, value;
-    std::vector<T> states, log_probs, values;
     int resolution, batching, scaling;
-    std::vector<int> resolution_actions;
-    std::vector<int> batching_actions;
-    std::vector<int> scaling_actions;
-    std::vector<double> rewards;
+    ExperienceBuffer experiences;
 
     bool first = true;
     std::ofstream out;
