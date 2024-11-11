@@ -785,7 +785,7 @@ void Controller::StartContainer(ContainerHandle *container, bool easy_allocation
                 base_config[0]["msvc_idealBatchSize"] = ctrl_systemFPS;
             }
             base_config[1]["msvc_dnstreamMicroservices"][0]["nb_expectedShape"] = {container->dimensions};
-            base_config[2]["path"] = container->model_file;
+            base_config[3]["path"] = container->model_file;
         }
 
         // adjust receiver upstreams

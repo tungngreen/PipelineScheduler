@@ -19,18 +19,13 @@ FCPOAgent::FCPOAgent(std::string& cont_name, uint state_size, uint resolution_si
     optimizer = std::make_unique<torch::optim::Adam>(model->parameters(), torch::optim::AdamOptions(1e-3));
 
     cumu_reward = 0.0;
-    states = {};
-    resolution_actions = {};
-    batching_actions = {};
-    scaling_actions = {};
-    rewards = {};
-    log_probs = {};
-    values = {};
+    experiences = ExperienceBuffer(100);
 }
 
 void FCPOAgent::update() {
     steps_counter = 0;
     if (federated_steps_counter == 0) {
+        experiences.clear();
         spdlog::get("container_agent")->trace("Waiting for federated update, cancel !");
         return;
     }
@@ -38,20 +33,20 @@ void FCPOAgent::update() {
     Stopwatch sw;
     sw.start();
 
-    std::cout << "Sizes: " << states.size() << " " << resolution_actions.size() << " " << batching_actions.size() << " " << scaling_actions.size() << " " << rewards.size() << values.size() << log_probs.size() << std::endl;
+    //std::cout << "Sizes: " << states.size() << " " << resolution_actions.size() << " " << batching_actions.size() << " " << scaling_actions.size() << " " << rewards.size() << values.size() << log_probs.size() << std::endl;
 
-    auto [policy1, policy2, policy3, val] = model->forward(torch::stack(states));
+    auto [policy1, policy2, policy3, val] = model->forward(torch::stack(experiences.get_states()));
     T action1_probs = torch::softmax(policy1, -1);
-    T action1_log_probs = torch::log(action1_probs.gather(-1, torch::tensor(resolution_actions).reshape({-1, 1})).squeeze(-1));
+    T action1_log_probs = torch::log(action1_probs.gather(-1, torch::tensor(experiences.get_resolution()).reshape({-1, 1})).squeeze(-1));
     T action2_probs = torch::softmax(policy2, -1);
-    T action2_log_probs = torch::log(action2_probs.gather(-1, torch::tensor(batching_actions).reshape({-1, 1})).squeeze(-1));
+    T action2_log_probs = torch::log(action2_probs.gather(-1, torch::tensor(experiences.get_batching()).reshape({-1, 1})).squeeze(-1));
     T action3_probs = torch::softmax(policy3, -1);
-    T action3_log_probs = torch::log(action3_probs.gather(-1, torch::tensor(scaling_actions).reshape({-1, 1})).squeeze(-1));
+    T action3_log_probs = torch::log(action3_probs.gather(-1, torch::tensor(experiences.get_scaling()).reshape({-1, 1})).squeeze(-1));
     T new_log_probs = (action1_log_probs + action2_log_probs + action3_log_probs).squeeze(-1);
 
-    T ratio = torch::exp(new_log_probs - torch::stack(log_probs));
+    T ratio = torch::exp(new_log_probs - torch::stack(experiences.get_log_probs()));
 
-    if (rewards.size() < states.size()) {
+    if (experiences.get_rewards().size() < experiences.get_states().size()) {
         ratio = ratio.slice(0, 1, ratio.size(0), 1);
         val = val.slice(0, 1, val.size(0), 1);
     }
@@ -61,8 +56,8 @@ void FCPOAgent::update() {
     T policy_loss = -torch::min(ratio * advantages, clipped_ratio * advantages).to(precision).mean();
 
     T value_loss = torch::mse_loss(val.squeeze(), computeCumuRewards());
-    T policy1_penalty = penalty_weight * torch::mean(torch::tensor(resolution_actions).to(precision));
-    T policy3_penalty = penalty_weight * torch::mean(torch::tensor(scaling_actions).to(precision));
+    T policy1_penalty = penalty_weight * torch::mean(torch::tensor(experiences.get_resolution()).to(precision));
+    T policy3_penalty = penalty_weight * torch::mean(torch::tensor(experiences.get_scaling()).to(precision));
     T loss = (policy_loss + 0.5 * value_loss + policy1_penalty + policy3_penalty);
 
     // Backpropagation
@@ -100,16 +95,16 @@ void FCPOAgent::federatedUpdate() {
     torch::save(model, oss);
     request.set_network(oss.str());
     oss.str("");
-    torch::save(torch::stack(states).to(precision), oss);
+    torch::save(torch::stack(experiences.get_states()).to(precision), oss);
     request.set_states(oss.str());
     oss.str("");
-    torch::save(torch::tensor(resolution_actions).to(precision), oss);
+    torch::save(torch::tensor(experiences.get_resolution()).to(precision), oss);
     request.set_resolution_actions(oss.str());
     oss.str("");
-    torch::save(torch::tensor(batching_actions).to(precision), oss);
+    torch::save(torch::tensor(experiences.get_batching()).to(precision), oss);
     request.set_batching_actions(oss.str());
     oss.str("");
-    torch::save(torch::tensor(scaling_actions).to(precision), oss);
+    torch::save(torch::tensor(experiences.get_scaling()).to(precision), oss);
     request.set_scaling_actions(oss.str());
     reset();
     EmptyMessage reply;
@@ -142,7 +137,9 @@ void FCPOAgent::rewardCallback(double throughput, double drops, double latency_p
         first = false;
         return;
     }
-    rewards.push_back(2 * throughput - drops - latency_penalty + (1 - oversize_penalty));
+    double reward = 2 * throughput - drops - latency_penalty + (1 - oversize_penalty);
+    experiences.add_reward(reward);
+    cumu_reward += reward;
 }
 
 void FCPOAgent::setState(double curr_resolution, double curr_batch, double curr_scaling,  double arrival,
@@ -163,16 +160,11 @@ void FCPOAgent::selectAction() {
 
 
     log_prob = torch::log(policy1[resolution]) + torch::log(policy2[batching]) + torch::log(policy3[scaling]);
-    states.push_back(state);
-    log_probs.push_back(log_prob);
-    values.push_back(val);
-    resolution_actions.push_back(resolution);
-    batching_actions.push_back(batching);
-    scaling_actions.push_back(scaling);
+    experiences.add(state, log_prob, val, resolution, batching, scaling);
 }
 
 T FCPOAgent::computeCumuRewards() const {
-    std::vector<double> discounted_rewards;
+    std::vector<double> discounted_rewards, rewards = experiences.get_rewards();
     double cumulative = 0.0;
     for (auto it = rewards.rbegin(); it != rewards.rend(); ++it) {
         cumulative = *it + gamma * cumulative;
@@ -182,7 +174,8 @@ T FCPOAgent::computeCumuRewards() const {
 }
 
 T FCPOAgent::computeGae() const {
-    std::vector<double> advantages;
+    std::vector<double> advantages, rewards = experiences.get_rewards();
+    std::vector<T> values = experiences.get_values();
     double gae = 0.0;
     double next_value = 0.0;
     for (int t = rewards.size() - 1; t >= 0; --t) {
@@ -198,7 +191,6 @@ std::tuple<int, int, int> FCPOAgent::runStep() {
     Stopwatch sw;
     sw.start();
     selectAction();
-    cumu_reward += (steps_counter) ? rewards[steps_counter - 1] : 0;
 
     steps_counter++;
     sw.stop();
