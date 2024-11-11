@@ -47,8 +47,8 @@ public:
     ExperienceBuffer() = default;
 
     ExperienceBuffer(size_t capacity)
-        : states(capacity), log_probs(capacity), values(capacity), resolution_actions(capacity),
-          batching_actions(capacity), scaling_actions(capacity), rewards(capacity), timestamps(capacity),
+        :  timestamps(capacity), states(capacity), log_probs(capacity), values(capacity),
+          resolutions(capacity), batchings(capacity), scalings(capacity), rewards(capacity),
           capacity(capacity), current_index(0), await_reward(false), is_full(false) {}
 
     void add(const T& state, const T& log_prob, const T& value,
@@ -71,9 +71,9 @@ public:
 
         log_probs[current_index] = log_prob;
         values[current_index] = value;
-        resolution_actions[current_index] = resolution_action;
-        batching_actions[current_index] = batching_action;
-        scaling_actions[current_index] = scaling_action;
+        resolutions[current_index] = resolution_action;
+        batchings[current_index] = batching_action;
+        scalings[current_index] = scaling_action;
         valid_history = false;
     }
 
@@ -106,18 +106,18 @@ public:
     }
 
     [[nodiscard]] std::vector<int> get_resolution() const {
-        if (is_full) return resolution_actions;
-        return {resolution_actions.begin(), resolution_actions.begin() + current_index};
+        if (is_full) return resolutions;
+        return {resolutions.begin(), resolutions.begin() + current_index};
     }
 
     [[nodiscard]] std::vector<int> get_batching() const {
-        if (is_full)  return batching_actions;
-        return {batching_actions.begin(), batching_actions.begin() + current_index};
+        if (is_full)  return batchings;
+        return {batchings.begin(), batchings.begin() + current_index};
     }
 
     [[nodiscard]] std::vector<int> get_scaling() const {
-        if (is_full)  return scaling_actions;
-        return {scaling_actions.begin(), scaling_actions.begin() + current_index};
+        if (is_full)  return scalings;
+        return {scalings.begin(), scalings.begin() + current_index};
     }
 
     [[nodiscard]] std::vector<double> get_rewards() const {
@@ -154,7 +154,7 @@ private:
     std::vector<ClockType> timestamps;
     std::vector<T> states, log_probs, values;
     T historical_states, covariance_inv;
-    std::vector<int> resolution_actions, batching_actions, scaling_actions;
+    std::vector<int> resolutions, batchings, scalings;
     std::vector<double> rewards;
 
     size_t capacity;
