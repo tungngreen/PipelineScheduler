@@ -274,6 +274,7 @@ void BaseBatcher::batchRequests() {
                 RELOADING = false;
                 READY = true;
             }
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
             continue;
         }
         // Processing the next incoming request
