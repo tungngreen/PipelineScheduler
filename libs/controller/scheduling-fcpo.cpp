@@ -1444,8 +1444,8 @@ uint8_t Controller::incNumReplicas(const PipelineModel *model) {
     float indiPreprocessRate = 1000000.f / profile.batchInfer.at(model->batchSize).p95prepLat;
     float processRate = indiProcessRate * numReplicas;
     float preprocessRate = indiPreprocessRate * numReplicas;
-    while ((processRate * 0.6 < model->arrivalProfiles.arrivalRates ||
-           preprocessRate * 0.75 < model->arrivalProfiles.arrivalRates)) {
+    while ((processRate * 0.9 < model->arrivalProfiles.arrivalRates ||
+           preprocessRate * 0.95 < model->arrivalProfiles.arrivalRates) && numReplicas < 4) {
         numReplicas++;
         spdlog::get("container_agent")->info("Increasing the number of replicas of model {0:s} to {1:d}", model->name, numReplicas);
         processRate = indiProcessRate * numReplicas;
@@ -1474,8 +1474,8 @@ uint8_t Controller::decNumReplicas(const PipelineModel *model) {
         processRate = indiProcessRate * numReplicas;
         preprocessRate = indiPreprocessRate * numReplicas;
         // If the number of replicas is no longer enough to meet the arrival rate, we should not decrease the number of replicas anymore.
-        if ((processRate * 0.5 < model->arrivalProfiles.arrivalRates ||
-            preprocessRate * 0.7 < model->arrivalProfiles.arrivalRates)) {
+        if ((processRate * 0.8 < model->arrivalProfiles.arrivalRates ||
+            preprocessRate * 0.9 < model->arrivalProfiles.arrivalRates)) {
             numReplicas++;
             break;
         }
