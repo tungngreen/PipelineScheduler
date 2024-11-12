@@ -39,6 +39,8 @@ DeviceAgent::DeviceAgent() {
     std::string type = absl::GetFlag(FLAGS_device_type);
     if (type == "server") {
         dev_type = SystemDeviceType::Server;
+    } else if (type == "onprem") {
+        dev_type = SystemDeviceType::OnPremise;
     } else if (type == "nxavier") {
         dev_type = SystemDeviceType::NXXavier;
     } else if (type == "agxavier") {
@@ -47,7 +49,7 @@ DeviceAgent::DeviceAgent() {
         dev_type = SystemDeviceType::OrinNano;
     }
     else {
-        std::cerr << "Invalid device type, use [server, nxavier, agxavier, orinano]" << std::endl;
+        std::cerr << "Invalid device type, use [server, onprem, nxavier, agxavier, orinano]" << std::endl;
         exit(1);
     }
     dev_port_offset = absl::GetFlag(FLAGS_dev_port_offset);
