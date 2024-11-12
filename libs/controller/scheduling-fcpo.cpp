@@ -911,7 +911,12 @@ bool Controller::mergeModels(PipelineModel *mergedModel, PipelineModel* toBeMerg
         toBeMergedModel->merged || mergedModel->device != device || toBeMergedModel->device != device) {
         return false;
     }
-
+    if (toBeMergedModel->name.find("datasource") != std::string::npos ||
+        toBeMergedModel->name.find("dsrc") != std::string::npos ||
+        toBeMergedModel->name.find("sink") != std::string::npos) {
+        mergedModel->datasourceName.push_back(toBeMergedModel->datasourceName[0]);
+        return false;
+    }
 
     float rate1 = mergedModel->arrivalProfiles.arrivalRates;
     float rate2 = toBeMergedModel->arrivalProfiles.arrivalRates;
@@ -970,7 +975,15 @@ TaskHandle* Controller::mergePipelines(const std::string& taskName) {
             }
             // If model is not scheduled to be run on the server, we should not merge it.
             // However, the model is still
-            if (task.second->tk_pipelineModels[i]->device != "server") {
+            /*if (task.second->tk_pipelineModels[i]->device != "server") {
+                mergedPipeline->tk_pipelineModels.emplace_back(new PipelineModel(*task.second->tk_pipelineModels[i]));
+                task.second->tk_pipelineModels[i]->merged = true;
+                task.second->tk_pipelineModels[i]->toBeRun = false;
+                mergedPipeline->tk_pipelineModels.back()->toBeRun = false;
+                continue;
+            }*/
+            // If the model devices are different from another we should not merge it.
+            if (mergedPipeline->tk_pipelineModels[i]->device != task.second->tk_pipelineModels[i]->device) {
                 mergedPipeline->tk_pipelineModels.emplace_back(new PipelineModel(*task.second->tk_pipelineModels[i]));
                 task.second->tk_pipelineModels[i]->merged = true;
                 task.second->tk_pipelineModels[i]->toBeRun = false;
