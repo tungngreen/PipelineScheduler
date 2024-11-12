@@ -382,7 +382,7 @@ void BasePreprocessor::preprocess() {
 
         if (msvc_concat.currIndex == 0) {
             // Create a new frame to hold the concatenated images
-            outReq = {};
+            outReq = Request<LocalGPUReqDataType>{};
             outReq.req_origGenTime = {};
             outReq.req_e2eSLOLatency = {};
             outReq.req_travelPath = {};

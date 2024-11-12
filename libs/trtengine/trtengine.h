@@ -98,8 +98,21 @@ public:
     // Utility method for transforming triple nested output array into single array
     // Should be used when the output batch size is 1, and there is only a single output feature vector
     static void transformOutput(std::vector<std::vector<std::vector<float>>>& input, std::vector<float>& output);
-    // Convert NHWC to NCHW and apply scaling and mean subtraction
-    static cv::cuda::GpuMat blobFromGpuMats(const std::vector<cv::cuda::GpuMat>& batchInput, const std::array<float, 3>& subVals, const std::array<float, 3>& divVals, bool normalize);
+
+    inline cv::cuda::GpuMat cvtHWCToCHW(
+        const std::vector<cv::cuda::GpuMat>& batch,
+        cv::cuda::Stream &stream = cv::cuda::Stream::Null(),
+        uint8_t IMG_TYPE = CV_8UC3 
+    );
+
+    inline void normalize(
+        const cv::cuda::GpuMat &transposedBatch, // NCHW
+        const BatchSizeType batchSize,
+        cv::cuda::Stream &stream = cv::cuda::Stream::Null(),
+        const std::array<float, 3>& subVals = {0.0f, 0.0f, 0.0f},
+        const std::array<float, 3>& divVals = {1.0f, 1.0f, 1.0f},
+        const float normalizedScale = 1.f
+    );
 
     std::string getEngineName() const;
     std::vector<void *>& getInputBuffers();
@@ -113,7 +126,7 @@ private:
     // Normalization, scaling, and mean subtraction of inputs
     std::array<float, 3> m_subVals{};
     std::array<float, 3> m_divVals{};
-    bool m_normalize;
+    float m_normalizedScale;
 
     // Holds pointers to the input and output GPU buffers
     std::vector<void*> m_buffers, m_inputBuffers, m_outputBuffers;
