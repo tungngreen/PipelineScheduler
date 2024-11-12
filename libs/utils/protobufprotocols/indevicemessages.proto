@@ -10,6 +10,19 @@ package indevicemessages;
 service InDeviceMessages {
   rpc ReportMsvcStart(ProcessData) returns (ProcessData) {}
   rpc StartFederatedLearning(indevicecommands.FlData) returns (google.protobuf.Empty) {}
+  rpc BCEdgeConfigUpdate(BCEdgeData) returns (BCEdgeConfig) {}
+}
+
+message BCEdgeData {
+  string msvc_name = 1;
+  int32 slo = 2;
+  double throughput = 3;
+  double latency = 4;
+}
+
+message BCEdgeConfig {
+  int32 batch_size = 1;
+  int32 shared_mem_config = 2;
 }
 
 message ProcessData {
