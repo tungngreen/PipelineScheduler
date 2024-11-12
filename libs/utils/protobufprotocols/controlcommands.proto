@@ -26,6 +26,8 @@ message ContainerConfig {
   string executable = 3;
   int32 device = 4;
   int32 control_port = 5;
+  int32 model_type = 6;
+  repeated int32 input_shape = 7;
 }
 
 message ContainerLink {

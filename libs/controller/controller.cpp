@@ -878,7 +878,10 @@ void Controller::StartContainer(ContainerHandle *container, bool easy_allocation
         request.set_device(0);
     }
     request.set_control_port(control_port);
-
+    request.set_model_type(container->model);
+    for (auto &dim: container->dimensions) {
+        request.add_input_shape(dim);
+    }
 
     std::unique_ptr<ClientAsyncResponseReader<EmptyMessage>> rpc(
             container->device_agent->stub->AsyncStartContainer(&context, request,

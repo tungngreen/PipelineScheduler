@@ -58,6 +58,9 @@ struct DevContainerHandle {
     unsigned int port;
     unsigned int pid;
     std::string startCommand;
+    ModelType modelType;
+    std::vector<int> dataShape;
+    int instances;
     SummarizedHardwareMetrics hwMetrics;
 };
 
@@ -221,6 +224,22 @@ protected:
         FlData request;
         EmptyMessage reply;
         grpc::ServerAsyncResponseWriter<EmptyMessage> responder;
+    };
+
+    class BCEdgeConfigUpdateRequestHandler : public DeviceRequestHandler {
+    public:
+        BCEdgeConfigUpdateRequestHandler(InDeviceMessages::AsyncService *service, ServerCompletionQueue *cq,
+                                             DeviceAgent *device)
+                : DeviceRequestHandler(service, cq, device), responder(&ctx) {
+            Proceed();
+        }
+
+        void Proceed() final;
+
+    private:
+        indevicemessages::BCEdgeData request;
+        indevicemessages::BCEdgeConfig reply;
+        grpc::ServerAsyncResponseWriter<indevicemessages::BCEdgeConfig> responder;
     };
 
     class ExecuteNetworkTestRequestHandler : public ControlRequestHandler {

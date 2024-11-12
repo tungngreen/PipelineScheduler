@@ -157,7 +157,7 @@ DeviceAgent::DeviceAgent(const std::string &controller_url) : DeviceAgent() {
         pushSQL(*dev_metricsServerConn, sql);
     }
 
-    if (dev_system_name == "BCE") {
+    if (dev_system_name == "bce") {
         dev_bcedge_agent = new BCEdgeAgent(dev_name, torch::kF32);
     }
 
@@ -321,10 +321,15 @@ bool DeviceAgent::CreateContainer(ContainerConfig &c) {
         if (c.name().find("sink") != std::string::npos) {
             return true;
         }
+        std::vector<int> dims = {};
+        for (auto &dim: c.input_shape()) {
+            dims.push_back(dim);
+        }
         std::lock_guard<std::mutex> lock(containers_mutex);
         containers[c.name()] = {InDeviceCommands::NewStub(
                 grpc::CreateChannel(target, grpc::InsecureChannelCredentials())),
-                                new CompletionQueue(), static_cast<unsigned int>(c.control_port()), 0, command, {}};
+                                new CompletionQueue(), static_cast<unsigned int>(c.control_port()), 0, command,
+                                static_cast<ModelType>(c.model_type()), dims, 1, {}};
         return true;
     } catch (std::exception &e) {
         spdlog::get("container_agent")->error("Error creating container: {}", e.what());
@@ -462,6 +467,9 @@ void DeviceAgent::Ready(const std::string &ip, SystemDeviceType type) {
 void DeviceAgent::HandleDeviceRecvRpcs() {
     new ReportStartRequestHandler(&device_service, device_cq.get(), this);
     new StartFederatedLearningRequestHandler(&device_service, device_cq.get(), this);
+    if (dev_system_name == "bce") {
+        new BCEdgeConfigUpdateRequestHandler(&device_service, device_cq.get(), this);
+    }
     void *tag;
     bool ok;
     while (running) {
@@ -549,6 +557,28 @@ void DeviceAgent::StartFederatedLearningRequestHandler::Proceed() {
         if (sending_cq != nullptr) GPR_ASSERT(sending_cq->Next(&got_tag, &ok));
         status = FINISH;
         responder.Finish(reply, sending_status, this);
+    } else {
+        GPR_ASSERT(status == FINISH);
+        delete this;
+    }
+}
+
+void DeviceAgent::BCEdgeConfigUpdateRequestHandler::Proceed() {
+    if (status == CREATE) {
+        status = PROCESS;
+        service->RequestBCEdgeConfigUpdate(&ctx, &request, &responder, cq, cq, this);
+    } else if (status == PROCESS) {
+        new BCEdgeConfigUpdateRequestHandler(service, cq, device_agent);
+        DevContainerHandle *node = &device_agent->containers[request.msvc_name()];
+        device_agent->dev_bcedge_agent->rewardCallback(request.throughput(), request.latency(), request.slo(), node->hwMetrics.gpuMemUsage);
+        device_agent->dev_bcedge_agent->setState(node->modelType, node->dataShape, request.slo());
+        int batching, scaling, memory;
+        std::tie(batching, scaling, memory) = device_agent->dev_bcedge_agent->runStep();
+        reply.set_batch_size(batching);
+        node->instances = scaling;
+        reply.set_shared_mem_config(memory);
+        status = FINISH;
+        responder.Finish(reply, Status::OK, this);
     } else {
         GPR_ASSERT(status == FINISH);
         delete this;
