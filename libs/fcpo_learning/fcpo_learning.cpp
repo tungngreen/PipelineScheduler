@@ -14,7 +14,7 @@ FCPOAgent::FCPOAgent(std::string& cont_name, uint state_size, uint resolution_si
 
     model = std::make_shared<MultiPolicyNet>(state_size, resolution_size, max_batch, scaling_size);
     std::string model_save = path + "/latest_model.pt";
-    if (std::filesystem::exists(model_save)) torch::load(model, model_save);
+    //if (std::filesystem::exists(model_save)) torch::load(model, model_save);
     model->to(precision);
     optimizer = std::make_unique<torch::optim::Adam>(model->parameters(), torch::optim::AdamOptions(1e-3));
 
@@ -33,8 +33,6 @@ void FCPOAgent::update() {
     Stopwatch sw;
     sw.start();
 
-    //std::cout << "Sizes: " << states.size() << " " << resolution_actions.size() << " " << batching_actions.size() << " " << scaling_actions.size() << " " << rewards.size() << values.size() << log_probs.size() << std::endl;
-
     auto [policy1, policy2, policy3, val] = model->forward(torch::stack(experiences.get_states()));
     T action1_probs = torch::softmax(policy1, -1);
     T action1_log_probs = torch::log(action1_probs.gather(-1, torch::tensor(experiences.get_resolution()).reshape({-1, 1})).squeeze(-1));
@@ -43,6 +41,10 @@ void FCPOAgent::update() {
     T action3_probs = torch::softmax(policy3, -1);
     T action3_log_probs = torch::log(action3_probs.gather(-1, torch::tensor(experiences.get_scaling()).reshape({-1, 1})).squeeze(-1));
     T new_log_probs = (action1_log_probs + action2_log_probs + action3_log_probs).squeeze(-1);
+    // code if using SinglePolicyNet
+//    auto [policy, val] = model->forward(torch::stack(experiences.get_states()));
+//    T actions = model->combine_actions(experiences.get_resolution(), experiences.get_batching(), experiences.get_scaling(), max_batch, scaling_size).to(torch::kInt64);
+//    T new_log_probs = torch::log(policy.gather(-1, actions.reshape({-1, 1})).squeeze(-1));
 
     T ratio = torch::exp(new_log_probs - torch::stack(experiences.get_log_probs()));
 
@@ -72,7 +74,7 @@ void FCPOAgent::update() {
     out << "episodeEnd," << sw.elapsed_microseconds() << "," << federated_steps_counter << "," << steps_counter << "," << cumu_reward << "," << avg_reward << std::endl;
     if (last_avg_reward < avg_reward) {
         last_avg_reward = avg_reward;
-        torch::save(model, path + "/latest_model.pt");
+        //torch::save(model, path + "/latest_model.pt");
     }
 
     if (federated_steps_counter++ % federated_steps == 0) {
@@ -150,16 +152,21 @@ void FCPOAgent::setState(double curr_resolution, double curr_batch, double curr_
 void FCPOAgent::selectAction() {
     std::unique_lock<std::mutex> lock(model_mutex);
     auto [policy1, policy2, policy3, val] = model->forward(state);
-
     T action_dist = torch::multinomial(policy1, 1);  // Sample from policy (discrete distribution)
     resolution = action_dist.item<int>();  // Convert tensor to int action
     action_dist = torch::multinomial(policy2, 1);
     batching = action_dist.item<int>();
     action_dist = torch::multinomial(policy3, 1);
     scaling = action_dist.item<int>();
-
-
     log_prob = torch::log(policy1[resolution]) + torch::log(policy2[batching]) + torch::log(policy3[scaling]);
+    // code if using SinglePolicyNet
+//    auto [policy, val] = model->forward(state);
+//    T action_dist = torch::multinomial(policy, 1);  // Sample from policy (discrete distribution)
+//    std::tie(resolution, batching, scaling) = model->interpret_action(action_dist.item<int>(), max_batch, scaling_size);
+//    log_prob = torch::log(policy[action_dist.item<int>()]);
+
+
+
     experiences.add(state, log_prob, val, resolution, batching, scaling);
 }
 
