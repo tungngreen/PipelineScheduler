@@ -298,8 +298,11 @@ void BaseBBoxCropperVerifier::cropping() {
                             originStream,
                             getSenderHost(currReq.req_travelPath[imageIndexInBatch])
                     );
-                    addToLatencyEWMA(
-                            std::chrono::duration_cast<TimePrecisionType>(currReq_recvTime - currReq.req_origGenTime[i][3]).count());
+                    if (timeNow > currReq.req_origGenTime[imageIndexInBatch][3]) {
+                        addToLatencyEWMA(
+                                std::chrono::duration_cast<TimePrecisionType>(
+                                        timeNow - currReq.req_origGenTime[imageIndexInBatch][3]).count());
+                    }
                 }
             }
 
