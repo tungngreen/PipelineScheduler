@@ -352,13 +352,26 @@ void BasePreprocessor::preprocess() {
             std::this_thread::sleep_for(std::chrono::milliseconds(1));
             continue;
         }
-        currCPUReq = msvc_InQueue.at(0)->pop1();
-
         if (flush) {
-            if (msvc_concat.currIndex == 0) return;
-            msvc_OutQueue[0]->emplace(outReq);
-            msvc_concat.currIndex = 0;
+            spdlog::get("container_agent")->trace("{0:s} is flushing the buffer.", msvc_name);
+            if (msvc_concat.currIndex != 0) {
+                msvc_OutQueue[0]->emplace(outReq);
+                msvc_concat.currIndex = 0;
+                spdlog::get("container_agent")->trace("{0:s} flushed a frame of {1:d} images", msvc_name, msvc_concat.currIndex + 1);
+            }
+            flush = false;
+            msvc_OutQueue[0]->emplace(Request<LocalGPUReqDataType>{
+                {},
+                {},
+                {"flush"},
+                0,
+                {},
+                {},
+                {}
+            });
         }
+
+        currCPUReq = msvc_InQueue.at(0)->pop1();
 
         if (!validateRequest<LocalCPUReqDataType>(currCPUReq)) {
             continue;
