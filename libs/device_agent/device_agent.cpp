@@ -551,6 +551,7 @@ void DeviceAgent::StartFederatedLearningRequestHandler::Proceed() {
         ClientContext context;
         Status sending_status;
         CompletionQueue* sending_cq = device_agent->controller_sending_cq;
+        request.set_device_name(device_agent->dev_name);
         std::unique_ptr<ClientAsyncResponseReader<EmptyMessage>> rpc(
                 device_agent->controller_stub->AsyncForwardFl(&context, request, sending_cq));
         rpc->Finish(&reply, &sending_status, (void *)1);

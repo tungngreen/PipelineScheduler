@@ -1018,6 +1018,8 @@ void ContainerAgent::collectRuntimeMetrics() {
                     latencyEWMA += post->getLatencyEWMA();
                 }
                 latencyEWMA /= cont_msvcsGroups["postprocessor"].msvcList.size();
+                spdlog::get("container_agent")->info("{0:s} RL Decision: {1:d} miniBatches, {2:f} request rate, {3:d} queue drops, {4:f} latency, {5:f} avgExecutedBatchSize",
+                                                     cont_name, miniBatchCount, avgRequestRate, queueDrops, latencyEWMA / TIME_PRECISION_TO_SEC, avgExecutedBatchSize);
                 cont_fcpo_agent->rewardCallback((double) miniBatchCount * avgExecutedBatchSize / avgRequestRate,
                                          (double) (pre_queueDrops + inf_queueDrops) / avgRequestRate,
                                          latencyEWMA / TIME_PRECISION_TO_SEC,
