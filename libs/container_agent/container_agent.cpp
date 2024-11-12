@@ -592,7 +592,11 @@ void ContainerAgent::initiateMicroservices(const json &configs) {
             MicroserviceType msvc_type = pipeConfig.at("msvc_type");
             std::vector<ThreadSafeFixSizedDoubleQueue *> inQueueList;
             if (msvc_type == MicroserviceType::DataReader) {
-                msvcsList.push_back(new DataReader(pipeConfig));
+                std::vector<std::string> sources = pipeConfig["msvc_upstreamMicroservices"][0]["nb_link"];
+                numInstances = sources.size();
+                json runConfig = pipeConfig;
+                runConfig["msvc_upstreamMicroservices"][0]["nb_link"] = {sources[i]};
+                msvcsList.push_back(new DataReader(runConfig));
             } else if (msvc_type == MicroserviceType::Receiver) {
                 msvcsList.push_back(new Receiver(pipeConfig));
             } else if (msvc_type >= MicroserviceType::Preprocessor &&
@@ -1011,6 +1015,7 @@ void ContainerAgent::collectRuntimeMetrics() {
                 cont_fcpo_agent->rewardCallback(0.0, 0.0, 0.0, (double) cont_msvcsGroups["batcher"].msvcList[0]->msvc_idealBatchSize / 10.0);
                 avgRequestRate = 0;
             } else {
+                avgRequestRate = std::max(0.1, avgRequestRate);
                 pre_queueDrops = 0;
                 for (auto &recv: cont_msvcsGroups["receiver"].msvcList) pre_queueDrops += recv->GetQueueDrops();
                 inf_queueDrops = 0;

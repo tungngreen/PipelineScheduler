@@ -911,7 +911,12 @@ bool Controller::mergeModels(PipelineModel *mergedModel, PipelineModel* toBeMerg
         toBeMergedModel->merged || mergedModel->device != device || toBeMergedModel->device != device) {
         return false;
     }
-
+    if (toBeMergedModel->name.find("datasource") != std::string::npos ||
+        toBeMergedModel->name.find("dsrc") != std::string::npos ||
+        toBeMergedModel->name.find("sink") != std::string::npos) {
+        mergedModel->datasourceName.push_back(toBeMergedModel->datasourceName[0]);
+        return false;
+    }
 
     float rate1 = mergedModel->arrivalProfiles.arrivalRates;
     float rate2 = toBeMergedModel->arrivalProfiles.arrivalRates;
@@ -970,7 +975,15 @@ TaskHandle* Controller::mergePipelines(const std::string& taskName) {
             }
             // If model is not scheduled to be run on the server, we should not merge it.
             // However, the model is still
-            if (task.second->tk_pipelineModels[i]->device != "server") {
+            /*if (task.second->tk_pipelineModels[i]->device != "server") {
+                mergedPipeline->tk_pipelineModels.emplace_back(new PipelineModel(*task.second->tk_pipelineModels[i]));
+                task.second->tk_pipelineModels[i]->merged = true;
+                task.second->tk_pipelineModels[i]->toBeRun = false;
+                mergedPipeline->tk_pipelineModels.back()->toBeRun = false;
+                continue;
+            }*/
+            // If the model devices are different from another we should not merge it.
+            if (mergedPipeline->tk_pipelineModels[i]->device != task.second->tk_pipelineModels[i]->device) {
                 mergedPipeline->tk_pipelineModels.emplace_back(new PipelineModel(*task.second->tk_pipelineModels[i]));
                 task.second->tk_pipelineModels[i]->merged = true;
                 task.second->tk_pipelineModels[i]->toBeRun = false;
@@ -1444,7 +1457,7 @@ uint8_t Controller::incNumReplicas(const PipelineModel *model) {
     float indiPreprocessRate = 1000000.f / profile.batchInfer.at(model->batchSize).p95prepLat;
     float processRate = indiProcessRate * numReplicas;
     float preprocessRate = indiPreprocessRate * numReplicas;
-    while ((processRate * 0.9 < model->arrivalProfiles.arrivalRates ||
+    while ((processRate * 0.85 < model->arrivalProfiles.arrivalRates ||
            preprocessRate * 0.95 < model->arrivalProfiles.arrivalRates) && numReplicas < 4) {
         numReplicas++;
         spdlog::get("container_agent")->info("Increasing the number of replicas of model {0:s} to {1:d}", model->name, numReplicas);
@@ -1474,7 +1487,7 @@ uint8_t Controller::decNumReplicas(const PipelineModel *model) {
         processRate = indiProcessRate * numReplicas;
         preprocessRate = indiPreprocessRate * numReplicas;
         // If the number of replicas is no longer enough to meet the arrival rate, we should not decrease the number of replicas anymore.
-        if ((processRate * 0.8 < model->arrivalProfiles.arrivalRates ||
+        if ((processRate * 0.75 < model->arrivalProfiles.arrivalRates ||
             preprocessRate * 0.9 < model->arrivalProfiles.arrivalRates)) {
             numReplicas++;
             break;
