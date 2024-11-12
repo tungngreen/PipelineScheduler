@@ -14,7 +14,7 @@ FCPOAgent::FCPOAgent(std::string& cont_name, uint state_size, uint resolution_si
 
     model = std::make_shared<MultiPolicyNet>(state_size, resolution_size, max_batch, scaling_size);
     std::string model_save = path + "/latest_model.pt";
-    //if (std::filesystem::exists(model_save)) torch::load(model, model_save);
+    if (std::filesystem::exists(model_save)) torch::load(model, model_save);
     model->to(precision);
     optimizer = std::make_unique<torch::optim::Adam>(model->parameters(), torch::optim::AdamOptions(1e-3));
 
@@ -26,7 +26,7 @@ void FCPOAgent::update() {
     steps_counter = 0;
     if (federated_steps_counter == 0) {
         experiences.clear();
-        spdlog::get("container_agent")->trace("Waiting for federated update, cancel !");
+        spdlog::get("container_agent")->trace("Waiting for federated update!");
         return;
     }
     spdlog::get("container_agent")->info("Locally training RL agent at cumulative Reward {}!", cumu_reward);
@@ -74,10 +74,10 @@ void FCPOAgent::update() {
     out << "episodeEnd," << sw.elapsed_microseconds() << "," << federated_steps_counter << "," << steps_counter << "," << cumu_reward << "," << avg_reward << std::endl;
     if (last_avg_reward < avg_reward) {
         last_avg_reward = avg_reward;
-        //torch::save(model, path + "/latest_model.pt");
+        torch::save(model, path + "/latest_model.pt");
     }
 
-    if (federated_steps_counter++ % federated_steps == 0) {
+    if (++federated_steps_counter % federated_steps == 0) {
         spdlog::get("container_agent")->info("Federated training RL agent!");
         federated_steps_counter = 0; // 0 means that we are waiting for federated update to come back
         federatedUpdate();
@@ -125,6 +125,7 @@ void FCPOAgent::federatedUpdate() {
 }
 
 void FCPOAgent::federatedUpdateCallback(FlData &response) {
+    spdlog::get("container_agent")->info("Federated Update received!");
     std::istringstream iss(response.network());
     std::unique_lock<std::mutex> lock(model_mutex);
     torch::load(model, iss);
@@ -203,7 +204,7 @@ std::tuple<int, int, int> FCPOAgent::runStep() {
     sw.stop();
     out << "step," << sw.elapsed_microseconds() << "," << federated_steps_counter << "," << steps_counter << "," << cumu_reward  << "," << resolution << "," << batching << "," << scaling << std::endl;
 
-    if (steps_counter%update_steps == 0) {
+    if (steps_counter % update_steps == 0) {
         std::thread t(&FCPOAgent::update, this);
         t.detach();
     }
