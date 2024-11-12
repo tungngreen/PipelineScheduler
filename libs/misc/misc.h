@@ -543,14 +543,13 @@ namespace trt {
         size_t maxWorkspaceSize = 1 << 30;
         std::array<float, 3> subVals{0.f, 0.f, 0.f};
         std::array<float, 3> divVals{1.f, 1.f, 1.f};
-        bool normalize = false;
+        float normalizeScale = 1.f;
     };
 
     void to_json(nlohmann::json &j, const TRTConfigs &val);
 
     void from_json(const nlohmann::json &j, TRTConfigs &val);
 }
-
 class Stopwatch {
 private:
     std::chrono::high_resolution_clock::time_point start_time;

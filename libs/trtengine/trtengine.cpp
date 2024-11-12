@@ -44,7 +44,7 @@ void Engine::serializeEngineOptions(const TRTConfigs &configs) {
 
     m_subVals = configs.subVals;
     m_divVals = configs.divVals;
-    m_normalize = configs.normalize;
+    m_normalizedScale = configs.normalizeScale;
     m_precision = configs.precision;
     m_deviceIndex = configs.deviceIndex;
 
@@ -524,6 +524,66 @@ void Engine::copyFromBuffer(
     spdlog::get("container_agent")->trace("[{0:s}] Finished. Comming out. ", __func__);
 }
 
+inline cv::cuda::GpuMat Engine::cvtHWCToCHW(
+    const std::vector<cv::cuda::GpuMat>& batch,
+    cv::cuda::Stream &stream,
+    uint8_t IMG_TYPE
+) {
+    spdlog::get("container_agent")->trace("[{0:s}] going in. ", __func__);
+    const BatchSizeType batchSize = batch.size();
+    cv::cuda::GpuMat transposed(1, batch[0].rows * batch[0].cols * batchSize, IMG_TYPE);
+
+    uint8_t IMG_SINGLE_CHANNEL_TYPE;
+    if (batch[0].channels() == 1) {
+        IMG_SINGLE_CHANNEL_TYPE = IMG_TYPE;
+        for (size_t img = 0; img < batchSize; img++) {
+            std::vector<cv::cuda::GpuMat> input_channels{
+                    cv::cuda::GpuMat(batch[0].rows, batch[0].cols, IMG_TYPE, &(transposed.ptr()[0 + batch[0].rows * batch[0].cols * img])),
+            };
+            cv::cuda::split(batch[img], input_channels);  // HWC -> CHW
+        }
+    } else {
+        IMG_SINGLE_CHANNEL_TYPE = IMG_TYPE ^ 16;
+        uint16_t height = batch[0].rows;
+        uint16_t width = batch[0].cols;
+        uint32_t channelMemWidth = height * width;
+        for (size_t img = 0; img < batchSize; img++) {
+            uint32_t offset = channelMemWidth * 3 * img;
+            std::vector<cv::cuda::GpuMat> input_channels{
+                cv::cuda::GpuMat(height, width, IMG_SINGLE_CHANNEL_TYPE, &(transposed.ptr()[0 + offset])),
+                cv::cuda::GpuMat(height, width, IMG_SINGLE_CHANNEL_TYPE, &(transposed.ptr()[channelMemWidth + offset])),
+                cv::cuda::GpuMat(height, width, IMG_SINGLE_CHANNEL_TYPE, &(transposed.ptr()[channelMemWidth * 2 + offset]))
+            };
+            cv::cuda::split(batch[img], input_channels, stream);  // HWC -> CHW
+        }
+    }
+
+    stream.waitForCompletion();
+    spdlog::get("container_agent")->trace("[{0:s}] Finished. Comming out. ", __func__);
+
+    return transposed;
+}
+
+inline void Engine::normalize(
+    const cv::cuda::GpuMat &transposedBatch, // NCHW
+    const BatchSizeType batchSize,
+    cv::cuda::Stream &stream,
+    const std::array<float, 3>& subVals,
+    const std::array<float, 3>& divVals,
+    const float normalizedScale
+) {
+    spdlog::get("container_agent")->trace("[{0:s}] going in. ", __func__);
+    
+    float * inputBufferPtr = (float *)(m_inputBuffers[0]);
+    cv::cuda::GpuMat batch(1, m_inputDims.at(0).d[1] * m_inputDims.at(0).d[2] * batchSize, CV_32FC3, inputBufferPtr);
+    transposedBatch.convertTo(batch, CV_32FC3, m_normalizedScale, stream);
+    cv::cuda::subtract(batch, cv::Scalar(subVals[0], subVals[1], subVals[2]), batch, cv::noArray(), -1, stream);
+    cv::cuda::divide(batch, cv::Scalar(divVals[0], divVals[1], divVals[2]), batch, 1, -1, stream);
+    stream.waitForCompletion();
+
+    spdlog::get("container_agent")->trace("[{0:s}] Finished. Comming out. ", __func__);
+}
+
 /**
  * @brief Inference function capable of taking varying batch size
  * 
@@ -571,7 +631,22 @@ bool Engine::runInference(
     
     // There could be more than one inputs to the inference, and to do inference we need to make sure all the input data
     // is copied to the allocated buffers
-    copyToBuffer(batch, inferenceStream);
+
+    cv::cuda::Stream cvInferenceStream;
+    cv::cuda::GpuMat transposedBatch = cvtHWCToCHW(batch, cvInferenceStream, CV_8UC3);
+    normalize(transposedBatch, batchSize, cvInferenceStream, m_subVals, m_divVals, m_normalizedScale);
+
+    // checkCudaErrorCode(cudaMemcpyAsync
+    //     (
+    //         m_inputBuffers[0],
+    //         normalized.ptr<void>(),
+    //         normalized.rows * normalized.cols * normalized.channels() * sizeof(float),
+    //         cudaMemcpyDeviceToDevice,
+    //         inferenceStream
+    //     ), __func__
+    // );
+
+    // copyToBuffer(batch, inferenceStream);
 
     // Run Inference
     bool inferenceStatus = m_context->enqueueV2(m_buffers.data(), inferenceStream, nullptr);
@@ -586,45 +661,6 @@ bool Engine::runInference(
     return inferenceStatus;
 
 
-}
-
-/**
- * @brief Preprocess the image by first permuting the images to shape CHW (instead) and normalize the image
- * 
- * @param batchInput 
- * @param subVals 
- * @param divVals 
- * @param normalize 
- * @return cv::cuda::GpuMat 
- */
-cv::cuda::GpuMat Engine::blobFromGpuMats(const std::vector<cv::cuda::GpuMat>& batchInput, const std::array<float, 3>& subVals, const std::array<float, 3>& divVals, bool normalize) {
-    cv::cuda::GpuMat gpu_dst(1, batchInput[0].rows * batchInput[0].cols * batchInput.size(), CV_8UC3);
-
-    size_t width = batchInput[0].cols * batchInput[0].rows;
-    for (size_t img = 0; img < batchInput.size(); img++) {
-        std::vector<cv::cuda::GpuMat> input_channels{
-                cv::cuda::GpuMat(batchInput[0].rows, batchInput[0].cols, CV_8U, &(gpu_dst.ptr()[0 + width * 3 * img])),
-                cv::cuda::GpuMat(batchInput[0].rows, batchInput[0].cols, CV_8U, &(gpu_dst.ptr()[width + width * 3 * img])),
-                cv::cuda::GpuMat(batchInput[0].rows, batchInput[0].cols, CV_8U,
-                                 &(gpu_dst.ptr()[width * 2 + width * 3 * img]))
-        };
-        cv::cuda::split(batchInput[img], input_channels);  // HWC -> CHW
-    }
-
-    cv::cuda::GpuMat mfloat;
-    if (normalize) {
-        // [0.f, 1.f]
-        gpu_dst.convertTo(mfloat, CV_32FC3, 1.f / 255.f);
-    } else {
-        // [0.f, 255.f]
-        gpu_dst.convertTo(mfloat, CV_32FC3);
-    }
-
-    // Apply scaling and mean subtraction
-    cv::cuda::subtract(mfloat, cv::Scalar(subVals[0], subVals[1], subVals[2]), mfloat, cv::noArray(), -1);
-    cv::cuda::divide(mfloat, cv::Scalar(divVals[0], divVals[1], divVals[2]), mfloat, 1, -1);
-
-    return mfloat;
 }
 
 /**
