@@ -999,6 +999,7 @@ void ContainerAgent::collectRuntimeMetrics() {
                 cont_fcpo_agent->rewardCallback(0.0, 0.0, 0.0, (double) cont_msvcsGroups["batcher"].msvcList[0]->msvc_idealBatchSize / 10.0);
                 avgRequestRate = 0;
             } else {
+                avgRequestRate = std::max(0.1, avgRequestRate);
                 pre_queueDrops = 0;
                 for (auto &recv: cont_msvcsGroups["receiver"].msvcList) pre_queueDrops += recv->GetQueueDrops();
                 inf_queueDrops = 0;
