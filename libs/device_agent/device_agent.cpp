@@ -39,6 +39,8 @@ DeviceAgent::DeviceAgent() {
     std::string type = absl::GetFlag(FLAGS_device_type);
     if (type == "server") {
         dev_type = SystemDeviceType::Server;
+    } else if (type == "onprem") {
+        dev_type = SystemDeviceType::OnPremise;
     } else if (type == "nxavier") {
         dev_type = SystemDeviceType::NXXavier;
     } else if (type == "agxavier") {
@@ -47,7 +49,7 @@ DeviceAgent::DeviceAgent() {
         dev_type = SystemDeviceType::OrinNano;
     }
     else {
-        std::cerr << "Invalid device type, use [server, nxavier, agxavier, orinano]" << std::endl;
+        std::cerr << "Invalid device type, use [server, onprem, nxavier, agxavier, orinano]" << std::endl;
         exit(1);
     }
     dev_port_offset = absl::GetFlag(FLAGS_dev_port_offset);
@@ -553,6 +555,7 @@ void DeviceAgent::StartFederatedLearningRequestHandler::Proceed() {
         ClientContext context;
         Status sending_status;
         CompletionQueue* sending_cq = device_agent->controller_sending_cq;
+        request.set_device_name(device_agent->dev_name);
         std::unique_ptr<ClientAsyncResponseReader<EmptyMessage>> rpc(
                 device_agent->controller_stub->AsyncForwardFl(&context, request, sending_cq));
         rpc->Finish(&reply, &sending_status, (void *)1);

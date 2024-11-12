@@ -53,14 +53,21 @@ void FCPOAgent::update() {
         val = val.slice(0, 1, val.size(0), 1);
     }
 
-    T clipped_ratio = torch::clamp(ratio, 1 - clip_epsilon, 1 + clip_epsilon);
-    T advantages = computeGae();
-    T policy_loss = -torch::min(ratio * advantages, clipped_ratio * advantages).to(precision).mean();
+    T loss = torch::tensor(0.0);
+    try {
+        T clipped_ratio = torch::clamp(ratio, 1 - clip_epsilon, 1 + clip_epsilon);
+        T advantages = computeGae();
+        T policy_loss = -torch::min(ratio * advantages, clipped_ratio * advantages).to(precision).mean();
 
-    T value_loss = torch::mse_loss(val.squeeze(), computeCumuRewards());
-    T policy1_penalty = penalty_weight * torch::mean(torch::tensor(experiences.get_resolution()).to(precision));
-    T policy3_penalty = penalty_weight * torch::mean(torch::tensor(experiences.get_scaling()).to(precision));
-    T loss = (policy_loss + 0.5 * value_loss + policy1_penalty + policy3_penalty);
+        T value_loss = torch::mse_loss(val.squeeze(), computeCumuRewards());
+        T policy1_penalty = penalty_weight * torch::mean(torch::tensor(experiences.get_resolution()).to(precision));
+        T policy3_penalty = penalty_weight * torch::mean(torch::tensor(experiences.get_scaling()).to(precision));
+        loss = (policy_loss + 0.5 * value_loss + policy1_penalty + policy3_penalty);
+    } catch (const std::exception& e) {
+        spdlog::get("container_agent")->error("Error in loss computation: {}", e.what());
+        reset();
+        return;
+    }
 
     // Backpropagation
     optimizer->zero_grad();
@@ -141,6 +148,7 @@ void FCPOAgent::rewardCallback(double throughput, double drops, double latency_p
         return;
     }
     double reward = 2 * throughput - drops - latency_penalty + (1 - oversize_penalty);
+    reward = std::max(-10.0, std::min(10.0, reward)); // Clip reward to [-10, 10]
     experiences.add_reward(reward);
     cumu_reward += reward;
 }

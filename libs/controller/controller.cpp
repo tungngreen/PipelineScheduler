@@ -337,7 +337,7 @@ bool Controller::AddTask(const TaskDescription::TaskStruct &t) {
 
     task->tk_pipelineModels = getModelsByPipelineType(t.type, t.device, t.name, t.source);
     for (auto &model: task->tk_pipelineModels) {
-        model->datasourceName = t.source;
+        model->datasourceName = {t.source};
         model->task = task;
     }
 
@@ -792,7 +792,9 @@ void Controller::StartContainer(ContainerHandle *container, bool easy_allocation
         base_config[0]["msvc_upstreamMicroservices"][0]["nb_link"] = {};
         if (container->model == DataSource || container->model == Yolov5nDsrc || container->model == RetinafaceDsrc) {
             base_config[0]["msvc_upstreamMicroservices"][0]["nb_name"] = "video_source";
-            base_config[0]["msvc_upstreamMicroservices"][0]["nb_link"].push_back(container->pipelineModel->datasourceName);
+            for (auto &source: container->pipelineModel->datasourceName) {
+                base_config[0]["msvc_upstreamMicroservices"][0]["nb_link"].push_back(source);
+            }
         } else {
             if (!container->pipelineModel->upstreams.empty()) {
                 base_config[0]["msvc_upstreamMicroservices"][0]["nb_name"] = container->pipelineModel->upstreams[0].first->name;
@@ -1198,9 +1200,9 @@ void Controller::ForwardFLRequestHandler::Proceed() {
         status = FINISH;
         responder.Finish(reply, Status::OK, this);
         //find container with name in scheduled pipelines
-        for (auto &cont: controller->containers.getList()) {
-            if (cont->name == request.name()) {
-                controller->ctrl_fcpo_server->addClient(request, cont->device_agent->stub, cont->device_agent->cq);
+        for (auto &dev: controller->devices.getMap()) {
+            if (dev.first == request.device_name()) {
+                controller->ctrl_fcpo_server->addClient(request, dev.second->stub, dev.second->cq);
                 break;
             }
         }

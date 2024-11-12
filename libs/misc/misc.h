@@ -445,6 +445,7 @@ std::unique_ptr<pqxx::connection> connectToMetricsServer(MetricsServerConfigs &m
 
 enum SystemDeviceType {
     Server,
+    OnPremise,
     NXXavier,
     AGXXavier,
     OrinNano
