@@ -1163,6 +1163,8 @@ std::map<std::string, std::string> keywordAbbrs = {
     {"yolov5l", "y5l"},
     {"yolov5x", "y5x"},
     {"yolov5ndsrc", "y5nd"},
+    {"retina", "rt"},
+    {"multiface", "mf"},
     {"retina1face", "rt1f"},
     {"retina1facedsrc", "rt1fd"},
     {"age", "age"},
@@ -1175,6 +1177,7 @@ std::map<std::string, std::string> keywordAbbrs = {
     {"dynamic", "dyn"},
     {"movenet", "move"},
     {"3090", "39"}, // GPU name
+    {"1080", "18"}, // GPU name
     {"fp32", "32"},
     {"fp16", "16"},
     {"int8", "8"}
