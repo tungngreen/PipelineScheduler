@@ -325,7 +325,7 @@ public:
                 {"precision", boost::algorithm::to_lower_copy(p)},
                 {"update_steps", 60},
                 {"update_step_incs", 5},
-                {"federated_steps", 2}
+                {"federated_steps", 5}
         };
     }
 
