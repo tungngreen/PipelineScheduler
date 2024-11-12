@@ -592,7 +592,11 @@ void ContainerAgent::initiateMicroservices(const json &configs) {
             MicroserviceType msvc_type = pipeConfig.at("msvc_type");
             std::vector<ThreadSafeFixSizedDoubleQueue *> inQueueList;
             if (msvc_type == MicroserviceType::DataReader) {
-                msvcsList.push_back(new DataReader(pipeConfig));
+                std::vector<std::string> sources = pipeConfig["msvc_upstreamMicroservices"][0]["nb_link"];
+                numInstances = sources.size();
+                json runConfig = pipeConfig;
+                runConfig["msvc_upstreamMicroservices"][0]["nb_link"] = {sources[i]};
+                msvcsList.push_back(new DataReader(runConfig));
             } else if (msvc_type == MicroserviceType::Receiver) {
                 msvcsList.push_back(new Receiver(pipeConfig));
             } else if (msvc_type >= MicroserviceType::Preprocessor &&
@@ -1011,6 +1015,7 @@ void ContainerAgent::collectRuntimeMetrics() {
                 cont_fcpo_agent->rewardCallback(0.0, 0.0, 0.0, (double) cont_msvcsGroups["batcher"].msvcList[0]->msvc_idealBatchSize / 10.0);
                 avgRequestRate = 0;
             } else {
+                avgRequestRate = std::max(0.1, avgRequestRate);
                 pre_queueDrops = 0;
                 for (auto &recv: cont_msvcsGroups["receiver"].msvcList) pre_queueDrops += recv->GetQueueDrops();
                 inf_queueDrops = 0;
@@ -1030,6 +1035,8 @@ void ContainerAgent::collectRuntimeMetrics() {
                     latencyEWMA += post->getLatencyEWMA();
                 }
                 latencyEWMA /= cont_msvcsGroups["postprocessor"].msvcList.size();
+                spdlog::get("container_agent")->info("{0:s} RL Decision: {1:d} miniBatches, {2:f} request rate, {3:d} queue drops, {4:f} latency, {5:f} avgExecutedBatchSize",
+                                                     cont_name, miniBatchCount, avgRequestRate, queueDrops, latencyEWMA / TIME_PRECISION_TO_SEC, avgExecutedBatchSize);
                 cont_fcpo_agent->rewardCallback((double) miniBatchCount * avgExecutedBatchSize / avgRequestRate,
                                          (double) (pre_queueDrops + inf_queueDrops) / avgRequestRate,
                                          latencyEWMA / TIME_PRECISION_TO_SEC,

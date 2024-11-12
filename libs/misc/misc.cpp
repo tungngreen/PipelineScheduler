@@ -1126,6 +1126,7 @@ bool confirmIntention(const std::string &message, const std::string &magicPhrase
 std::map<std::string, std::string> keywordAbbrs = {
     {"batch", "batch"},
     {"server", "serv"},
+    {"onprem", "onp"},
     {"agxavier", "agx"},
     {"agxavier1", "agx1"},
     {"orinano", "orn"},
@@ -1192,6 +1193,7 @@ std::map<std::string, std::string> keywordAbbrs = {
 
 std::map<SystemDeviceType, std::string> SystemDeviceTypeList = {
     {Server, "server"},
+    {OnPremise, "onprem"},
     {NXXavier, "nxavier"},
     {AGXXavier, "agxavier"},
     {OrinNano, "orinano"}
@@ -1201,6 +1203,8 @@ std::map<SystemDeviceType, std::string> SystemDeviceTypeList = {
 std::map<std::string, SystemDeviceType> SystemDeviceTypeReverseList = {
     {"server", Server},
     {"serv", Server},
+    {"onprem", OnPremise},
+    {"onp", OnPremise},
     {"nxavier", NXXavier},
     {"nx", NXXavier},
     {"agxavier", AGXXavier},
