@@ -85,6 +85,7 @@ void manageJsonConfigs(json &configs) {
 
     (*containerConfigs)["cont_metricsServerConfigs"] = metricsServerConfigs;
     if (containerConfigs->at("cont_taskName") != "dsrc") {
+        std::cout << containerConfigs->at("cont_pipeline")[3].dump(4) << std::endl;
         (*containerConfigs)["cont_inferModelName"] = splitString(containerConfigs->at("cont_pipeline")[3]["path"], "/").back();
         containerConfigs->at("cont_inferModelName") = splitString(containerConfigs->at("cont_inferModelName"), ".").front();
         // The maximum batch size supported by the model (for TensorRT)
