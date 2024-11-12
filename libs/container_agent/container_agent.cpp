@@ -1018,7 +1018,7 @@ void ContainerAgent::collectRuntimeMetrics() {
                     latencyEWMA += post->getLatencyEWMA();
                 }
                 latencyEWMA /= cont_msvcsGroups["postprocessor"].msvcList.size();
-                cont_fcpo_agent->rewardCallback((double) miniBatchCount / avgRequestRate,
+                cont_fcpo_agent->rewardCallback((double) miniBatchCount * avgExecutedBatchSize / avgRequestRate,
                                          (double) (pre_queueDrops + inf_queueDrops) / avgRequestRate,
                                          latencyEWMA / TIME_PRECISION_TO_SEC,
                                          (double) cont_msvcsGroups["batcher"].msvcList[0]->msvc_idealBatchSize / avgExecutedBatchSize);
@@ -1032,6 +1032,31 @@ void ContainerAgent::collectRuntimeMetrics() {
             applyBatchSize(newBS);
             applyMultiThreading(scaling);
 
+            cont_nextRLDecisionTime = std::chrono::high_resolution_clock::now() + std::chrono::milliseconds(cont_rlIntervalMillisec);
+        } else if (cont_systemName == "bce" && timePointCastMillisecond(startTime) >= timePointCastMillisecond(cont_nextRLDecisionTime)) {
+            ClientContext context;
+            indevicemessages::BCEdgeData request;
+            indevicemessages::BCEdgeConfig reply;
+            request.set_msvc_name(cont_name);
+            request.set_slo(cont_msvcsGroups["inference"].msvcList[0]->msvc_contSLO);
+            avgExecutedBatchSize = 0.1;
+            for (auto &bat: cont_msvcsGroups["batcher"].msvcList) avgExecutedBatchSize += bat->GetAvgExecutedBatchSize();
+            avgExecutedBatchSize /= cont_msvcsGroups["batcher"].msvcList.size();
+            miniBatchCount = 0;
+            latencyEWMA = 0.0;
+            for (auto &post: cont_msvcsGroups["postprocessor"].msvcList) {
+                miniBatchCount += post->GetMiniBatchCount();
+                latencyEWMA += post->getLatencyEWMA();
+            }
+            request.set_throughput((double) miniBatchCount * avgExecutedBatchSize / perSecondArrivalRecords.getAvgArrivalRate());
+            latencyEWMA /= cont_msvcsGroups["postprocessor"].msvcList.size();
+            request.set_latency(latencyEWMA / TIME_PRECISION_TO_SEC);
+            Status status = stub->BCEdgeConfigUpdate(&context, request, &reply);
+            if (status.ok()) {
+                applyBatchSize(reply.batch_size());
+            } else {
+                spdlog::get("container_agent")->warn("{0:s} BCEdgeConfigUpdate failed: {1:d} - {2:s}", cont_name, status.error_code(), status.error_message());
+            }
             cont_nextRLDecisionTime = std::chrono::high_resolution_clock::now() + std::chrono::milliseconds(cont_rlIntervalMillisec);
         }
 
