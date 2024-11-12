@@ -163,7 +163,7 @@ public:
     virtual void loadConfigs(const json &jsonConfigs, bool isConstructing = false) override;
 
 protected:
-    Request<LocalGPUReqDataType> outReq;
+    std::atomic<bool> flush = false;
     template <typename T>
     bool validateRequest(Request<T> &req);
 

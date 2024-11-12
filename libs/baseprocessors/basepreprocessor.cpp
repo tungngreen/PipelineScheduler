@@ -313,7 +313,7 @@ void BasePreprocessor::preprocess() {
     std::vector<Request<LocalGPUReqDataType>> outBatch;
 
     // Incoming request
-    Request<LocalGPUReqDataType> currReq;
+    Request<LocalGPUReqDataType> currReq, outReq;
 
     Request<LocalCPUReqDataType> currCPUReq;
 
@@ -352,7 +352,27 @@ void BasePreprocessor::preprocess() {
             //info("{0:s} is being PAUSED.", msvc_name);
             continue;
         }
+        if (flush) {
+            spdlog::get("container_agent")->trace("{0:s} is flushing the buffer.", msvc_name);
+            if (msvc_concat.currIndex != 0) {
+                msvc_OutQueue[0]->emplace(outReq);
+                msvc_concat.currIndex = 0;
+                spdlog::get("container_agent")->trace("{0:s} flushed a frame of {1:d} images", msvc_name, msvc_concat.currIndex + 1);
+            }
+            flush = false;
+            msvc_OutQueue[0]->emplace(Request<LocalGPUReqDataType>{
+                {},
+                {},
+                {"flush"},
+                0,
+                {},
+                {},
+                {}
+            });
+        }
+
         currCPUReq = msvc_InQueue.at(0)->pop1();
+
         if (!validateRequest<LocalCPUReqDataType>(currCPUReq)) {
             continue;
         }
@@ -475,11 +495,7 @@ void BasePreprocessor::preprocess() {
 }
 
 void BasePreprocessor::flushBuffers() {
-    msvc_OutQueue[0]->emplace(outReq);
-    msvc_concat.currIndex = 0;
-    outReq = {};
-    outReq.req_travelPath.push_back("flush");
-    msvc_OutQueue[0]->emplace(outReq);
+    flush = true;
 }
 
 // inline void BasePreprocessor::executeBatch(BatchTimeType &genTime, RequestSLOType &slo, RequestPathType &path,
