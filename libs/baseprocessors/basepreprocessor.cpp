@@ -313,7 +313,7 @@ void BasePreprocessor::preprocess() {
     std::vector<Request<LocalGPUReqDataType>> outBatch;
 
     // Incoming request
-    Request<LocalGPUReqDataType> currReq;
+    Request<LocalGPUReqDataType> currReq, outReq;
 
     Request<LocalCPUReqDataType> currCPUReq;
 
@@ -321,6 +321,7 @@ void BasePreprocessor::preprocess() {
 
     spdlog::get("container_agent")->info("{0:s} STARTS.", msvc_name);
     cv::cuda::Stream *preProcStream = nullptr;
+    // uint8_t randomNumImgs = 0;
     while (true) {
         // Allowing this thread to naturally come to an end
         if (STOP_THREADS) {
@@ -352,6 +353,13 @@ void BasePreprocessor::preprocess() {
             continue;
         }
         currCPUReq = msvc_InQueue.at(0)->pop1();
+
+        if (flush) {
+            if (msvc_concat.currIndex == 0) return;
+            msvc_OutQueue[0]->emplace(outReq);
+            msvc_concat.currIndex = 0;
+        }
+
         if (!validateRequest<LocalCPUReqDataType>(currCPUReq)) {
             continue;
         }
@@ -469,9 +477,7 @@ void BasePreprocessor::preprocess() {
 }
 
 void BasePreprocessor::flushBuffers() {
-    if (msvc_concat.currIndex == 0) return;
-    msvc_OutQueue[0]->emplace(outReq);
-    msvc_concat.currIndex = 0;
+    flush = true;
 }
 
 // inline void BasePreprocessor::executeBatch(BatchTimeType &genTime, RequestSLOType &slo, RequestPathType &path,
