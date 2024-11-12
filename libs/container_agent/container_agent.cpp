@@ -1172,7 +1172,10 @@ void ContainerAgent::applyBatchSize(int batchSize) {
 };
 
 void ContainerAgent::applyMultiThreading(int multiThreadingConfig) {
-    cont_threadingAction = static_cast<threadingAction>(multiThreadingConfig);
+    if (cont_threadingAction != static_cast<threadingAction>(multiThreadingConfig)) {
+        cont_threadingAction = static_cast<threadingAction>(multiThreadingConfig);
+        return; // ensure that we always have two same decisions in a row before applying the change
+    }
     int current_pre_count = cont_msvcsGroups["preprocessor"].msvcList.size();
     int current_post_count = cont_msvcsGroups["postprocessor"].msvcList.size();
     switch (multiThreadingConfig) {
