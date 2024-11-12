@@ -164,24 +164,6 @@ private:
     bool is_full;
 };
 
-struct ActorCriticNet : torch::nn::Module {
-    ActorCriticNet(int state_size, int action_size) {
-        fc1 = register_module("fc1", torch::nn::Linear(state_size, 64));
-        policy_head = register_module("policy_head", torch::nn::Linear(64, action_size));
-        value_head = register_module("value_head", torch::nn::Linear(64, 1));
-    }
-
-    std::pair<T, T> forward(T state) {
-        T x = torch::relu(fc1->forward(state));
-        T policy_logits = policy_head->forward(x);
-        T policy = torch::softmax(policy_logits, -1); // Softmax to obtain action probabilities
-        T value = value_head->forward(x);             // State value
-        return {policy, value};
-    }
-
-    torch::nn::Linear fc1{nullptr}, policy_head{nullptr}, value_head{nullptr};
-};
-
 struct MultiPolicyNet: torch::nn::Module {
     MultiPolicyNet(int state_size, int action1_size, int action2_size, int action3_size) {
         shared_layer1 = register_module("shared_layer", torch::nn::Linear(state_size, 64));
@@ -208,6 +190,44 @@ struct MultiPolicyNet: torch::nn::Module {
     torch::nn::Linear policy_head1{nullptr};
     torch::nn::Linear policy_head2{nullptr};
     torch::nn::Linear policy_head3{nullptr};
+    torch::nn::Linear value_head{nullptr};
+};
+
+struct SinglePolicyNet: torch::nn::Module {
+    SinglePolicyNet(int state_size, int action1_size, int action2_size, int action3_size) {
+        shared_layer1 = register_module("shared_layer", torch::nn::Linear(state_size, 64));
+        shared_layer2 = register_module("shared_layer2", torch::nn::Linear(64, 48));
+        policy_head = register_module("policy_head", torch::nn::Linear(48, action1_size * action2_size * action3_size));
+        value_head = register_module("value_head", torch::nn::Linear(48, 1));
+    }
+
+    std::tuple<T, T> forward(T state) {
+        T x = torch::relu(shared_layer1->forward(state));
+        x = torch::relu(shared_layer2->forward(x));
+        T policy_output = torch::softmax(policy_head->forward(x), -1);
+        T value = value_head->forward(x);
+        return std::make_tuple(policy_output, value);
+    }
+
+    T combine_actions(std::vector<int> resolution, std::vector<int> batching, std::vector<int> scaling, int action2_size, int action3_size) {
+        T action = torch::zeros({static_cast<long>(resolution.size()), 1});
+        for (int i = 0; i < resolution.size(); i++) {
+            action[i] = resolution[i] * action2_size * action3_size + batching[i] * action3_size + scaling[i];
+        }
+        return action;
+    }
+
+    std::tuple<int, int, int> interpret_action(int action, int action2_size, int action3_size) {
+        int resolution = action / (action2_size * action3_size);
+        int remainder = action % (action2_size * action3_size);
+        int batching = remainder / action3_size;
+        int scaling = remainder % action3_size;
+        return std::make_tuple(resolution, batching, scaling);
+    }
+
+    torch::nn::Linear shared_layer1{nullptr};
+    torch::nn::Linear shared_layer2{nullptr};
+    torch::nn::Linear policy_head{nullptr};
     torch::nn::Linear value_head{nullptr};
 };
 
