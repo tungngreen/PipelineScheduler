@@ -483,6 +483,8 @@ enum ModelType {
     Arcface,
     Retinaface,
     RetinafaceDsrc,
+    RetinaMtface,
+    RetinaMtfaceDsrc,
     PlateDet,
     Movenet,
     Emotionnet,
