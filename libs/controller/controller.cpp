@@ -1197,15 +1197,17 @@ void Controller::ForwardFLRequestHandler::Proceed() {
         service->RequestForwardFl(&ctx, &request, &responder, cq, cq, this);
     } else if (status == PROCESS) {
         new ForwardFLRequestHandler(service, cq, controller);
-        status = FINISH;
-        responder.Finish(reply, Status::OK, this);
-        //find container with name in scheduled pipelines
         for (auto &dev: controller->devices.getMap()) {
             if (dev.first == request.device_name()) {
-                controller->ctrl_fcpo_server->addClient(request, dev.second->stub, dev.second->cq);
+                if (controller->ctrl_fcpo_server->addClient(request, dev.second->stub, dev.second->cq)) {
+                    responder.Finish(reply, Status::OK, this);
+                } else {
+                    responder.Finish(reply, Status::CANCELLED, this);
+                }
                 break;
             }
         }
+        status = FINISH;
     } else {
         GPR_ASSERT(status == FINISH);
         delete this;

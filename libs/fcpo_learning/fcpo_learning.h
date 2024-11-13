@@ -302,7 +302,7 @@ public:
         out.close();
     }
 
-    void addClient(FlData &data, std::shared_ptr<ControlCommands::Stub> stub, CompletionQueue *cq);
+    bool addClient(FlData &data, std::shared_ptr<ControlCommands::Stub> stub, CompletionQueue *cq);
 
     void incrementClientCounter() {
         client_counter++;

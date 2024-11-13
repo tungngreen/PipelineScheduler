@@ -244,14 +244,21 @@ FCPOServer::FCPOServer(std::string run_name, uint state_size, torch::Dtype preci
     t.detach();
 }
 
-void FCPOServer::addClient(FlData &request, std::shared_ptr<ControlCommands::Stub> stub, CompletionQueue *cq) {
+bool FCPOServer::addClient(FlData &request, std::shared_ptr<ControlCommands::Stub> stub, CompletionQueue *cq) {
     std::istringstream iss(request.network());
     federated_clients.push_back({request,
                                  std::make_shared<MultiPolicyNet>(request.state_size(), request.resolution_size(),
                                                                   request.max_batch(), request.threading_size()),
                                                                       stub, cq});
-    torch::load(federated_clients.back().model, iss);
-    federated_clients.back().model->to(precision);
+    try {
+        torch::load(federated_clients.back().model, iss);
+        federated_clients.back().model->to(precision);
+    } catch (const std::exception& e) {
+        spdlog::get("container_agent")->error("Error in loading model: {}", e.what());
+        federated_clients.pop_back();
+        return false;
+    }
+    return true;
 }
 
 void FCPOServer::proceed() {
