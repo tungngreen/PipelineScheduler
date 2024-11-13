@@ -911,9 +911,8 @@ bool Controller::mergeModels(PipelineModel *mergedModel, PipelineModel* toBeMerg
         toBeMergedModel->merged || mergedModel->device != device || toBeMergedModel->device != device) {
         return false;
     }
-    if (toBeMergedModel->name.find("datasource") != std::string::npos ||
-        toBeMergedModel->name.find("dsrc") != std::string::npos ||
-        toBeMergedModel->name.find("sink") != std::string::npos) {
+    if (mergedModel->name.find("datasource") != std::string::npos ||
+        mergedModel->name.find("dsrc") != std::string::npos) {
         mergedModel->datasourceName.push_back(toBeMergedModel->datasourceName[0]);
         return false;
     }
@@ -991,7 +990,7 @@ TaskHandle* Controller::mergePipelines(const std::string& taskName) {
                 continue;
             }
             // We attempt to merge to model i of this unscheduled task into the model i of the merged pipeline
-            bool merged = mergeModels(mergedPipeline->tk_pipelineModels[i], task.second->tk_pipelineModels.at(i), "server");
+            bool merged = mergeModels(mergedPipeline->tk_pipelineModels[i], task.second->tk_pipelineModels.at(i), mergedPipeline->tk_pipelineModels[i]->device);
             task.second->tk_pipelineModels.at(i)->merged = true;
             task.second->tk_pipelineModels.at(i)->toBeRun = false;
         }
