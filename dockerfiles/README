@@ -1,5 +1,33 @@
-To build a base container for Jetson devices.
-* r35.2.1-py3 for the orins
-* r35.1.0-py3 for the xaviers
+# AMD64 with Nvidia GPUs
+## Base container
+- Base: `nvcr.io/nvidia/cuda:11.4.3-cudnn8-devel-ubuntu20.04`
+- Specs:
+    - gRPC 1.60.2
+    - OpenCV 4.8.1 (with CUDA Support)
+        - Check and add GPU Compute Capability (e.g., 3090 uses 8.6) if necessary.
+    - TensorRT 8.4.3.1
+    - CUDA 11.4
+    - CuDNN 8.4.1
+    - Boost 1.84
+- Build command:
+    ```
+    docker build -t pipeplusplus:base-amd64 -f ./DOCKERFILE-base-amd64 .
+    ```
 
- ```docker build --build-arg JETPACK_VERSION="r35.1.0-py3" -t pipeline-scheduler:r35.1.0-py3 -f DOCKERFILE-jetson .```
+## Libtorch container (on top of base)
+- Base: pipeplusplus-base (see above)
+- Specs:
+    - Torch 1.11
+- Build command
+    ```
+    docker build -t pipeplusplus:torch-amd64 -f ./DOCKERFILE-torch-amd64 .
+    ```
+
+# Jetson devices
+- Base: `nvcr.io/nvidia/l4t-ml:${JETPACK_VERSION}`
+    * r35.2.1-py3 for the orins
+    * r35.1.0-py3 for the xaviers
+- Build command
+    ```
+    docker build --build-arg JETPACK_VERSION="r35.1.0-py3" -t pipeline-scheduler:r35.1.0-py3 -f DOCKERFILE-jetson .
+    ```
