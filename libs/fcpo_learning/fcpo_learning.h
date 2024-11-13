@@ -251,7 +251,7 @@ public:
 
 private:
     void update();
-    void federatedUpdate();
+    void federatedUpdate(double loss);
     void reset() {
         cumu_reward = 0.0;
         first = true;
@@ -302,7 +302,7 @@ public:
         out.close();
     }
 
-    void addClient(FlData &data, std::shared_ptr<ControlCommands::Stub> stub, CompletionQueue *cq);
+    bool addClient(FlData &data, std::shared_ptr<ControlCommands::Stub> stub, CompletionQueue *cq);
 
     void incrementClientCounter() {
         client_counter++;
@@ -324,7 +324,7 @@ public:
                 {"penalty_weight", penalty_weight},
                 {"precision", boost::algorithm::to_lower_copy(p)},
                 {"update_steps", 60},
-                {"update_step_incs", 5},
+                {"update_step_incs", 2},
                 {"federated_steps", 5}
         };
     }

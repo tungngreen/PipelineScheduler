@@ -1197,15 +1197,17 @@ void Controller::ForwardFLRequestHandler::Proceed() {
         service->RequestForwardFl(&ctx, &request, &responder, cq, cq, this);
     } else if (status == PROCESS) {
         new ForwardFLRequestHandler(service, cq, controller);
-        status = FINISH;
-        responder.Finish(reply, Status::OK, this);
-        //find container with name in scheduled pipelines
         for (auto &dev: controller->devices.getMap()) {
             if (dev.first == request.device_name()) {
-                controller->ctrl_fcpo_server->addClient(request, dev.second->stub, dev.second->cq);
+                if (controller->ctrl_fcpo_server->addClient(request, dev.second->stub, dev.second->cq)) {
+                    responder.Finish(reply, Status::OK, this);
+                } else {
+                    responder.Finish(reply, Status::CANCELLED, this);
+                }
                 break;
             }
         }
+        status = FINISH;
     } else {
         GPR_ASSERT(status == FINISH);
         delete this;
@@ -1308,12 +1310,13 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
     }
     switch (type) {
         case PipelineType::Traffic: {
-            auto *datasource = new PipelineModel{startDevice, "datasource", {}, true, {}, {}};
+            auto *datasource = new PipelineModel{startDevice, "datasource", ModelType::DataSource, {}, true, {}, {}};
             datasource->possibleDevices = {startDevice};
 
             auto *yolov5n = new PipelineModel{
                     "server",
                     "yolov5n",
+                    ModelType::Yolov5n,
                     {},
                     true,
                     {},
@@ -1333,6 +1336,7 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
                 yolov5n320 = new PipelineModel{
                         "server",
                         "yolov5n320",
+                        ModelType::Yolov5n320,
                         {},
                         true,
                         {},
@@ -1346,6 +1350,7 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
                 yolov5n512 = new PipelineModel{
                         "server",
                         "yolov5n512",
+                        ModelType::Yolov5n512,
                         {},
                         true,
                         {},
@@ -1358,6 +1363,7 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
                 yolov5s= new PipelineModel{
                         "server",
                         "yolov5s",
+                        ModelType::Yolov5s,
                         {},
                         true,
                         {},
@@ -1371,6 +1377,7 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
             auto *retina1face = new PipelineModel{
                     "server",
                     "retina1face",
+                    ModelType::Retinaface,
                     {},
                     false,
                     {},
@@ -1392,6 +1399,7 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
             auto *arcface = new PipelineModel{
                     "server",
                     "arcface",
+                    ModelType::Arcface,
                     {},
                     false,
                     {},
@@ -1405,6 +1413,7 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
             auto *carbrand = new PipelineModel{
                     "server",
                     "carbrand",
+                    ModelType::CarBrand,
                     {},
                     false,
                     {},
@@ -1426,6 +1435,7 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
             auto *platedet = new PipelineModel{
                     "server",
                     "platedet",
+                    ModelType::PlateDet,
                     {},
                     false,
                     {},
@@ -1447,6 +1457,7 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
             auto *sink = new PipelineModel{
                     "sink",
                     "sink",
+                    ModelType::Sink,
                     {},
                     false,
                     {},
@@ -1474,12 +1485,13 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
             return {datasource, yolov5n, retina1face, arcface, carbrand, platedet, sink};
         }
         case PipelineType::Building_Security: {
-            auto *datasource = new PipelineModel{startDevice, "datasource", {}, true, {}, {}};
+            auto *datasource = new PipelineModel{startDevice, "datasource", ModelType::DataSource, {}, true, {}, {}};
             datasource->possibleDevices = {startDevice};
 
             auto *yolov5n = new PipelineModel{
                     "server",
                     "yolov5n",
+                    ModelType::Yolov5n,
                     {},
                     true,
                     {},
@@ -1499,6 +1511,7 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
                 yolov5n320 = new PipelineModel{
                         "server",
                         "yolov5n320",
+                        ModelType::Yolov5n320,
                         {},
                         true,
                         {},
@@ -1512,6 +1525,7 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
                 yolov5n512 = new PipelineModel{
                         "server",
                         "yolov5n512",
+                        ModelType::Yolov5n512,
                         {},
                         true,
                         {},
@@ -1524,6 +1538,7 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
                 yolov5s= new PipelineModel{
                         "server",
                         "yolov5s",
+                        ModelType::Yolov5s,
                         {},
                         true,
                         {},
@@ -1537,6 +1552,7 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
             auto *retina1face = new PipelineModel{
                     "server",
                     "retina1face",
+                    ModelType::Retinaface,
                     {},
                     false,
                     {},
@@ -1558,6 +1574,7 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
             auto *movenet = new PipelineModel{
                     "server",
                     "movenet",
+                    ModelType::Movenet,
                     {},
                     false,
                     {},
@@ -1579,6 +1596,7 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
             auto *gender = new PipelineModel{
                     "server",
                     "gender",
+                    ModelType::Gender,
                     {},
                     false,
                     {},
@@ -1592,6 +1610,7 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
             auto *age = new PipelineModel{
                     "server",
                     "age",
+                    ModelType::Age,
                     {},
                     false,
                     {},
@@ -1605,6 +1624,7 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
             auto *sink = new PipelineModel{
                     "sink",
                     "sink",
+                    ModelType::Sink,
                     {},
                     false,
                     {},
@@ -1633,11 +1653,12 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
             return {datasource, yolov5n, retina1face, movenet, gender, age, sink};
         }
         case PipelineType::Video_Call: {
-            auto *datasource = new PipelineModel{startDevice, "datasource", {}, true, {}, {}};
+            auto *datasource = new PipelineModel{startDevice, "datasource", ModelType::DataSource, {}, true, {}, {}};
             datasource->possibleDevices = {startDevice};
             auto *retina1face = new PipelineModel{
                     "server",
                     "retina1face",
+                    ModelType::Retinaface,
                     {},
                     true,
                     {},
@@ -1648,22 +1669,23 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
             retina1face->possibleDevices = {"server"};
             datasource->downstreams.push_back({retina1face, -1});
 
-            auto *emotionnet = new PipelineModel{
-                    "server",
-                    "emotionnet",
-                    {},
-                    false,
-                    {},
-                    {},
-                    {},
-                    {{retina1face, -1}}
-            };
-            emotionnet->possibleDevices = {"server"};
-            retina1face->downstreams.push_back({emotionnet, -1});
+//            auto *emotionnet = new PipelineModel{
+//                    "server",
+//                    "emotionnet",
+//                    {},
+//                    false,
+//                    {},
+//                    {},
+//                    {},
+//                    {{retina1face, -1}}
+//            };
+//            emotionnet->possibleDevices = {"server"};
+//            retina1face->downstreams.push_back({emotionnet, -1});
 
             auto *age = new PipelineModel{
                     "server",
                     "age",
+                    ModelType::Age,
                     {},
                     false,
                     {},
@@ -1677,6 +1699,7 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
             auto *gender = new PipelineModel{
                     "server",
                     "gender",
+                    ModelType::Gender,
                     {},
                     false,
                     {},
@@ -1690,6 +1713,7 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
             auto *arcface = new PipelineModel{
                     "server",
                     "arcface",
+                    ModelType::Arcface,
                     {},
                     false,
                     {},
@@ -1703,28 +1727,31 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
             auto *sink = new PipelineModel{
                     "sink",
                     "sink",
+                    ModelType::Sink,
                     {},
                     false,
                     {},
                     {},
                     {},
-                    {{emotionnet, -1}, {age, -1}, {gender, -1}, {arcface, -1}}
+//                    {{emotionnet, -1}, {age, -1}, {gender, -1}, {arcface, -1}}
+                    {{age, -1}, {gender, -1}, {arcface, -1}}
             };
             sink->possibleDevices = {"sink"};
-            emotionnet->downstreams.push_back({sink, -1});
+//            emotionnet->downstreams.push_back({sink, -1});
             age->downstreams.push_back({sink, -1});
             gender->downstreams.push_back({sink, -1});
             arcface->downstreams.push_back({sink, -1});
 
             if (!sourceName.empty()) {
                 retina1face->arrivalProfiles.arrivalRates = ctrl_initialRequestRates[sourceName][retina1face->name];
-                emotionnet->arrivalProfiles.arrivalRates = ctrl_initialRequestRates[sourceName][emotionnet->name];
+//                emotionnet->arrivalProfiles.arrivalRates = ctrl_initialRequestRates[sourceName][emotionnet->name];
                 age->arrivalProfiles.arrivalRates = ctrl_initialRequestRates[sourceName][age->name];
                 gender->arrivalProfiles.arrivalRates = ctrl_initialRequestRates[sourceName][gender->name];
                 arcface->arrivalProfiles.arrivalRates = ctrl_initialRequestRates[sourceName][arcface->name];
             }
 
-            return {datasource, retina1face, emotionnet, age, gender, arcface, sink};
+//            return {datasource, retina1face, emotionnet, age, gender, arcface, sink};
+            return {datasource, retina1face, age, gender, arcface, sink};
         }
         default:
             return {};

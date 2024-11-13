@@ -57,9 +57,10 @@ message FlData {
   uint32 resolution_size = 4;
   uint32 max_batch = 5;
   uint32 threading_size = 6;
-  bytes network = 7;
-  optional bytes states = 8;
-  optional bytes resolution_actions = 9;
-  optional bytes batching_actions = 10;
-  optional bytes scaling_actions = 11;
+  double latest_loss = 7;
+  bytes network = 8;
+  optional bytes states = 9;
+  optional bytes resolution_actions = 10;
+  optional bytes batching_actions = 11;
+  optional bytes scaling_actions = 12;
 }
