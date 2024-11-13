@@ -388,6 +388,7 @@ struct ContainerHandle {
 
 struct PipelineModel {
     std::string name;
+    ModelType type;
     TaskHandle *task;
     // Whether the upstream is on another device
     bool isSplitPoint;
@@ -457,6 +458,7 @@ struct PipelineModel {
         // Constructor with default parameters
     PipelineModel(const std::string& device = "",
                   const std::string& name = "",
+                  ModelType type = ModelType::DataSource,
                   TaskHandle *task = nullptr,
                   bool isSplitPoint = false,
                   const ModelArrivalProfile& arrivalProfiles = ModelArrivalProfile(),
@@ -477,6 +479,7 @@ struct PipelineModel {
                   const std::vector<std::string>& possibleDevices = {})
         :
           name(name),
+          type(type),
           task(task),
           isSplitPoint(isSplitPoint),
           arrivalProfiles(arrivalProfiles),
@@ -504,6 +507,7 @@ struct PipelineModel {
         std::lock_guard<std::mutex> lock2(pipelineModelMutex, std::adopt_lock);
         device = other.device;
         name = other.name;
+        type = other.type;
         task = other.task;
         isSplitPoint = other.isSplitPoint;
         arrivalProfiles = other.arrivalProfiles;
@@ -548,6 +552,7 @@ struct PipelineModel {
             std::lock_guard<std::mutex> lock2(other.pipelineModelMutex, std::adopt_lock);
             device = other.device;
             name = other.name;
+            type = other.type;
             task = other.task;
             isSplitPoint = other.isSplitPoint;
             arrivalProfiles = other.arrivalProfiles;
