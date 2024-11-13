@@ -87,12 +87,12 @@ void FCPOAgent::update() {
     if (++federated_steps_counter % federated_steps == 0) {
         spdlog::get("container_agent")->info("Federated training RL agent!");
         federated_steps_counter = 0; // 0 means that we are waiting for federated update to come back
-        federatedUpdate();
+        federatedUpdate(loss.item<double>());
     }
     reset();
 }
 
-void FCPOAgent::federatedUpdate() {
+void FCPOAgent::federatedUpdate(const double loss) {
     FlData request;
     // save model information in uchar* pointer and then reload it from that information
     std::ostringstream oss;
@@ -101,6 +101,7 @@ void FCPOAgent::federatedUpdate() {
     request.set_resolution_size(resolution_size);
     request.set_max_batch(max_batch);
     request.set_threading_size(scaling_size);
+    request.set_latest_loss(loss);
     torch::save(model, oss);
     request.set_network(oss.str());
     oss.str("");
@@ -258,7 +259,6 @@ bool FCPOServer::addClient(FlData &request, std::shared_ptr<ControlCommands::Stu
         federated_clients.pop_back();
         return false;
     }
-    return true;
 }
 
 void FCPOServer::proceed() {
@@ -268,31 +268,49 @@ void FCPOServer::proceed() {
             continue;
         }
         spdlog::get("container_agent")->info("Starting Federated Aggregation of FCPO Agents!");
+        auto participants = federated_clients;
+        federated_clients.clear();
 
-        std::vector<torch::Tensor> aggregated_params;
-        for (auto param: {model->shared_layer1->weight, model->shared_layer1->bias, model->shared_layer2->weight, model->shared_layer2->bias, model->value_head->weight, model->value_head->bias}) {
-            aggregated_params.push_back(param);
+        std::vector<torch::Tensor> aggregated_shared_params;
+        for (const auto& param : model->parameters()) {
+            aggregated_shared_params.push_back(param.clone());
         }
-        for (auto client: federated_clients) {
-            aggregated_params[0] = aggregated_params[0] + client.model->shared_layer1->weight;
-            aggregated_params[1] = aggregated_params[1] + client.model->shared_layer1->bias;
-            aggregated_params[2] = aggregated_params[2] + client.model->shared_layer2->weight;
-            aggregated_params[3] = aggregated_params[3] + client.model->shared_layer2->bias;
-            aggregated_params[4] = aggregated_params[4] + client.model->value_head->weight;
-            aggregated_params[5] = aggregated_params[5] + client.model->value_head->bias;
+        std::vector<std::map<std::vector<int64_t>, T>> action_heads_by_size =
+                std::vector<std::map<std::vector<int64_t>, T>>(aggregated_shared_params.size());
+
+        double last_loss = 0.0;
+        for (auto& client : participants) {
+            size_t i = 0;
+            for (const auto& param : client.model->parameters()) {
+                if (aggregated_shared_params[i].sizes() == param.sizes()) {
+                    aggregated_shared_params[i] = aggregated_shared_params[i] + param;
+                } else {
+                    auto size_key = param.sizes().vec();
+                    if (action_heads_by_size[i].find(size_key) == action_heads_by_size[i].end()) {
+                        action_heads_by_size[i][size_key] = param.clone();
+                    } else {
+                        double factor = 1.0 / (client.data.latest_loss() - last_loss);
+                        action_heads_by_size[i][size_key] = action_heads_by_size[i][size_key] + param * factor;
+                    }
+                }
+                i++;
+                last_loss = client.data.latest_loss();
+            }
         }
-        for (auto& param : aggregated_params) {
-          param /= static_cast<int64_t>(federated_clients.size() + 1);
+
+        for (auto& param : aggregated_shared_params) {
+            param /= static_cast<int64_t>(participants.size() + 1);
+        }
+
+        for (auto& action_head : action_heads_by_size) {
+            for (auto &[key, value]: action_head) {
+
+            }
         }
 
         T states, resolution_actions, batching_actions, scaling_actions;
-        for (auto client: federated_clients) {
-            client.model->shared_layer1->weight = aggregated_params[0].clone();
-            client.model->shared_layer1->bias = aggregated_params[1].clone();
-            client.model->shared_layer2->weight = aggregated_params[2].clone();
-            client.model->shared_layer2->bias = aggregated_params[3].clone();
-            client.model->value_head->weight = aggregated_params[4].clone();
-            client.model->value_head->bias = aggregated_params[5].clone();
+        for (auto client: participants) {
+            for (int i = 0; i <= 5; i++) client.model->parameters()[i] = aggregated_shared_params[i].clone();
             client.model->train();
             optimizer->zero_grad();
             std::istringstream iss(client.data.states());
@@ -310,18 +328,16 @@ void FCPOServer::proceed() {
             auto policy3_loss = torch::nll_loss(policy3_output, scaling_actions.to(torch::kLong));
 
             auto loss = policy1_loss + policy2_loss + policy3_loss;
+            value.detach();
             loss.to(precision).backward();
             optimizer->step();
 
             returnFLModel(client);
         }
-        federated_clients.clear();
-        model->shared_layer1->weight = aggregated_params[0].clone();
-        model->shared_layer1->bias = aggregated_params[1].clone();
-        model->shared_layer2->weight = aggregated_params[2].clone();
-        model->shared_layer2->bias = aggregated_params[3].clone();
-        model->value_head->weight = aggregated_params[4].clone();
-        model->value_head->bias = aggregated_params[5].clone();
+
+        for (int i = 0; i < aggregated_shared_params.size(); i++) {
+            model->parameters()[i] = aggregated_shared_params[i].clone();
+        }
     }
 }
 
