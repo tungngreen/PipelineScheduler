@@ -1666,7 +1666,7 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
                     {},
                     {{datasource, -1}}
             };
-            retina1face->possibleDevices = {"server"};
+            retina1face->possibleDevices = {startDevice, "server"};
             datasource->downstreams.push_back({retina1face, -1});
 
 //            auto *emotionnet = new PipelineModel{
@@ -1707,7 +1707,7 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
                     {},
                     {{retina1face, -1}}
             };
-            gender->possibleDevices = {startDevice, "server"};
+            gender->possibleDevices = {"server"};
             retina1face->downstreams.push_back({gender, -1});
 
             auto *arcface = new PipelineModel{
@@ -1721,7 +1721,7 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
                     {},
                     {{retina1face, -1}}
             };
-            arcface->possibleDevices = {startDevice, "server"};
+            arcface->possibleDevices = {"server"};
             retina1face->downstreams.push_back({arcface, -1});
 
             auto *sink = new PipelineModel{
