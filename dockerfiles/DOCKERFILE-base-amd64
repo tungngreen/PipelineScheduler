@@ -72,7 +72,7 @@ RUN cd /opt/ &&\
     cmake \
         -DOPENCV_EXTRA_MODULES_PATH=/opt/opencv_contrib-${OPENCV_VERSION}/modules \
         -DWITH_CUDA=ON \
-        -DCUDA_ARCH_BIN=7.5,8.0,8.6 \
+        -DCUDA_ARCH_BIN=6.1,7.5,8.0,8.6 \
         -DCMAKE_BUILD_TYPE=RELEASE \
         # Install path will be /usr/local/lib (lib is implicit)
         -DCMAKE_INSTALL_PREFIX=/usr/local \
@@ -91,9 +91,11 @@ ARG version="8.4.3.1-1+cuda11.6"
 ARG tar_file="TensorRT-8.4.3.1.Linux.x86_64-gnu.cuda-11.6.cudnn8.4.tar.gz"
 
 COPY ${tar_file} /
-RUN mkdir /TensorRT
-RUN tar -xvzf ${tar_file} -C /TensorRT/ --strip-components 1
-RUN echo "export LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:/TensorRT/lib" >> /etc/profile
+RUN mkdir /TensorRT && \
+    tar -xvzf ${tar_file} -C /TensorRT/ --strip-components 1 && \
+    echo "export LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:/TensorRT/lib" >> /etc/profile && \
+    echo "export PATH=${PATH}:/TensorRT/bin" >> /etc/profile && \
+    rm ${tar_file}
 
 # Install GRPC
 ARG GRPC_INSTALL_DIR=/grpc
@@ -150,15 +152,18 @@ RUN cd /grpc-src && \
               -DCMAKE_INSTALL_PREFIX=$GRPC_INSTALL_DIR \
       ../.. && \
     make -j 8 && \
-    make install
+    make install && \
+    rm -rf /grpc-src
 ENV PATH="${PATH}:${GRPC_INSTALL_DIR}/bin"
 
 # Install Boost
-RUN wget https://boostorg.jfrog.io/artifactory/main/release/1.84.0/source/boost_1_84_0.tar.gz
-RUN tar xvf boost_1_84_0.tar.gz
-RUN cd boost_1_84_0 && \
+RUN wget https://boostorg.jfrog.io/artifactory/main/release/1.84.0/source/boost_1_84_0.tar.gz && \
+    tar xvf boost_1_84_0.tar.gz && \
+    cd boost_1_84_0 && \
     ./bootstrap.sh --prefix=/usr/ && \
-    ./b2 install
+    ./b2 install && \
+    cd .. && \
+    rm -rf boost_1_84_0
 
 RUN apt update
 
