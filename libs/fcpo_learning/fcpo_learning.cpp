@@ -263,7 +263,7 @@ bool FCPOServer::addClient(FlData &request, std::shared_ptr<ControlCommands::Stu
 
 void FCPOServer::proceed() {
     while (run) {
-        if (client_counter == 0 || federated_clients.size() < client_counter) {
+        if (client_counter == 0 || federated_clients.size() < (client_counter / 2)) {
             std::this_thread::sleep_for(std::chrono::seconds(1));
             continue;
         }
