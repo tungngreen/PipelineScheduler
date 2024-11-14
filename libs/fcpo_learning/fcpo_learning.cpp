@@ -267,6 +267,11 @@ void FCPOServer::proceed() {
             std::this_thread::sleep_for(std::chrono::seconds(1));
             continue;
         }
+        for (int i = 0; i < client_counter; i++) {
+            if (federated_clients.size() == client_counter) break;
+            std::this_thread::sleep_for(std::chrono::seconds(1)); // add some wait to potentially receive more clients
+        }
+
         spdlog::get("container_agent")->info("Starting Federated Aggregation of FCPO Agents!");
         auto participants = federated_clients;
         federated_clients.clear();
