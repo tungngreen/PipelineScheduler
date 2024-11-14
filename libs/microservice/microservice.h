@@ -937,9 +937,9 @@ public:
         return msvc_miniBatchCount.exchange(0);
     };
 
-    unsigned int GetAvgExecutedBatchSize() {
+    unsigned int GetAggExecutedBatchSize() {
         msvc_miniBatchCount = 0;
-        return msvc_avgBatchSize.exchange(0);
+        return msvc_aggBatchSize.exchange(0);
     }
 
     unsigned int GetQueueDrops() {
@@ -1106,7 +1106,7 @@ protected:
     uint64_t msvc_batchCount = 0;
 
     std::atomic<unsigned int> msvc_droppedReqCount = 0;
-    std::atomic<unsigned int> msvc_avgBatchSize = 0;
+    std::atomic<unsigned int> msvc_aggBatchSize = 0;
     std::atomic<unsigned int> msvc_miniBatchCount = 0;
     std::atomic<unsigned int> msvc_totalReqCount = 0;
     std::atomic<double> msvc_totalLatencyEWMA = 0.0;

@@ -913,7 +913,7 @@ std::vector<float> getThrptsInPeriods(const std::vector<ClockType> &timestamps, 
 
 void ContainerAgent::collectRuntimeMetrics() {
     unsigned int tmp_lateCount, lateCount = 0, queueDrops = 0, pre_queueDrops, inf_queueDrops, post_queueDrops, miniBatchCount, oldReqCount;
-    double avgRequestRate, avgExecutedBatchSize, latencyEWMA, avgLatency = 0;
+    double avgRequestRate, aggExecutedBatchSize, latencyEWMA, avgLatency = 0;
     ArrivalRecordType arrivalRecords;
     ProcessRecordType processRecords;
     BatchInferRecordType batchInferRecords;
@@ -1013,9 +1013,9 @@ void ContainerAgent::collectRuntimeMetrics() {
                 queueDrops += pre_queueDrops + inf_queueDrops + post_queueDrops;
 
 
-                avgExecutedBatchSize = 0.1;
-                for (auto &bat: cont_msvcsGroups["batcher"].msvcList) avgExecutedBatchSize += bat->GetAvgExecutedBatchSize();
-                avgExecutedBatchSize /= cont_msvcsGroups["batcher"].msvcList.size();
+                aggExecutedBatchSize = 0.1;
+                for (auto &bat: cont_msvcsGroups["batcher"].msvcList) aggExecutedBatchSize += bat->GetAggExecutedBatchSize();
+                aggExecutedBatchSize /= cont_msvcsGroups["batcher"].msvcList.size();
                 miniBatchCount = 0;
                 latencyEWMA = 0.0;
                 for (auto &post: cont_msvcsGroups["postprocessor"].msvcList) {
@@ -1023,12 +1023,13 @@ void ContainerAgent::collectRuntimeMetrics() {
                     latencyEWMA += post->getLatencyEWMA();
                 }
                 latencyEWMA /= cont_msvcsGroups["postprocessor"].msvcList.size();
-                spdlog::get("container_agent")->info("{0:s} RL Decision: {1:d} miniBatches, {2:f} request rate, {3:d} queue drops, {4:f} latency, {5:f} avgExecutedBatchSize",
-                                                     cont_name, miniBatchCount, avgRequestRate, queueDrops, latencyEWMA / TIME_PRECISION_TO_SEC, avgExecutedBatchSize);
-                cont_fcpo_agent->rewardCallback((double) miniBatchCount * avgExecutedBatchSize / avgRequestRate,
+                spdlog::get("container_agent")->info("{0:s} RL Decision: {1:d} miniBatches, {2:f} request rate, {3:d} queue drops, {4:f} latency, {5:f} aggExecutedBatchSize",
+                                                     cont_name, miniBatchCount, avgRequestRate, queueDrops, latencyEWMA / TIME_PRECISION_TO_SEC, aggExecutedBatchSize);
+                cont_fcpo_agent->rewardCallback((double) aggExecutedBatchSize / avgRequestRate,
                                          (double) (pre_queueDrops + inf_queueDrops) / avgRequestRate,
                                          latencyEWMA / TIME_PRECISION_TO_SEC,
-                                         (double) cont_msvcsGroups["batcher"].msvcList[0]->msvc_idealBatchSize / avgExecutedBatchSize);
+                                         std:: max( 1.0, (double) cont_msvcsGroups["batcher"].msvcList[0]->msvc_idealBatchSize
+                                                            / (aggExecutedBatchSize / miniBatchCount)));
             }
             cont_fcpo_agent->setState(cont_msvcsGroups["preprocessor"].msvcList[0]->msvc_concat.numImgs,
                                       cont_msvcsGroups["batcher"].msvcList[0]->msvc_idealBatchSize,cont_threadingAction,
@@ -1046,16 +1047,16 @@ void ContainerAgent::collectRuntimeMetrics() {
             indevicemessages::BCEdgeConfig reply;
             request.set_msvc_name(cont_name);
             request.set_slo(cont_msvcsGroups["inference"].msvcList[0]->msvc_contSLO);
-            avgExecutedBatchSize = 0.1;
-            for (auto &bat: cont_msvcsGroups["batcher"].msvcList) avgExecutedBatchSize += bat->GetAvgExecutedBatchSize();
-            avgExecutedBatchSize /= cont_msvcsGroups["batcher"].msvcList.size();
+            aggExecutedBatchSize = 0.1;
+            for (auto &bat: cont_msvcsGroups["batcher"].msvcList) aggExecutedBatchSize += bat->GetAggExecutedBatchSize();
+            aggExecutedBatchSize /= cont_msvcsGroups["batcher"].msvcList.size();
             miniBatchCount = 0;
             latencyEWMA = 0.0;
             for (auto &post: cont_msvcsGroups["postprocessor"].msvcList) {
                 miniBatchCount += post->GetMiniBatchCount();
                 latencyEWMA += post->getLatencyEWMA();
             }
-            request.set_throughput((double) miniBatchCount * avgExecutedBatchSize / perSecondArrivalRecords.getAvgArrivalRate());
+            request.set_throughput((double) miniBatchCount * aggExecutedBatchSize / perSecondArrivalRecords.getAvgArrivalRate());
             latencyEWMA /= cont_msvcsGroups["postprocessor"].msvcList.size();
             request.set_latency(latencyEWMA / TIME_PRECISION_TO_SEC);
             Status status = stub->BCEdgeConfigUpdate(&context, request, &reply);
