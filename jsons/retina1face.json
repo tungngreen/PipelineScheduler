@@ -32,9 +32,9 @@
                 ],
                 "msvc_dataShape": [
                     [
-                        3,
-                        640,
-                        640
+                        -1,
+                        -1,
+                        -1
                     ]
                 ],
                 "msvc_pipelineSLO": 999999,
@@ -304,8 +304,9 @@
                         "nb_name": "inference",
                         "nb_expectedShape": [
                             [
-                                0,
-                                0
+                                3,
+                                288,
+                                320
                             ]
                         ]
                     }

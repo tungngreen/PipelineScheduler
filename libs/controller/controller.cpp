@@ -1652,11 +1652,11 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
             }
             return {datasource, yolov5n, retina1face, movenet, gender, age, sink};
         }
-        case PipelineType::Video_Call: {
+        case PipelineType::Indoor: {
             auto *datasource = new PipelineModel{startDevice, "datasource", ModelType::DataSource, {}, true, {}, {}};
             datasource->possibleDevices = {startDevice};
             auto *retinamtface = new PipelineModel{
-                    "server",
+                    startDevice,
                     "retinamtface",
                     ModelType::RetinaMtface,
                     {},
