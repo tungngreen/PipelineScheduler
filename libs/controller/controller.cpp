@@ -1656,7 +1656,7 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
             auto *datasource = new PipelineModel{startDevice, "datasource", ModelType::DataSource, {}, true, {}, {}};
             datasource->possibleDevices = {startDevice};
             auto *retinamtface = new PipelineModel{
-                    "server",
+                    startDevice,
                     "retinamtface",
                     ModelType::RetinaMtface,
                     {},
