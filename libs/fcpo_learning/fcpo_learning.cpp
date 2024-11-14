@@ -14,7 +14,18 @@ FCPOAgent::FCPOAgent(std::string& cont_name, uint state_size, uint resolution_si
 
     model = std::make_shared<MultiPolicyNet>(state_size, resolution_size, max_batch, scaling_size);
     std::string model_save = path + "/latest_model.pt";
-    if (std::filesystem::exists(model_save)) torch::load(model, model_save);
+    if (std::filesystem::exists(model_save)) {
+        torch::load(model, model_save);
+    } else {
+        torch::manual_seed(42);
+        for (auto& p : model->named_parameters()) {
+            if (p.key().find("weight") != std::string::npos) {
+                torch::nn::init::xavier_uniform_(p.value());
+            } else if (p.key().find("bias") != std::string::npos) {
+                torch::nn::init::constant_(p.value(), 0);
+            }
+        }
+    };
     model->to(precision);
     optimizer = std::make_unique<torch::optim::Adam>(model->parameters(), torch::optim::AdamOptions(1e-3));
 
