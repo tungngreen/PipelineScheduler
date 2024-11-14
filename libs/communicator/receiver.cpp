@@ -86,6 +86,8 @@ void Receiver::GpuPointerRequestHandler::Proceed() {
             return;
         }
 
+        responder.Finish(reply, Status::OK, this);
+
         std::vector<RequestData<LocalGPUReqDataType>> elements = {};
         for (const auto &el: *request.mutable_elements()) {
             auto timestamps = std::vector<ClockType>();
@@ -128,7 +130,6 @@ void Receiver::GpuPointerRequestHandler::Proceed() {
         }
 
         status = FINISH;
-        responder.Finish(reply, Status::OK, this);
     } else {
         GPR_ASSERT(status == FINISH);
         delete this;
@@ -236,6 +237,8 @@ void Receiver::SerializedDataRequestHandler::Proceed() {
                 spdlog::get("container_agent")->error("SerializedDataRequestHandler::{0:s} data length does not match", __func__);
                 continue;
             }
+
+            responder.Finish(reply, Status::OK, this);
             cv::Mat image;
             if (el.is_encoded()){
                 std::vector<uchar> buf(el.data().c_str(), el.data().c_str() + length);
@@ -266,7 +269,6 @@ void Receiver::SerializedDataRequestHandler::Proceed() {
         }
 
         status = FINISH;
-        responder.Finish(reply, Status::OK, this);
     } else {
         GPR_ASSERT(status == FINISH);
         delete this;
