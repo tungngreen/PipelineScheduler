@@ -15,29 +15,29 @@ algorithm_names = ['OURS', 'dis', 'jlf', 'rim']
 colors = ['#0072B2', '#E69F00', '#009E73', '#CC79A7', '#56B4E9', '#F0E442']
 label_map = {'ppp': 'OctopInf', 'OURS': 'OctopInf', 'dis': 'Distream', 'jlf': 'Jellyfish', 'rim': 'Rim'}
 
-def plot_over_time(directory, inlcude_people = True, schema = '', missed = True, memory = True, stepless = True):
+def plot_over_time(directory, include_people = True, schema = '', missed = True, memory = True, stepless = True):
     fig, axs = plt.subplots(1, 1, figsize=(8, 3), gridspec_kw={'height_ratios': [1], 'width_ratios': [1]})
     ax1 = axs
     if memory: ax2 = ax1.twinx()
     cars = []
-    if inlcude_people: people = []
+    if include_people: people = []
     # if the csvs do not exist, create them
     if not os.path.exists(os.path.join(directory, 'df_cars.csv')) or not os.path.exists(
             os.path.join(directory, 'df_people.csv')):
         for f in natsorted(os.listdir(os.path.join(directory, 'OURS'))):
             c, p, _, _ = read_file(os.path.join(directory, 'OURS', f))
-            if inlcude_people: people.extend(p)
+            if include_people: people.extend(p)
             cars.extend(c)
         df_cars = pd.DataFrame(cars, columns=['path', 'latency', 'timestamps'])
         df_cars.to_csv(os.path.join(directory, 'df_cars.csv'), index=False)
-        if inlcude_people:
+        if include_people:
             df_people = pd.DataFrame(people, columns=['path', 'latency', 'timestamps'])
             df_people.to_csv(os.path.join(directory, 'df_people.csv'), index=False)
     else:
         df_cars = pd.read_csv(os.path.join(directory, 'df_cars.csv'))
-        if inlcude_people: df_people = pd.read_csv(os.path.join(directory, 'df_people.csv'))
+        if include_people: df_people = pd.read_csv(os.path.join(directory, 'df_people.csv'))
     lables = ['Traffic Throughput', 'Surveillance Throughput']
-    for j, df in enumerate([df_cars, df_people] if inlcude_people else [df_cars]):
+    for j, df in enumerate([df_cars, df_people] if include_people else [df_cars]):
         df['timestamps'] = df['timestamps'].apply(lambda x: int(x))
         df['latency'] = df['latency'].apply(lambda x: int(x))
         df['aligned_timestamp'] = (df['timestamps'] // 1e6).astype(int) * 1e6

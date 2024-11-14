@@ -185,7 +185,8 @@ void Controller::Scheduling() {
     }
     Stopwatch schedulingSW;
     schedulingSW.start();
-    ctrl_controlTimings.currSchedulingTime = std::chrono::system_clock::now();
+    startTime = std::chrono::system_clock::now();
+    ctrl_controlTimings.currSchedulingTime = startTime;
 
     ctrl_unscheduledPipelines = ctrl_savedUnscheduledPipelines;
     auto taskList = ctrl_unscheduledPipelines.getMap();
@@ -225,9 +226,15 @@ void Controller::Scheduling() {
     schedulingSW.stop();
     ClockType nextTime = std::min(ctrl_controlTimings.nextSchedulingTime, ctrl_controlTimings.nextRescalingTime);
     uint64_t sleepTime = std::chrono::duration_cast<TimePrecisionType>(nextTime - std::chrono::system_clock::now()).count();
+    startTime = std::chrono::system_clock::now();
     while (running) {
+        if (std::chrono::duration_cast<std::chrono::minutes>(std::chrono::system_clock::now() - startTime).count() > ctrl_runtime + 10) {
+            running = false;
+            break;
+        }
         std::this_thread::sleep_for(std::chrono::microseconds(sleepTime));
     }
+    delete this;
 }
 
 void Controller::ScaleUp(PipelineModel *model, uint8_t numIncReps) {
@@ -1069,7 +1076,7 @@ TaskHandle* Controller::mergePipelines(const std::string& taskName) {
 }
 
 void Controller::mergePipelines() {
-    std::vector<std::string> toMerge = {"traffic", "people"};
+    std::vector<std::string> toMerge = {"traffic", "people", "indoor"};
     TaskHandle* mergedPipeline;
 
     for (const auto &taskName : toMerge) {
@@ -1195,8 +1202,13 @@ void Controller::crossDeviceWorkloadDistributor(TaskHandle *task, uint64_t slo) 
 
         estimateModelLatency(m);
         if (m->name.find("datasource") == std::string::npos) {
-            m->device = "server";
-            m->deviceTypeName = "server";
+            for (auto &d: m->possibleDevices) {
+                if (d == "server") {
+                    m->device = "server";
+                    m->deviceTypeName = "server";
+                    break;
+                }
+            }
         }
     }
 

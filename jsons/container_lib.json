@@ -55,15 +55,15 @@
     },
     "retinamtface_server": {
         "taskName": "retinamtface",
-        "templateConfigPath": "../jsons/retinamtface.json",
+        "templateConfigPath": "../jsons/retinaface.json",
         "runCommand": "./Container_RetinaFace",
-        "modelPath": "../models/retina_multiface_640_nx_fp32_64_1.engine"
+        "modelPath": "../models/retina_multiface_640_3090_fp32_16_1.engine"
     },
     "retinamtfacedsrc_server": {
         "taskName": "retinamtface",
-        "templateConfigPath": "../jsons/retinamtface.json",
+        "templateConfigPath": "../jsons/retinaface.json",
         "runCommand": "./Container_RetinaFace",
-        "modelPath": "../models/retina_multiface_640_3090_fp32_64_1.engine"
+        "modelPath": "../models/retina_multiface_640_3090_fp32_16_1.engine"
     },
     "platedet_server": {
         "taskName": "platedet",
@@ -133,15 +133,15 @@
     },
     "retinamtfacedsrc_nxavier": {
         "taskName": "retinamtface",
-        "templateConfigPath": "../jsons/retinamtface.json",
+        "templateConfigPath": "../jsons/retinaface.json",
         "runCommand": "./Container_RetinaFace",
-        "modelPath": "../models/retina_multiface_640_nx_fp32_64_1.engine"
+        "modelPath": "../models/retina_multiface_640_nx_fp32_16_1.engine"
     },
     "retinamtface_nxavier": {
         "taskName": "retinamtface",
-        "templateConfigPath": "../jsons/retinamtface.json",
+        "templateConfigPath": "../jsons/retinaface.json",
         "runCommand": "./Container_RetinaFace",
-        "modelPath": "../models/retina_multiface_640_nx_fp32_64_1.engine"
+        "modelPath": "../models/retina_multiface_640_nx_fp32_16_1.engine"
     },
     "platedet_nxavier": {
         "taskName": "platedet",
@@ -211,15 +211,15 @@
     },
     "retinamtfacedsrc_agxavier": {
         "taskName": "retinamtface",
-        "templateConfigPath": "../jsons/retinamtface.json",
+        "templateConfigPath": "../jsons/retinaface.json",
         "runCommand": "./Container_RetinaFace",
-        "modelPath": "../models/retina_multiface_640_agx_fp32_64_1.engine"
+        "modelPath": "../models/retina_multiface_640_agx_fp32_16_1.engine"
     },
     "retinamtface_agxavier": {
         "taskName": "retinamtface",
-        "templateConfigPath": "../jsons/retinamtface.json",
+        "templateConfigPath": "../jsons/retinaface.json",
         "runCommand": "./Container_RetinaFace",
-        "modelPath": "../models/retina_multiface_640_agx_fp32_64_1.engine"
+        "modelPath": "../models/retina_multiface_640_agx_fp32_16_1.engine"
     },
     "platedet_agxavier": {
         "taskName": "platedet",
@@ -289,15 +289,15 @@
     },
     "retinamtfacedsrc_orinano": {
         "taskName": "retinamtface",
-        "templateConfigPath": "../jsons/retinamtface.json",
+        "templateConfigPath": "../jsons/retinaface.json",
         "runCommand": "./Container_RetinaFace",
-        "modelPath": "../models/retina_multiface_640_orn_fp32_64_1.engine"
+        "modelPath": "../models/retina_multiface_640_orn_fp32_16_1.engine"
     },
     "retinamtface_orinano": {
         "taskName": "retinamtface",
-        "templateConfigPath": "../jsons/retinamtface.json",
+        "templateConfigPath": "../jsons/retinaface.json",
         "runCommand": "./Container_RetinaFace",
-        "modelPath": "../models/retina_multiface_640_orn_fp32_64_1.engine"
+        "modelPath": "../models/retina_multiface_640_orn_fp32_16_1.engine"
     },
     "platedet_orinano": {
         "taskName": "platedet",
@@ -451,15 +451,15 @@
     },
     "retinamtface_onprem": {
         "taskName": "retinamtface",
-        "templateConfigPath": "../jsons/retinamtface.json",
+        "templateConfigPath": "../jsons/retinaface.json",
         "runCommand": "./Container_RetinaFace",
-        "modelPath": "../models/retina_multiface_640_nx_fp32_64_1.engine"
+        "modelPath": "../models/retina_multiface_640_1080_fp32_16_1.engine"
     },
     "retinamtfacedsrc_onprem": {
         "taskName": "retinamtface",
-        "templateConfigPath": "../jsons/retinamtface.json",
+        "templateConfigPath": "../jsons/retinaface.json",
         "runCommand": "./Container_RetinaFace",
-        "modelPath": "../models/retina_multiface_640_1080_fp32_64_1.engine"
+        "modelPath": "../models/retina_multiface_640_1080_fp32_16_1.engine"
     },
     "platedet_onprem": {
         "taskName": "platedet",

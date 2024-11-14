@@ -461,7 +461,7 @@ typedef std::map<SystemDeviceType, std::string> DeviceInfoType;
 
 enum PipelineType {
     Traffic,
-    Video_Call,
+    Indoor,
     Building_Security
 };
 

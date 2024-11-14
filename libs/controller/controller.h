@@ -1096,6 +1096,7 @@ private:
     //         std::map<ModelType, int> &batch_sizes, std::map<ModelType, int> &estimated_infer_times, int nObjects);
 
     bool running;
+    ClockType startTime;
     std::string ctrl_experimentName;
     std::string ctrl_systemName;
     std::vector<TaskDescription::TaskStruct> initialTasks;
@@ -1110,6 +1111,7 @@ private:
     ContainerLibType ctrl_containerLib;
     DeviceInfoType ctrl_sysDeviceInfo = {
         {Server, "server"},
+        {OnPremise, "onprem"},
         {AGXXavier, "agxavier"},
         {NXXavier, "nxavier"},
         {OrinNano, "orinano"}
