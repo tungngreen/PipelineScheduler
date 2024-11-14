@@ -1213,6 +1213,11 @@ void ContainerAgent::updateArrivalRecords(ArrivalRecordType arrivalRecords, Runn
         std::vector<uint8_t> percentiles = {95};
         std::map<uint8_t, PercentilesArrivalRecord> percentilesRecord = records.findPercentileAll(percentiles);
 
+        if (percentilesRecord[95].transferDuration > (2^63-1)) { // 2^63-1 is the maximum value for BIGINT
+            spdlog::get("container_agent")->warn("{0:s} Transfer duration is too high: {1:d}us", cont_name, percentilesRecord[95].transferDuration);
+            continue;
+        }
+
         sql = absl::StrFormat("INSERT INTO %s (timestamps, stream, model_name, sender_host, receiver_host, ", cont_arrivalTableName);
 
         for (auto &period : cont_metricsServerConfigs.queryArrivalPeriodMillisec) {
