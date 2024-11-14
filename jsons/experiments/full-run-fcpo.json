@@ -124,13 +124,13 @@
         }, {
             "pipeline_name": "indoor1",
             "pipeline_target_slo": 250000,
-            "pipeline_type": 2,
+            "pipeline_type": 1,
             "video_source": "../data/indoor1.mp4",
             "pipeline_source_device": "onprem1"
         }, {
             "pipeline_name": "indoor2",
             "pipeline_target_slo": 250000,
-            "pipeline_type": 2,
+            "pipeline_type": 1,
             "video_source": "../data/indoor2.mp4",
             "pipeline_source_device": "onprem1"
         }
