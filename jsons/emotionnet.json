@@ -110,7 +110,7 @@
                 ],
                 "msvc_maxQueueSize": 10,
                 "=========================================Here ends the common part of the microservice configuration": "The following are the specific configurations for each microservice.",
-                "msvc_imgType": 16,
+                "msvc_imgType": 0,
                 "msvc_colorCvtType": 6,
                 "msvc_resizeInterpolType": 1,
                 "msvc_imgNormScale": "1/255",

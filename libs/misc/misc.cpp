@@ -1030,13 +1030,16 @@ std::unique_ptr<pqxx::connection> connectToMetricsServer(MetricsServerConfigs &m
 }
 
 pqxx::result pushSQL(pqxx::connection &conn, const std::string &sql) {
-
     pqxx::work session(conn);
     pqxx::result res;
     try {
         res = session.exec(sql.c_str());
         session.commit();
         return res;
+        //catch error when duplicate key detected
+    } catch (const pqxx::unique_violation &e) {
+        spdlog::get("container_agent")->error("{0:s} Unique Violation: {1:s}", __func__, e.what());
+        return {};
     } catch (const pqxx::sql_error &e) {
         spdlog::get("container_agent")->error("{0:s} SQL Error: {1:s}", __func__, e.what());
         exit(1);

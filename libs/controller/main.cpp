@@ -36,7 +36,7 @@ int main(int argc, char **argv) {
         }  else if (command == "traffic") {
             task.type = PipelineType::Traffic;
         } else if (command == "video_call") {
-            task.type = PipelineType::Video_Call;
+            task.type = PipelineType::Indoor;
         } else if (command == "people") {
             task.type = PipelineType::Building_Security;
         } else {
