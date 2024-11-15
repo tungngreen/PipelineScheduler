@@ -802,6 +802,12 @@ void DeviceAgent::ReturnFlRequestHandler::Proceed() {
         ClientContext context;
         Status sending_status;
         CompletionQueue* sending_cq = device_agent->containers[request.name()].cq;
+        if (sending_cq == nullptr) {
+            spdlog::get("container_agent")->error("ReturnFl: Container {}'s cq is null!", request.name());
+            status = FINISH;
+            responder.Finish(reply, Status::CANCELLED, this);
+            return;
+        }
         std::unique_ptr<ClientAsyncResponseReader<EmptyMessage>> rpc(
                 device_agent->containers[request.name()].stub->AsyncFederatedLearningReturn(&context, request, sending_cq));
         rpc->Finish(&reply, &sending_status, (void *)1);
