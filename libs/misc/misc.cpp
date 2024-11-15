@@ -977,7 +977,7 @@ void setupLogger(
     std::vector<spdlog::sink_ptr> &loggerSinks,
     std::shared_ptr<spdlog::logger> &logger
 ) {
-    std::string path = logPath + "/" + loggerName + ".log";
+    std::string path = logPath + "/" + loggerName + "_" + getTimestampString() + ".log";
 
     // Console sink setup
     if (loggingMode == 0 || loggingMode == 2) {

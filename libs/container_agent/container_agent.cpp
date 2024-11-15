@@ -79,6 +79,7 @@ void manageJsonConfigs(json &configs) {
     std::filesystem::create_directory(
         std::filesystem::path(logPath)
     );
+    containerConfigs->at("cont_logPath") = logPath;
 
     std::ifstream metricsServerCfgsFile = std::ifstream(containerConfigs->at("cont_metricServerConfigs"));
     json metricsServerConfigs = json::parse(metricsServerCfgsFile);
