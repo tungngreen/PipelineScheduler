@@ -982,6 +982,7 @@ void ContainerAgent::collectRuntimeMetrics() {
         }
 
         if (timePointCastMillisecond(startTime) >= timePointCastMillisecond(cont_metricsServerConfigs.nextArrivalRateScrapeTime)) {
+            spdlog::get("container_agent")->trace("{0:s} SCRAPE per second arrival rate.", cont_name);
             for (auto &receiver: cont_msvcsGroups["receiver"].msvcList) {
                 perSecondArrivalRecords.addRecord(receiver->getPerSecondArrivalRecord());
             }
@@ -1017,9 +1018,6 @@ void ContainerAgent::collectRuntimeMetrics() {
                 latencyEWMA += post->getLatencyEWMA();
             }
             latencyEWMA /= cont_msvcsGroups["postprocessor"].msvcList.size();
-
-            spdlog::get("container_agent")->info("RL Decision: {1:d} miniBatches, {2:f} request rate, {3:d} queue drops, {4:f} latency, {5:f} aggExecutedBatchSize",
-                                                 miniBatchCount, avgRequestRate, queueDrops, latencyEWMA / TIME_PRECISION_TO_SEC, aggExecutedBatchSize);
             
             if (avgRequestRate == 0 || std::isnan(avgRequestRate)) {
                 cont_fcpo_agent->rewardCallback(0.0, 0.0, 0.0, (double) cont_msvcsGroups["batcher"].msvcList[0]->msvc_idealBatchSize / 10.0);
@@ -1032,11 +1030,14 @@ void ContainerAgent::collectRuntimeMetrics() {
                                          std:: max( 1.0, (double) cont_msvcsGroups["batcher"].msvcList[0]->msvc_idealBatchSize
                                                             / (aggExecutedBatchSize / miniBatchCount)));
             }
+
+            spdlog::get("container_agent")->info("RL Decision Input: {1:d} miniBatches, {2:f} request rate, {3:d} queue drops, {4:f} latency, {5:f} aggExecutedBatchSize",
+                                                 miniBatchCount, avgRequestRate, queueDrops, latencyEWMA / TIME_PRECISION_TO_SEC, aggExecutedBatchSize);
             cont_fcpo_agent->setState(cont_msvcsGroups["preprocessor"].msvcList[0]->msvc_concat.numImgs,
                                       cont_msvcsGroups["batcher"].msvcList[0]->msvc_idealBatchSize,cont_threadingAction,
                                       avgRequestRate, pre_queueDrops, inf_queueDrops, post_queueDrops);
             auto [targetRes, newBS, scaling] = cont_fcpo_agent->runStep();
-            spdlog::get("container_agent")->info("RL Decision: Resolution: {1:d}, Batch Size: {2:d}, Scaling: {3:f}",
+            spdlog::get("container_agent")->info("RL Decision Output: Resolution: {1:d}, Batch Size: {2:d}, Scaling: {3:f}",
                                                  targetRes, newBS, scaling);
             applyResolution(targetRes);
             applyBatchSize(newBS);
