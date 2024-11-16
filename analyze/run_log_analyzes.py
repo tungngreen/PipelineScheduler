@@ -61,7 +61,7 @@ def read_file(filepath, first = None, last = None):
                 if int(timestamps.split(',')[1]) > last:
                     last = int(timestamps.split(',')[1])
             diffs = data[i].split('|')[1]
-            if "retina1face" in data[0] or "movenet" in data[0]:
+            if "retina" in data[0] or "movenet" in data[0]:
                 people.append(
                     [path[0].split('|')[1], diffs.replace('\n', '').split(',')[0], timestamps.split(',')[0]])  # store source, latency and arrival timestamp
             else:
