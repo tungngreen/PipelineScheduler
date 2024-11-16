@@ -30,10 +30,6 @@ DataReader::DataReader(const json &jsonConfigs) : Microservice(jsonConfigs) {
     spdlog::get("container_agent")->info("{0:s} is created.", __func__);
 };
 
-PerSecondArrivalRecord DataReader::getPerSecondArrivalRecord() {
-    return {static_cast<uint32_t>(target_fps), static_cast<MsvcSLOType>(1000000 / target_fps), 0};
-}
-
 void DataReader::loadConfigs(const json &jsonConfigs, bool isConstructing) {
     if (!isConstructing) {
         Microservice::loadConfigs(jsonConfigs);
