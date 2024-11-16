@@ -159,7 +159,7 @@ void FCPOAgent::rewardCallback(double throughput, double drops, double latency_p
         first = false;
         return;
     }
-    double reward = 2 * throughput - drops - latency_penalty + (1 - oversize_penalty);
+    double reward = 2 * throughput - drops - 2 * latency_penalty + (1 - oversize_penalty);
     reward = std::max(-10.0, std::min(10.0, reward)); // Clip reward to [-10, 10]
     experiences.add_reward(reward);
     cumu_reward += reward;
@@ -185,9 +185,6 @@ void FCPOAgent::selectAction() {
 //    T action_dist = torch::multinomial(policy, 1);  // Sample from policy (discrete distribution)
 //    std::tie(resolution, batching, scaling) = model->interpret_action(action_dist.item<int>(), max_batch, scaling_size);
 //    log_prob = torch::log(policy[action_dist.item<int>()]);
-
-
-
     experiences.add(state, log_prob, val, resolution, batching, scaling);
 }
 

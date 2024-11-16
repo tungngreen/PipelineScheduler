@@ -31,11 +31,7 @@ DataReader::DataReader(const json &jsonConfigs) : Microservice(jsonConfigs) {
 };
 
 PerSecondArrivalRecord DataReader::getPerSecondArrivalRecord() {
-    PerSecondArrivalRecord perSecondArrivalRecord;
-    perSecondArrivalRecord.numRequests = target_fps;
-    perSecondArrivalRecord.interArrivalMean = 1.0 / target_fps;
-    perSecondArrivalRecord.interArrivalVariance = 0.0;
-    return perSecondArrivalRecord;
+    return {static_cast<uint32_t>(target_fps), static_cast<MsvcSLOType>(1000000 / target_fps), 0};
 }
 
 void DataReader::loadConfigs(const json &jsonConfigs, bool isConstructing) {
