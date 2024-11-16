@@ -1013,7 +1013,6 @@ void ContainerAgent::collectRuntimeMetrics() {
                 for (auto &inf: cont_msvcsGroups["inference"].msvcList) post_queueDrops += inf->GetQueueDrops();
                 queueDrops += pre_queueDrops + inf_queueDrops + post_queueDrops;
 
-
                 aggExecutedBatchSize = 0.1;
                 for (auto &bat: cont_msvcsGroups["batcher"].msvcList) aggExecutedBatchSize += bat->GetAggExecutedBatchSize();
                 aggExecutedBatchSize /= cont_msvcsGroups["batcher"].msvcList.size();
@@ -1024,8 +1023,8 @@ void ContainerAgent::collectRuntimeMetrics() {
                     latencyEWMA += post->getLatencyEWMA();
                 }
                 latencyEWMA /= cont_msvcsGroups["postprocessor"].msvcList.size();
-                spdlog::get("container_agent")->info("{0:s} RL Decision: {1:d} miniBatches, {2:f} request rate, {3:d} queue drops, {4:f} latency, {5:f} aggExecutedBatchSize",
-                                                     cont_name, miniBatchCount, avgRequestRate, queueDrops, latencyEWMA / TIME_PRECISION_TO_SEC, aggExecutedBatchSize);
+                spdlog::get("container_agent")->info("RL Decision: {1:d} miniBatches, {2:f} request rate, {3:d} queue drops, {4:f} latency, {5:f} aggExecutedBatchSize",
+                                                     miniBatchCount, avgRequestRate, queueDrops, latencyEWMA / TIME_PRECISION_TO_SEC, aggExecutedBatchSize);
                 cont_fcpo_agent->rewardCallback((double) aggExecutedBatchSize / avgRequestRate,
                                          (double) (pre_queueDrops + inf_queueDrops) / avgRequestRate,
                                          latencyEWMA / TIME_PRECISION_TO_SEC,
@@ -1036,7 +1035,8 @@ void ContainerAgent::collectRuntimeMetrics() {
                                       cont_msvcsGroups["batcher"].msvcList[0]->msvc_idealBatchSize,cont_threadingAction,
                                       avgRequestRate, pre_queueDrops, inf_queueDrops, post_queueDrops);
             auto [targetRes, newBS, scaling] = cont_fcpo_agent->runStep();
-            std::cout << "New Resolution: " << targetRes << ", New Batch Size: " << newBS << ", Scaling: " << scaling << std::endl;
+            spdlog::get("container_agent")->info("RL Decision: Resolution: {1:d}, Batch Size: {2:d}, Scaling: {3:f}",
+                                                 targetRes, newBS, scaling);
             applyResolution(targetRes);
             applyBatchSize(newBS);
             applyMultiThreading(scaling);

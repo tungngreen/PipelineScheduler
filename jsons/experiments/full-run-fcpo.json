@@ -2,7 +2,7 @@
     "expName": "full",
     "system_fps": 30,
     "systemName": "fcpo",
-    "runtime": 600,
+    "runtime": 775,
     "port_offset": 0,
     "sink_ip": "143.248.55.76",
     "yolov5_batch_size": 2,
