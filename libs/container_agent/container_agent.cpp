@@ -1037,7 +1037,7 @@ void ContainerAgent::collectRuntimeMetrics() {
                                       cont_msvcsGroups["batcher"].msvcList[0]->msvc_idealBatchSize,cont_threadingAction,
                                       avgRequestRate, pre_queueDrops, inf_queueDrops, post_queueDrops);
             auto [targetRes, newBS, scaling] = cont_fcpo_agent->runStep();
-            spdlog::get("container_agent")->info("RL Decision Output: Resolution: {0:d}, Batch Size: {1:d}, Scaling: {2:f}",
+            spdlog::get("container_agent")->info("RL Decision Output: Resolution: {0:d}, Batch Size: {1:d}, Scaling: {2:d}",
                                                  targetRes, newBS, scaling);
             applyResolution(targetRes);
             applyBatchSize(newBS);
