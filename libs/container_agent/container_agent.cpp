@@ -1228,7 +1228,7 @@ void ContainerAgent::updateArrivalRecords(ArrivalRecordType arrivalRecords, Runn
         std::vector<uint8_t> percentiles = {95};
         std::map<uint8_t, PercentilesArrivalRecord> percentilesRecord = records.findPercentileAll(percentiles);
 
-        if (percentilesRecord[95].transferDuration > (2^63-1)) { // 2^63-1 is the maximum value for BIGINT
+        if (percentilesRecord[95].transferDuration > ((1LL << 63) - 1)) { // 2^63-1 is the maximum value for BIGINT
             spdlog::get("container_agent")->warn("{0:s} Transfer duration is too high: {1:d}us", cont_name, percentilesRecord[95].transferDuration);
             continue;
         }
