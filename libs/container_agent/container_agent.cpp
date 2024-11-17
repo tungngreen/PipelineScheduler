@@ -995,9 +995,11 @@ void ContainerAgent::collectRuntimeMetrics() {
 
         if (timePointCastMillisecond(startTime) >= timePointCastMillisecond(cont_metricsServerConfigs.nextArrivalRateScrapeTime)) {
             spdlog::get("container_agent")->trace("{0:s} SCRAPE per second arrival rate.", cont_name);
+            PerSecondArrivalRecord perSecondArrivalRecord;
             for (auto &receiver: cont_msvcsGroups["receiver"].msvcList) {
-                perSecondArrivalRecords.addRecord(receiver->getPerSecondArrivalRecord());
+                perSecondArrivalRecord = perSecondArrivalRecord + receiver->getPerSecondArrivalRecord();
             }
+            perSecondArrivalRecords.addRecord(perSecondArrivalRecord);
             // secondIndex = (secondIndex + 1) % maxNumSeconds;
             metricsStopwatch.stop();
             auto localScrapeLatencyMilisec = (uint64_t) std::ceil(metricsStopwatch.elapsed_microseconds() / 1000.f);
