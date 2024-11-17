@@ -1216,15 +1216,14 @@ void ContainerAgent::updateArrivalRecords(ArrivalRecordType arrivalRecords, Runn
     std::string sql;
     // Keys value here is std::pair<std::string, std::string> for stream and sender_host
     NetworkRecordType networkRecords;
+    perSecondArrivalRecords.aggregateArrivalRecord(cont_metricsServerConfigs.queryArrivalPeriodMillisec);
+    std::vector<float> requestRates = perSecondArrivalRecords.getArrivalRatesInPeriods();
+    std::vector<float> coeffVars = perSecondArrivalRecords.getCoeffVarsInPeriods();
     for (auto &[keys, records]: arrivalRecords) {
         uint32_t numEntries = records.arrivalTime.size();
-        if (numEntries == 0) {
-            continue;
-        }
-
+        if (numEntries == 0) continue;
         std::string stream = keys.first;
         std::string senderHostAbbr = abbreviate(keys.second);
-
         std::vector<uint8_t> percentiles = {95};
         std::map<uint8_t, PercentilesArrivalRecord> percentilesRecord = records.findPercentileAll(percentiles);
 
@@ -1234,14 +1233,10 @@ void ContainerAgent::updateArrivalRecords(ArrivalRecordType arrivalRecords, Runn
         }
 
         sql = absl::StrFormat("INSERT INTO %s (timestamps, stream, model_name, sender_host, receiver_host, ", cont_arrivalTableName);
-
         for (auto &period : cont_metricsServerConfigs.queryArrivalPeriodMillisec) {
             sql += "arrival_rate_" + std::to_string(period/1000) + "s, ";
             sql += "coeff_var_" + std::to_string(period/1000) + "s, ";
         }
-        perSecondArrivalRecords.aggregateArrivalRecord(cont_metricsServerConfigs.queryArrivalPeriodMillisec);
-        std::vector<float> requestRates = perSecondArrivalRecords.getArrivalRatesInPeriods();
-        std::vector<float> coeffVars = perSecondArrivalRecords.getCoeffVarsInPeriods();
         sql += absl::StrFormat("p95_out_queueing_duration_us, p95_transfer_duration_us, p95_queueing_duration_us, p95_total_package_size_b, late_requests, queue_drops) "
                                "VALUES ('%s', '%s', '%s', '%s', '%s'",
                                timePointToEpochString(std::chrono::system_clock::now()),
