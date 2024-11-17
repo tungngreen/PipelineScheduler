@@ -983,9 +983,11 @@ void ContainerAgent::collectRuntimeMetrics() {
 
         if (timePointCastMillisecond(startTime) >= timePointCastMillisecond(cont_metricsServerConfigs.nextArrivalRateScrapeTime)) {
             spdlog::get("container_agent")->trace("{0:s} SCRAPE per second arrival rate.", cont_name);
+            PerSecondArrivalRecord perSecondArrivalRecord;
             for (auto &receiver: cont_msvcsGroups["receiver"].msvcList) {
-                perSecondArrivalRecords.addRecord(receiver->getPerSecondArrivalRecord());
+                perSecondArrivalRecord = perSecondArrivalRecord + receiver->getPerSecondArrivalRecord();
             }
+            perSecondArrivalRecords.addRecord(perSecondArrivalRecord);
             // secondIndex = (secondIndex + 1) % maxNumSeconds;
             metricsStopwatch.stop();
             auto localScrapeLatencyMilisec = (uint64_t) std::ceil(metricsStopwatch.elapsed_microseconds() / 1000.f);
@@ -1010,7 +1012,6 @@ void ContainerAgent::collectRuntimeMetrics() {
 
             aggExecutedBatchSize = 0.1;
             for (auto &bat: cont_msvcsGroups["batcher"].msvcList) aggExecutedBatchSize += bat->GetAggExecutedBatchSize();
-            aggExecutedBatchSize /= cont_msvcsGroups["batcher"].msvcList.size();
             miniBatchCount = 0;
             latencyEWMA = 0.0;
             for (auto &post: cont_msvcsGroups["postprocessor"].msvcList) {
@@ -1052,14 +1053,13 @@ void ContainerAgent::collectRuntimeMetrics() {
             request.set_slo(cont_msvcsGroups["inference"].msvcList[0]->msvc_contSLO);
             aggExecutedBatchSize = 0.1;
             for (auto &bat: cont_msvcsGroups["batcher"].msvcList) aggExecutedBatchSize += bat->GetAggExecutedBatchSize();
-            aggExecutedBatchSize /= cont_msvcsGroups["batcher"].msvcList.size();
             miniBatchCount = 0;
             latencyEWMA = 0.0;
             for (auto &post: cont_msvcsGroups["postprocessor"].msvcList) {
                 miniBatchCount += post->GetMiniBatchCount();
                 latencyEWMA += post->getLatencyEWMA();
             }
-            request.set_throughput((double) miniBatchCount * aggExecutedBatchSize / perSecondArrivalRecords.getAvgArrivalRate());
+            request.set_throughput((double) aggExecutedBatchSize / perSecondArrivalRecords.getAvgArrivalRate());
             latencyEWMA /= cont_msvcsGroups["postprocessor"].msvcList.size();
             request.set_latency(latencyEWMA / TIME_PRECISION_TO_SEC);
             Status status = stub->BCEdgeConfigUpdate(&context, request, &reply);
@@ -1204,32 +1204,27 @@ void ContainerAgent::updateArrivalRecords(ArrivalRecordType arrivalRecords, Runn
     std::string sql;
     // Keys value here is std::pair<std::string, std::string> for stream and sender_host
     NetworkRecordType networkRecords;
+    perSecondArrivalRecords.aggregateArrivalRecord(cont_metricsServerConfigs.queryArrivalPeriodMillisec);
+    std::vector<float> requestRates = perSecondArrivalRecords.getArrivalRatesInPeriods();
+    std::vector<float> coeffVars = perSecondArrivalRecords.getCoeffVarsInPeriods();
     for (auto &[keys, records]: arrivalRecords) {
         uint32_t numEntries = records.arrivalTime.size();
-        if (numEntries == 0) {
-            continue;
-        }
-
+        if (numEntries == 0) continue;
         std::string stream = keys.first;
         std::string senderHostAbbr = abbreviate(keys.second);
-
         std::vector<uint8_t> percentiles = {95};
         std::map<uint8_t, PercentilesArrivalRecord> percentilesRecord = records.findPercentileAll(percentiles);
 
-        if (percentilesRecord[95].transferDuration > (2^63-1)) { // 2^63-1 is the maximum value for BIGINT
+        if (percentilesRecord[95].transferDuration > ((1LL << 63) - 1)) { // 2^63-1 is the maximum value for BIGINT
             spdlog::get("container_agent")->warn("{0:s} Transfer duration is too high: {1:d}us", cont_name, percentilesRecord[95].transferDuration);
             continue;
         }
 
         sql = absl::StrFormat("INSERT INTO %s (timestamps, stream, model_name, sender_host, receiver_host, ", cont_arrivalTableName);
-
         for (auto &period : cont_metricsServerConfigs.queryArrivalPeriodMillisec) {
             sql += "arrival_rate_" + std::to_string(period/1000) + "s, ";
             sql += "coeff_var_" + std::to_string(period/1000) + "s, ";
         }
-        perSecondArrivalRecords.aggregateArrivalRecord(cont_metricsServerConfigs.queryArrivalPeriodMillisec);
-        std::vector<float> requestRates = perSecondArrivalRecords.getArrivalRatesInPeriods();
-        std::vector<float> coeffVars = perSecondArrivalRecords.getCoeffVarsInPeriods();
         sql += absl::StrFormat("p95_out_queueing_duration_us, p95_transfer_duration_us, p95_queueing_duration_us, p95_total_package_size_b, late_requests, queue_drops) "
                                "VALUES ('%s', '%s', '%s', '%s', '%s'",
                                timePointToEpochString(std::chrono::system_clock::now()),

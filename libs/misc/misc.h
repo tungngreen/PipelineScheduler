@@ -142,6 +142,22 @@ struct PerSecondArrivalRecord {
     uint32_t numRequests = 0;
     MsvcSLOType interArrivalMean = 0;
     MsvcSLOType interArrivalVariance = 0;
+
+    PerSecondArrivalRecord operator+(const PerSecondArrivalRecord &rhs) const {
+        PerSecondArrivalRecord result;
+        result.numRequests = numRequests + rhs.numRequests;
+        if (interArrivalMean == 0) {
+            result.interArrivalVariance = rhs.interArrivalVariance;
+        } else {
+            result.interArrivalVariance = (interArrivalVariance + rhs.interArrivalVariance) / 2;
+        }
+        if (interArrivalMean == 0) {
+            result.interArrivalMean = rhs.interArrivalMean;
+        } else {
+            result.interArrivalMean = (interArrivalMean + rhs.interArrivalMean) / 2;
+        }
+        return result;
+    }
 };
 
 struct RunningArrivalRecord {
