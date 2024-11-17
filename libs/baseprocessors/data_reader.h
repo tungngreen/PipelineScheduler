@@ -24,7 +24,9 @@ public:
         handler.detach();
     }
 
-    PerSecondArrivalRecord getPerSecondArrivalRecord() override;
+    virtual PerSecondArrivalRecord getPerSecondArrivalRecord() override {
+        return {static_cast<uint32_t>(target_fps), static_cast<MsvcSLOType>(1000000 / target_fps), 0};
+    }
 
     virtual void loadConfigs(const json &jsonConfigs, bool isConstructing) override;
 

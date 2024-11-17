@@ -994,9 +994,12 @@ void ContainerAgent::collectRuntimeMetrics() {
         }
 
         if (timePointCastMillisecond(startTime) >= timePointCastMillisecond(cont_metricsServerConfigs.nextArrivalRateScrapeTime)) {
+            spdlog::get("container_agent")->trace("{0:s} SCRAPE per second arrival rate.", cont_name);
+            PerSecondArrivalRecord perSecondArrivalRecord;
             for (auto &receiver: cont_msvcsGroups["receiver"].msvcList) {
-                perSecondArrivalRecords.addRecord(receiver->getPerSecondArrivalRecord());
+                perSecondArrivalRecord = perSecondArrivalRecord + receiver->getPerSecondArrivalRecord();
             }
+            perSecondArrivalRecords.addRecord(perSecondArrivalRecord);
             // secondIndex = (secondIndex + 1) % maxNumSeconds;
             metricsStopwatch.stop();
             auto localScrapeLatencyMilisec = (uint64_t) std::ceil(metricsStopwatch.elapsed_microseconds() / 1000.f);
@@ -1011,44 +1014,44 @@ void ContainerAgent::collectRuntimeMetrics() {
             for (auto &recv: cont_msvcsGroups["receiver"].msvcList) tmp_lateCount += recv->GetDroppedReqCount();
             lateCount += tmp_lateCount;
             avgRequestRate = perSecondArrivalRecords.getAvgArrivalRate() - tmp_lateCount;
+            pre_queueDrops = 0;
+            for (auto &recv: cont_msvcsGroups["receiver"].msvcList) pre_queueDrops += recv->GetQueueDrops();
+            inf_queueDrops = 0;
+            for (auto &pre: cont_msvcsGroups["preprocessor"].msvcList) inf_queueDrops += pre->GetQueueDrops();
+            post_queueDrops = 0;
+            for (auto &inf: cont_msvcsGroups["inference"].msvcList) post_queueDrops += inf->GetQueueDrops();
+            queueDrops += pre_queueDrops + inf_queueDrops + post_queueDrops;
 
+            aggExecutedBatchSize = 0.1;
+            for (auto &bat: cont_msvcsGroups["batcher"].msvcList) aggExecutedBatchSize += bat->GetAggExecutedBatchSize();
+            miniBatchCount = 0;
+            latencyEWMA = 0.0;
+            for (auto &post: cont_msvcsGroups["postprocessor"].msvcList) {
+                miniBatchCount += post->GetMiniBatchCount();
+                latencyEWMA += post->getLatencyEWMA();
+            }
+            latencyEWMA /= cont_msvcsGroups["postprocessor"].msvcList.size();
+            
             if (avgRequestRate == 0 || std::isnan(avgRequestRate)) {
                 cont_fcpo_agent->rewardCallback(0.0, 0.0, 0.0, (double) cont_msvcsGroups["batcher"].msvcList[0]->msvc_idealBatchSize / 10.0);
                 avgRequestRate = 0;
             } else {
-                avgRequestRate = std::max(0.1, avgRequestRate);
-                pre_queueDrops = 0;
-                for (auto &recv: cont_msvcsGroups["receiver"].msvcList) pre_queueDrops += recv->GetQueueDrops();
-                inf_queueDrops = 0;
-                for (auto &pre: cont_msvcsGroups["preprocessor"].msvcList) inf_queueDrops += pre->GetQueueDrops();
-                post_queueDrops = 0;
-                for (auto &inf: cont_msvcsGroups["inference"].msvcList) post_queueDrops += inf->GetQueueDrops();
-                queueDrops += pre_queueDrops + inf_queueDrops + post_queueDrops;
-
-
-                aggExecutedBatchSize = 0.1;
-                for (auto &bat: cont_msvcsGroups["batcher"].msvcList) aggExecutedBatchSize += bat->GetAggExecutedBatchSize();
-                aggExecutedBatchSize /= cont_msvcsGroups["batcher"].msvcList.size();
-                miniBatchCount = 0;
-                latencyEWMA = 0.0;
-                for (auto &post: cont_msvcsGroups["postprocessor"].msvcList) {
-                    miniBatchCount += post->GetMiniBatchCount();
-                    latencyEWMA += post->getLatencyEWMA();
-                }
-                latencyEWMA /= cont_msvcsGroups["postprocessor"].msvcList.size();
-                spdlog::get("container_agent")->info("{0:s} RL Decision: {1:d} miniBatches, {2:f} request rate, {3:d} queue drops, {4:f} latency, {5:f} aggExecutedBatchSize",
-                                                     cont_name, miniBatchCount, avgRequestRate, queueDrops, latencyEWMA / TIME_PRECISION_TO_SEC, aggExecutedBatchSize);
+                avgRequestRate = std::max(0.1, avgRequestRate); // prevent negative values in the case of many drops or no requests
                 cont_fcpo_agent->rewardCallback((double) aggExecutedBatchSize / avgRequestRate,
                                          (double) (pre_queueDrops + inf_queueDrops) / avgRequestRate,
                                          latencyEWMA / TIME_PRECISION_TO_SEC,
                                          std:: max( 1.0, (double) cont_msvcsGroups["batcher"].msvcList[0]->msvc_idealBatchSize
                                                             / (aggExecutedBatchSize / miniBatchCount)));
             }
+
+            spdlog::get("container_agent")->info("RL Decision Input: {0:d} miniBatches, {1:f} request rate, {2:d} queue drops, {3:f} latency, {4:f} aggExecutedBatchSize",
+                                                 miniBatchCount, avgRequestRate, queueDrops, latencyEWMA / TIME_PRECISION_TO_SEC, aggExecutedBatchSize);
             cont_fcpo_agent->setState(cont_msvcsGroups["preprocessor"].msvcList[0]->msvc_concat.numImgs,
                                       cont_msvcsGroups["batcher"].msvcList[0]->msvc_idealBatchSize,cont_threadingAction,
                                       avgRequestRate, pre_queueDrops, inf_queueDrops, post_queueDrops);
             auto [targetRes, newBS, scaling] = cont_fcpo_agent->runStep();
-            std::cout << "New Resolution: " << targetRes << ", New Batch Size: " << newBS << ", Scaling: " << scaling << std::endl;
+            spdlog::get("container_agent")->info("RL Decision Output: Resolution: {0:d}, Batch Size: {1:d}, Scaling: {2:d}",
+                                                 targetRes, newBS, scaling);
             applyResolution(targetRes);
             applyBatchSize(newBS);
             applyMultiThreading(scaling);
@@ -1062,14 +1065,13 @@ void ContainerAgent::collectRuntimeMetrics() {
             request.set_slo(cont_msvcsGroups["inference"].msvcList[0]->msvc_contSLO);
             aggExecutedBatchSize = 0.1;
             for (auto &bat: cont_msvcsGroups["batcher"].msvcList) aggExecutedBatchSize += bat->GetAggExecutedBatchSize();
-            aggExecutedBatchSize /= cont_msvcsGroups["batcher"].msvcList.size();
             miniBatchCount = 0;
             latencyEWMA = 0.0;
             for (auto &post: cont_msvcsGroups["postprocessor"].msvcList) {
                 miniBatchCount += post->GetMiniBatchCount();
                 latencyEWMA += post->getLatencyEWMA();
             }
-            request.set_throughput((double) miniBatchCount * aggExecutedBatchSize / perSecondArrivalRecords.getAvgArrivalRate());
+            request.set_throughput((double) aggExecutedBatchSize / perSecondArrivalRecords.getAvgArrivalRate());
             latencyEWMA /= cont_msvcsGroups["postprocessor"].msvcList.size();
             request.set_latency(latencyEWMA / TIME_PRECISION_TO_SEC);
             Status status = stub->BCEdgeConfigUpdate(&context, request, &reply);
@@ -1214,32 +1216,27 @@ void ContainerAgent::updateArrivalRecords(ArrivalRecordType arrivalRecords, Runn
     std::string sql;
     // Keys value here is std::pair<std::string, std::string> for stream and sender_host
     NetworkRecordType networkRecords;
+    perSecondArrivalRecords.aggregateArrivalRecord(cont_metricsServerConfigs.queryArrivalPeriodMillisec);
+    std::vector<float> requestRates = perSecondArrivalRecords.getArrivalRatesInPeriods();
+    std::vector<float> coeffVars = perSecondArrivalRecords.getCoeffVarsInPeriods();
     for (auto &[keys, records]: arrivalRecords) {
         uint32_t numEntries = records.arrivalTime.size();
-        if (numEntries == 0) {
-            continue;
-        }
-
+        if (numEntries == 0) continue;
         std::string stream = keys.first;
         std::string senderHostAbbr = abbreviate(keys.second);
-
         std::vector<uint8_t> percentiles = {95};
         std::map<uint8_t, PercentilesArrivalRecord> percentilesRecord = records.findPercentileAll(percentiles);
 
-        if (percentilesRecord[95].transferDuration > (2^63-1)) { // 2^63-1 is the maximum value for BIGINT
+        if (percentilesRecord[95].transferDuration > ((1LL << 63) - 1)) { // 2^63-1 is the maximum value for BIGINT
             spdlog::get("container_agent")->warn("{0:s} Transfer duration is too high: {1:d}us", cont_name, percentilesRecord[95].transferDuration);
             continue;
         }
 
         sql = absl::StrFormat("INSERT INTO %s (timestamps, stream, model_name, sender_host, receiver_host, ", cont_arrivalTableName);
-
         for (auto &period : cont_metricsServerConfigs.queryArrivalPeriodMillisec) {
             sql += "arrival_rate_" + std::to_string(period/1000) + "s, ";
             sql += "coeff_var_" + std::to_string(period/1000) + "s, ";
         }
-        perSecondArrivalRecords.aggregateArrivalRecord(cont_metricsServerConfigs.queryArrivalPeriodMillisec);
-        std::vector<float> requestRates = perSecondArrivalRecords.getArrivalRatesInPeriods();
-        std::vector<float> coeffVars = perSecondArrivalRecords.getCoeffVarsInPeriods();
         sql += absl::StrFormat("p95_out_queueing_duration_us, p95_transfer_duration_us, p95_queueing_duration_us, p95_total_package_size_b, late_requests, queue_drops) "
                                "VALUES ('%s', '%s', '%s', '%s', '%s'",
                                timePointToEpochString(std::chrono::system_clock::now()),
