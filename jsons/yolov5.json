@@ -391,7 +391,7 @@
         "profile_numProfileReqs": 1800
     },
     "fcpo": {
-        "state_size": 7,
+        "state_size": 4,
         "resolution_size": 4,
         "batch_size": 16,
         "threads_size": 4,
