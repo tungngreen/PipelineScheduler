@@ -17,8 +17,11 @@ FCPOAgent::FCPOAgent(std::string& cont_name, uint state_size, uint resolution_si
     if (std::filesystem::exists(model_save)) {
         torch::load(model, model_save);
     } else {
-        torch::manual_seed(42);
+        torch::manual_seed(1337);
         for (auto& p : model->named_parameters()) {
+            std::cout << p.key() << std::endl;
+            if(p.key().find("norm") != std::string::npos) continue;
+            // Initialize weights and biases
             if (p.key().find("weight") != std::string::npos) {
                 torch::nn::init::xavier_uniform_(p.value());
             } else if (p.key().find("bias") != std::string::npos) {
@@ -64,13 +67,13 @@ void FCPOAgent::update() {
         val = val.slice(0, 1, val.size(0), 1);
     }
 
-    T loss = torch::tensor(0.0);
+    T loss = torch::tensor(0.0), policy_loss = torch::tensor(0.0), value_loss = torch::tensor(0.0);
     try {
         T clipped_ratio = torch::clamp(ratio, 1 - clip_epsilon, 1 + clip_epsilon);
         T advantages = computeGae();
-        T policy_loss = -torch::min(ratio * advantages, clipped_ratio * advantages).to(precision).mean();
+        policy_loss = -torch::min(ratio * advantages, clipped_ratio * advantages).to(precision).mean();
 
-        T value_loss = torch::mse_loss(val.squeeze(), computeCumuRewards());
+        value_loss = torch::mse_loss(val.squeeze(), computeCumuRewards());
         T policy1_penalty = penalty_weight * torch::mean(torch::tensor(experiences.get_resolution()).to(precision));
         T policy3_penalty = penalty_weight * torch::mean(torch::tensor(experiences.get_scaling()).to(precision));
         spdlog::get("container_agent")->info("RL Agent Policy Loss: {}, Value Loss: {}, Policy1 Penalty: {}, Policy3 Penalty: {}",
@@ -91,7 +94,8 @@ void FCPOAgent::update() {
 
     std::cout << "Training: " << sw.elapsed_microseconds() << std::endl;
     double avg_reward = cumu_reward / (double) update_steps;
-    out << "episodeEnd," << sw.elapsed_microseconds() << "," << federated_steps_counter << "," << steps_counter << "," << cumu_reward << "," << avg_reward << std::endl;
+    out << "episodeEnd," << sw.elapsed_microseconds() << "," << federated_steps_counter << "," << steps_counter
+    << "," << cumu_reward << "," << avg_reward << "," << loss.item<double>() << "," << policy_loss.item<double>() << "," << value_loss.item<double>() << std::endl;
     if (last_avg_reward < avg_reward) {
         last_avg_reward = avg_reward;
         torch::save(model, path + "/latest_model.pt");
@@ -167,9 +171,13 @@ void FCPOAgent::rewardCallback(double throughput, double drops, double latency_p
     cumu_reward += reward;
 }
 
-void FCPOAgent::setState(double curr_resolution, double curr_batch, double curr_scaling,  double arrival,
-                         double pre_queue_size, double inf_queue_size, double post_queue_size) {
-    state = torch::tensor({curr_resolution, curr_batch / max_batch, curr_scaling, arrival, pre_queue_size, inf_queue_size, post_queue_size}, precision);
+//void FCPOAgent::setState(double curr_resolution, double curr_batch, double curr_scaling,  double arrival,
+//                         double pre_queue_size, double inf_queue_size, double post_queue_size) {
+//    state = torch::tensor({curr_resolution, curr_batch / max_batch, curr_scaling, arrival, pre_queue_size, inf_queue_size, post_queue_size}, precision);
+//}
+
+void FCPOAgent::setState(double arrival, double pre_queue_size, double inf_queue_size, double post_queue_size) {
+    state = torch::tensor({arrival, pre_queue_size, inf_queue_size, post_queue_size}, precision);
 }
 
 void FCPOAgent::selectAction() {
@@ -247,7 +255,7 @@ FCPOServer::FCPOServer(std::string run_name, uint state_size, torch::Dtype preci
 
     lambda = 0.95;
     gamma = 0.99;
-    clip_epsilon = 0.4;
+    clip_epsilon = 0.9; // choose a big clip value to motivate big changes
     penalty_weight = 0.1;
     federated_clients = {};
     run = true;
