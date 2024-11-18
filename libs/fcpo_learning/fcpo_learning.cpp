@@ -40,7 +40,7 @@ void FCPOAgent::update() {
         spdlog::get("container_agent")->trace("Waiting for federated update!");
         return;
     }
-    spdlog::get("container_agent")->info("Locally training RL agent at cumulative Reward {}!", cumu_reward);
+    spdlog::get("container_agent")->info("Locally training RL Agent at cumulative Reward {}!", cumu_reward);
     Stopwatch sw;
     sw.start();
 
@@ -73,6 +73,8 @@ void FCPOAgent::update() {
         T value_loss = torch::mse_loss(val.squeeze(), computeCumuRewards());
         T policy1_penalty = penalty_weight * torch::mean(torch::tensor(experiences.get_resolution()).to(precision));
         T policy3_penalty = penalty_weight * torch::mean(torch::tensor(experiences.get_scaling()).to(precision));
+        spdlog::get("container_agent")->info("RL Agent Policy Loss: {}, Value Loss: {}, Policy1 Penalty: {}, Policy3 Penalty: {}",
+                                             policy_loss.item<double>(), value_loss.item<double>(), policy1_penalty.item<double>(), policy3_penalty.item<double>());
         loss = (policy_loss + 0.5 * value_loss + policy1_penalty + policy3_penalty);
     } catch (const std::exception& e) {
         spdlog::get("container_agent")->error("Error in loss computation: {}", e.what());
@@ -245,7 +247,7 @@ FCPOServer::FCPOServer(std::string run_name, uint state_size, torch::Dtype preci
 
     lambda = 0.95;
     gamma = 0.99;
-    clip_epsilon = 0.2;
+    clip_epsilon = 0.4;
     penalty_weight = 0.1;
     federated_clients = {};
     run = true;
