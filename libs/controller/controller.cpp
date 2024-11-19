@@ -275,7 +275,7 @@ Controller::Controller(int argc, char **argv) {
                       DATA_BASE_PORT + ctrl_port_offset, {});
     devices.addDevice("sink", sink_node);
 
-    ctrl_fcpo_server = new FCPOServer(ctrl_systemName + "_" + ctrl_experimentName, 4, torch::kF32);
+    ctrl_fcpo_server = new FCPOServer(ctrl_systemName + "_" + ctrl_experimentName, 7, torch::kF32);
 
     ctrl_nextSchedulingTime = std::chrono::system_clock::now();
 }
