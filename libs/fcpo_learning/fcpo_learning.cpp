@@ -19,7 +19,6 @@ FCPOAgent::FCPOAgent(std::string& cont_name, uint state_size, uint resolution_si
     } else {
         torch::manual_seed(1337);
         for (auto& p : model->named_parameters()) {
-            std::cout << p.key() << std::endl;
             if(p.key().find("norm") != std::string::npos) continue;
             // Initialize weights and biases
             if (p.key().find("weight") != std::string::npos) {
@@ -33,7 +32,7 @@ FCPOAgent::FCPOAgent(std::string& cont_name, uint state_size, uint resolution_si
     optimizer = std::make_unique<torch::optim::Adam>(model->parameters(), torch::optim::AdamOptions(1e-3));
 
     cumu_reward = 0.0;
-    experiences = ExperienceBuffer(100);
+    experiences = ExperienceBuffer(200);
 }
 
 void FCPOAgent::update() {
@@ -54,7 +53,7 @@ void FCPOAgent::update() {
     T action2_log_probs = torch::log(action2_probs.gather(-1, torch::tensor(experiences.get_batching()).reshape({-1, 1})).squeeze(-1));
     T action3_probs = torch::softmax(policy3, -1);
     T action3_log_probs = torch::log(action3_probs.gather(-1, torch::tensor(experiences.get_scaling()).reshape({-1, 1})).squeeze(-1));
-    T new_log_probs = (1 * action1_log_probs + 1.1 * action2_log_probs + 0.9 * action3_log_probs).squeeze(-1);
+    T new_log_probs = (1 * action1_log_probs + 1 * action2_log_probs + 1 * action3_log_probs).squeeze(-1);
     // code if using SinglePolicyNet
 //    auto [policy, val] = model->forward(torch::stack(experiences.get_states()));
 //    T actions = model->combine_actions(experiences.get_resolution(), experiences.get_batching(), experiences.get_scaling(), max_batch, scaling_size).to(torch::kInt64);
@@ -171,14 +170,14 @@ void FCPOAgent::rewardCallback(double throughput, double drops, double latency_p
     cumu_reward += reward;
 }
 
-//void FCPOAgent::setState(double curr_resolution, double curr_batch, double curr_scaling,  double arrival,
-//                         double pre_queue_size, double inf_queue_size, double post_queue_size) {
-//    state = torch::tensor({curr_resolution, curr_batch / max_batch, curr_scaling, arrival, pre_queue_size, inf_queue_size, post_queue_size}, precision);
-//}
-
-void FCPOAgent::setState(double curr_resolution, double curr_batch, double curr_scaling, double arrival) {
-    state = torch::tensor({arrival, curr_resolution, curr_batch, curr_scaling}, precision);
+void FCPOAgent::setState(double curr_resolution, double curr_batch, double curr_scaling,  double arrival,
+                         double pre_queue_size, double inf_queue_size, double post_queue_size) {
+    state = torch::tensor({curr_resolution, curr_batch / max_batch, curr_scaling, arrival, pre_queue_size, inf_queue_size, post_queue_size}, precision);
 }
+
+//void FCPOAgent::setState(double curr_resolution, double curr_batch, double curr_scaling, double arrival) {
+//    state = torch::tensor({arrival, curr_resolution, curr_batch, curr_scaling}, precision);
+//}
 
 void FCPOAgent::selectAction() {
     std::unique_lock<std::mutex> lock(model_mutex);
@@ -255,8 +254,8 @@ FCPOServer::FCPOServer(std::string run_name, uint state_size, torch::Dtype preci
 
     lambda = 0.95;
     gamma = 0.99;
-    clip_epsilon = 0.9; // choose a big clip value to motivate big changes
-    penalty_weight = 0.1;
+    clip_epsilon = 0.75;
+    penalty_weight = 0.15;
     federated_clients = {};
     run = true;
     std::thread t(&FCPOServer::proceed, this);

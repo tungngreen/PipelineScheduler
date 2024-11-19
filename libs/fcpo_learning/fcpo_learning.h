@@ -248,9 +248,9 @@ public:
 
     std::tuple<int, int, int> runStep();
     void rewardCallback(double throughput, double drops, double latency_penalty, double oversize_penalty);
-//    void setState(double curr_resolution, double curr_batch, double curr_scaling,  double arrival, double pre_queue_size,
-//                  double inf_queue_size, double post_queue_size);
-    void setState(double curr_resolution, double curr_batch, double curr_scaling, double arrival);
+    void setState(double curr_resolution, double curr_batch, double curr_scaling,  double arrival, double pre_queue_size,
+                  double inf_queue_size, double post_queue_size);
+//    void setState(double curr_resolution, double curr_batch, double curr_scaling, double arrival);
     void federatedUpdateCallback(FlData &response);
 
 private:
@@ -327,7 +327,7 @@ public:
                 {"clip_epsilon", clip_epsilon},
                 {"penalty_weight", penalty_weight},
                 {"precision", boost::algorithm::to_lower_copy(p)},
-                {"update_steps", 60},
+                {"update_steps", 100},
                 {"update_step_incs", 2},
                 {"federated_steps", 5}
         };
