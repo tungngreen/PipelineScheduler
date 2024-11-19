@@ -248,9 +248,9 @@ public:
 
     std::tuple<int, int, int> runStep();
     void rewardCallback(double throughput, double drops, double latency_penalty, double oversize_penalty);
-    void setState(double curr_resolution, double curr_batch, double curr_scaling,  double arrival, double pre_queue_size,
-                  double inf_queue_size, double post_queue_size);
-//    void setState(double arrival, double pre_queue_size, double inf_queue_size, double post_queue_size);
+//    void setState(double curr_resolution, double curr_batch, double curr_scaling,  double arrival, double pre_queue_size,
+//                  double inf_queue_size, double post_queue_size);
+    void setState(double curr_resolution, double curr_batch, double curr_scaling, double arrival);
     void federatedUpdateCallback(FlData &response);
 
 private:
