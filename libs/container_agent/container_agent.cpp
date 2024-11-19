@@ -1048,7 +1048,8 @@ void ContainerAgent::collectRuntimeMetrics() {
                                                  miniBatchCount, avgRequestRate, queueDrops, latencyEWMA / TIME_PRECISION_TO_SEC, aggExecutedBatchSize);
             cont_fcpo_agent->setState(cont_msvcsGroups["preprocessor"].msvcList[0]->msvc_concat.numImgs,
                                       cont_msvcsGroups["batcher"].msvcList[0]->msvc_idealBatchSize,cont_threadingAction,
-                                      avgRequestRate, pre_queueDrops, inf_queueDrops, post_queueDrops);
+                                      avgRequestRate);
+//            cont_fcpo_agent->setState(avgRequestRate, pre_queueDrops, inf_queueDrops, post_queueDrops);
             auto [targetRes, newBS, scaling] = cont_fcpo_agent->runStep();
             spdlog::get("container_agent")->info("RL Decision Output: Resolution: {0:d}, Batch Size: {1:d}, Scaling: {2:d}",
                                                  targetRes, newBS, scaling);

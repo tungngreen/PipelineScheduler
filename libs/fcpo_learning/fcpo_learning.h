@@ -168,15 +168,17 @@ struct MultiPolicyNet: torch::nn::Module {
     MultiPolicyNet(int state_size, int action1_size, int action2_size, int action3_size) {
         shared_layer1 = register_module("shared_layer", torch::nn::Linear(state_size, 64));
         shared_layer2 = register_module("shared_layer2", torch::nn::Linear(64, 48));
+        value_head = register_module("value_head", torch::nn::Linear(48, 1));
+        norm_layer = register_module("norm_layer", torch::nn::LayerNorm(torch::nn::LayerNormOptions({48})));
         policy_head1 = register_module("policy_head1", torch::nn::Linear(48, action1_size));
         policy_head2 = register_module("policy_head2", torch::nn::Linear(48 + action1_size, action2_size));
         policy_head3 = register_module("policy_head3", torch::nn::Linear(48 + action1_size, action3_size));
-        value_head = register_module("value_head", torch::nn::Linear(48, 1));
     }
 
     std::tuple<T, T, T, T> forward(T state) {
         T x = torch::relu(shared_layer1->forward(state));
         x = torch::relu(shared_layer2->forward(x));
+        x = norm_layer->forward(x);
         T policy1_output = torch::softmax(policy_head1->forward(x), -1);
         T combined_input = torch::cat({x, policy1_output.clone()}, -1);
         T policy2_output = torch::softmax(policy_head2->forward(combined_input), -1);
@@ -187,10 +189,11 @@ struct MultiPolicyNet: torch::nn::Module {
 
     torch::nn::Linear shared_layer1{nullptr};
     torch::nn::Linear shared_layer2{nullptr};
+    torch::nn::Linear value_head{nullptr};
+    torch::nn::LayerNorm norm_layer{nullptr};
     torch::nn::Linear policy_head1{nullptr};
     torch::nn::Linear policy_head2{nullptr};
     torch::nn::Linear policy_head3{nullptr};
-    torch::nn::Linear value_head{nullptr};
 };
 
 struct SinglePolicyNet: torch::nn::Module {
@@ -247,6 +250,7 @@ public:
     void rewardCallback(double throughput, double drops, double latency_penalty, double oversize_penalty);
     void setState(double curr_resolution, double curr_batch, double curr_scaling,  double arrival, double pre_queue_size,
                   double inf_queue_size, double post_queue_size);
+//    void setState(double curr_resolution, double curr_batch, double curr_scaling, double arrival);
     void federatedUpdateCallback(FlData &response);
 
 private:
@@ -323,7 +327,7 @@ public:
                 {"clip_epsilon", clip_epsilon},
                 {"penalty_weight", penalty_weight},
                 {"precision", boost::algorithm::to_lower_copy(p)},
-                {"update_steps", 60},
+                {"update_steps", 100},
                 {"update_step_incs", 2},
                 {"federated_steps", 5}
         };
