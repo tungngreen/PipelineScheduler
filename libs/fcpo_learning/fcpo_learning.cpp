@@ -171,14 +171,14 @@ void FCPOAgent::rewardCallback(double throughput, double drops, double latency_p
     cumu_reward += reward;
 }
 
-//void FCPOAgent::setState(double curr_resolution, double curr_batch, double curr_scaling,  double arrival,
-//                         double pre_queue_size, double inf_queue_size, double post_queue_size) {
-//    state = torch::tensor({curr_resolution, curr_batch / max_batch, curr_scaling, arrival, pre_queue_size, inf_queue_size, post_queue_size}, precision);
-//}
-
-void FCPOAgent::setState(double arrival, double pre_queue_size, double inf_queue_size, double post_queue_size) {
-    state = torch::tensor({arrival, pre_queue_size, inf_queue_size, post_queue_size}, precision);
+void FCPOAgent::setState(double curr_resolution, double curr_batch, double curr_scaling,  double arrival,
+                         double pre_queue_size, double inf_queue_size, double post_queue_size) {
+    state = torch::tensor({curr_resolution, curr_batch / max_batch, curr_scaling, arrival, pre_queue_size, inf_queue_size, post_queue_size}, precision);
 }
+
+//void FCPOAgent::setState(double arrival, double pre_queue_size, double inf_queue_size, double post_queue_size) {
+//    state = torch::tensor({arrival, pre_queue_size, inf_queue_size, post_queue_size}, precision);
+//}
 
 void FCPOAgent::selectAction() {
     std::unique_lock<std::mutex> lock(model_mutex);
