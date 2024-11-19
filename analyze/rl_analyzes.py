@@ -30,12 +30,12 @@ def reward_plot(directory):
                     # we are only interested in the rows with the episodeEnd
                     with open(rewards_dir, 'r') as f:
                         for line in f:
-                            if 'step' in line:
+                            if 'episodeEnd' in line:
                                 if index >= len(rewards[agent]):
-                                    rewards[agent].append(float(line.split(',')[4]))
+                                    rewards[agent].append(float(line.split(',')[5]))
                                 else:
                                     # if (rewards[agent][index] < float(line.split(',')[5])):
-                                    rewards[agent][index] += float(line.split(',')[4])
+                                    rewards[agent][index] += float(line.split(',')[5])
                                 index += 1
         for i in range(len(rewards[agent])):
             rewards[agent][i] = (rewards[agent][i]) / len(instances)
