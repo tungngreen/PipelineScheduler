@@ -275,5 +275,10 @@ else()
 
     add_executable(Container_CarBrand libs/workloads/carbrand/carbrand.cpp)
     target_link_libraries(Container_CarBrand carbrand)
+
+    if (${SYSTEM_NAME} STREQUAL "FCPO")
+        add_executable(RL_OfflineTraining libs/fcpo_learning/offline_training.cpp)
+        target_link_libraries(RL_OfflineTraining fcpo_learning absl::flags absl::flags_parse)
+    endif()
     
 endif()
