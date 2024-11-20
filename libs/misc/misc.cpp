@@ -1052,8 +1052,12 @@ pqxx::result pullSQL(pqxx::connection &conn, const std::string &sql) {
     try {
         res = session.exec(sql.c_str());
         return res;
+        //catch error when table does not exist
     } catch (const pqxx::undefined_table &e) {
         spdlog::get("container_agent")->error("{0:s} Undefined table {1:s}", __func__, e.what());
+        return {};
+    } catch (const pqxx::insufficient_privilege &e) {
+        spdlog::get("container_agent")->error("{0:s} Insufficient privilege  {1:s}", __func__, e.what());
         return {};
     } catch (const pqxx::sql_error &e) {
         spdlog::get("container_agent")->error("{0:s} SQL Error: {1:s}", __func__, e.what());
