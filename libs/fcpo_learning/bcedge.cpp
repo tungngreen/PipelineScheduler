@@ -8,7 +8,7 @@ BCEdgeAgent::BCEdgeAgent(std::string& dev_name, torch::Dtype precision,
     std::filesystem::create_directories(std::filesystem::path(path));
     out.open(path + "/latest_log_" + getTimestampString() + ".csv");
 
-    model = std::make_shared<BCEdgeNet>(3, 64, 2, 2);
+    model = std::make_shared<BCEdgeNet>(5, 64, 2, 2);
     std::string model_save = path + "/latest_model.pt";
     if (std::filesystem::exists(model_save)) torch::load(model, model_save);
     model->to(precision);
@@ -29,7 +29,7 @@ void BCEdgeAgent::update() {
     Stopwatch sw;
     sw.start();
 
-    std::cout << "Sizes: " << states.size() << " " << batching_actions.size() << " " << scaling_actions.size() << " " << memory_actions.size() << " " << rewards.size() << values.size() << log_probs.size() << std::endl;
+    std::cout << "Sizes: " << states.size() << " " << batching_actions.size() << " " << scaling_actions.size() << " " << memory_actions.size() << " " << rewards.size() << " " << values.size() << " " << log_probs.size() << std::endl;
 
     auto [policy1, policy2, policy3, val] = model->forward(torch::stack(states));
     T action1_probs = torch::softmax(policy1, -1);
@@ -77,7 +77,7 @@ void BCEdgeAgent::rewardCallback(double throughput, double latency, MsvcSLOType 
 }
 
 void BCEdgeAgent::setState(ModelType model_type, std::vector<int> data_shape, MsvcSLOType slo) {
-    state = torch::tensor({model_type, data_shape[0], data_shape[1], data_shape[2], (double) slo}, precision);
+    state = torch::tensor({model_type, data_shape[0], data_shape[1], data_shape[2], (int) slo}, precision);
 }
 
 void BCEdgeAgent::selectAction() {
@@ -135,8 +135,9 @@ std::tuple<int, int, int> BCEdgeAgent::runStep() {
     out << "step," << sw.elapsed_microseconds() << "," << 0 << "," << steps_counter << "," << cumu_reward  << "," << batching << "," << scaling << "," << memory << std::endl;
 
     if (steps_counter%update_steps == 0) {
-        std::thread t(&BCEdgeAgent::update, this);
-        t.detach();
+        //std::thread t(&BCEdgeAgent::update, this);
+        //t.detach();
+        update();
     }
     return std::make_tuple(batching + 1, scaling + 1, memory);
 }
