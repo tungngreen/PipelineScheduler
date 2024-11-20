@@ -20,12 +20,9 @@ struct BCEdgeNet: torch::nn::Module {
     std::tuple<T, T, T, T> forward(T state) {
         T x = torch::relu(shared_layer1->forward(state));
         x = torch::relu(shared_layer2->forward(x));
-        T policy1_output = torch::relu(policy_head1->forward(torch::relu(policy_layer1->forward(x))));
-        policy1_output = torch::softmax(policy_head1->forward(policy1_output), -1);
-        T policy2_output = torch::relu(policy_head2->forward(torch::relu(policy_layer2->forward(x))));
-        policy2_output = torch::softmax(policy_head2->forward(policy2_output), -1);
-        T policy3_output = torch::relu(policy_head3->forward(torch::relu(policy_layer3->forward(x))));
-        policy3_output = torch::softmax(policy_head3->forward(policy3_output), -1);
+        T policy1_output = torch::softmax(policy_head1->forward(torch::relu(policy_layer1->forward(x))), -1);
+        T policy2_output = torch::softmax(policy_head2->forward(torch::relu(policy_layer2->forward(x))), -1);
+        T policy3_output = torch::softmax(policy_head3->forward(torch::relu(policy_layer3->forward(x))), -1);
         T value = value_head->forward(torch::relu(value_layer->forward(x)));
         return std::make_tuple(policy1_output, policy2_output, policy3_output, value);
     }
