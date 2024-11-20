@@ -164,8 +164,8 @@ void FCPOAgent::rewardCallback(double throughput, double drops, double latency_p
         first = false;
         return;
     }
-    double reward = 2 * throughput - drops - 2 * latency_penalty + (1 - oversize_penalty);
-    reward = std::max(-10.0, std::min(10.0, reward)); // Clip reward to [-10, 10]
+    double reward = 3 * throughput - drops - 5 * latency_penalty + (1.5 - oversize_penalty);
+    reward = std::max(-10.0, std::min(10.0, reward)) / 10.0; // Clip reward to [-10, 10] and then scale it to [-1, 1]
     experiences.add_reward(reward);
     cumu_reward += reward;
 }
