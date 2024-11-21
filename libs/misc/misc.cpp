@@ -1001,10 +1001,15 @@ void signalHandler(int signal) {
     for (int i = 0; i < stackSize; ++i) {
         std::cerr << symbols[i] << std::endl;
         // Use addr2line to convert addresses to file names and line numbers
-        std::string command = "addr2line -e " + std::string(program_invocation_name) + " " + std::to_string((uintptr_t)callStack[i]);
+        std::string input = std::string(symbols[i]);
+        std::string::size_type begin = input.find("(") + 2;
+        std::string::size_type end = input.find(")", begin);
+        if (begin == std::string::npos || end == std::string::npos) continue;
+        std::string command = "addr2line -e " + std::string(program_invocation_name) + " " + input.substr(begin, end - begin);
         std::array<char, 128> buffer;
         std::shared_ptr<FILE> pipe(popen(command.c_str(), "r"), pclose);
         if (pipe) {
+            std::cerr << "|---> ";
             while (fgets(buffer.data(), buffer.size(), pipe.get()) != nullptr) {
                 std::cerr << buffer.data();
             }
@@ -1047,6 +1052,8 @@ void setupLogger(
         errOutFile.open(path + "_err");
         std::cerr.rdbuf(errOutFile.rdbuf());
     }
+
+    std::cout << 1 / 0 << std::endl;
 
     // Create and configure logger
     logger = std::make_shared<spdlog::logger>("container_agent", begin(loggerSinks), end(loggerSinks));
