@@ -1,9 +1,9 @@
 #include "bcedge.h"
 
-BCEdgeAgent::BCEdgeAgent(std::string& dev_name, torch::Dtype precision,
+BCEdgeAgent::BCEdgeAgent(std::string& dev_name, double max_memory, torch::Dtype precision,
                          uint update_steps, double lambda, double gamma, double clip_epsilon)
-                         : precision(precision), dev_name(dev_name), lambda(lambda), gamma(gamma),
-                           clip_epsilon(clip_epsilon), update_steps(update_steps) {
+                         : precision(precision), dev_name(dev_name), max_memory(max_memory), lambda(lambda),
+                           gamma(gamma), clip_epsilon(clip_epsilon), update_steps(update_steps) {
     path = "../models/bcedge/" + dev_name;
     std::filesystem::create_directories(std::filesystem::path(path));
     out.open(path + "/latest_log_" + getTimestampString() + ".csv");
@@ -28,8 +28,6 @@ void BCEdgeAgent::update() {
     spdlog::get("container_agent")->info("Locally training RL agent at cumulative Reward {}!", cumu_reward);
     Stopwatch sw;
     sw.start();
-
-    std::cout << "Sizes: " << states.size() << " " << batching_actions.size() << " " << scaling_actions.size() << " " << memory_actions.size() << " " << rewards.size() << " " << values.size() << " " << log_probs.size() << std::endl;
 
     auto [policy1, policy2, policy3, val] = model->forward(torch::stack(states));
     T action1_probs = torch::softmax(policy1, -1);
@@ -61,7 +59,6 @@ void BCEdgeAgent::update() {
     optimizer->step();
     sw.stop();
 
-    std::cout << "Training: " << sw.elapsed_microseconds() << std::endl;
     out << "episodeEnd," << sw.elapsed_microseconds() << "," << 0 << "," << steps_counter << "," << cumu_reward << "," << cumu_reward / (double) steps_counter << std::endl;
     steps_counter = 0;
 
@@ -69,11 +66,13 @@ void BCEdgeAgent::update() {
 }
 
 void BCEdgeAgent::rewardCallback(double throughput, double latency, MsvcSLOType slo, double memory_usage) {
-    if (latency <= slo) {
-        rewards.push_back(log(throughput/(latency/slo)));
+    double tmp_reward;
+    if (latency <= slo && memory_usage <= max_memory) {
+        tmp_reward = log(throughput/(latency/slo));
     } else {
-        rewards.push_back(exp(latency * memory_usage));
+        tmp_reward = exp(-latency * (memory_usage));
     }
+    rewards.push_back(tmp_reward / 25.0); // Normalize reward to be almost always in the range of [-1, 1] for better training
 }
 
 void BCEdgeAgent::setState(ModelType model_type, std::vector<int> data_shape, MsvcSLOType slo) {
