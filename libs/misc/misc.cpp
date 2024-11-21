@@ -4,6 +4,8 @@ ABSL_FLAG(uint16_t, deploy_mode, 0, "The deployment mode of the system. 0: devel
 
 using json = nlohmann::json;
 
+std::ofstream errOutFile;
+
 std::chrono::time_point<std::chrono::_V2::system_clock, std::chrono::milliseconds> timePointCastMillisecond(
     std::chrono::system_clock::time_point tp) {
     return std::chrono::time_point_cast<std::chrono::milliseconds>(tp);
@@ -993,13 +995,23 @@ void signalHandler(int signal) {
     void* callStack[128];
     int stackSize = backtrace(callStack, 128);
 
-    // Print the backtrace
+// Print the backtrace
     std::cerr << "Backtrace (most recent calls first):" << std::endl;
     char** symbols = backtrace_symbols(callStack, stackSize);
     for (int i = 0; i < stackSize; ++i) {
         std::cerr << symbols[i] << std::endl;
+        // Use addr2line to convert addresses to file names and line numbers
+        std::string command = "addr2line -e " + std::string(program_invocation_name) + " " + std::to_string((uintptr_t)callStack[i]);
+        std::array<char, 128> buffer;
+        std::shared_ptr<FILE> pipe(popen(command.c_str(), "r"), pclose);
+        if (pipe) {
+            while (fgets(buffer.data(), buffer.size(), pipe.get()) != nullptr) {
+                std::cerr << buffer.data();
+            }
+        }
     }
     free(symbols);
+    errOutFile.close();
 
     std::exit(signal); // Graceful termination
 }
@@ -1032,8 +1044,8 @@ void setupLogger(
         auto file_sink = std::make_shared<spdlog::sinks::basic_file_sink_mt>(path, auto_flush);
         loggerSinks.emplace_back(file_sink);
 
-        std::ofstream outFile(path + "_err");
-        std::cerr.rdbuf(outFile.rdbuf());
+        errOutFile.open(path + "_err");
+        std::cerr.rdbuf(errOutFile.rdbuf());
     }
 
     // Create and configure logger
