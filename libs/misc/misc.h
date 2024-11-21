@@ -20,6 +20,7 @@
 #include "absl/flags/parse.h"
 #include "absl/flags/flag.h"
 #include <fstream>
+#include <typeinfo>
 #include <boost/circular_buffer.hpp>
 
 ABSL_DECLARE_FLAG(uint16_t, deploy_mode);

@@ -175,7 +175,7 @@ inline std::vector<std::pair<uint8_t, uint16_t>> crop(
             0.f,
             0
         });
-        saveGPUAsImg(croppedBBox, "bbox_" + std::to_string(i) + ".jpg");
+        // saveGPUAsImg(croppedBBox, "bbox_" + std::to_string(i) + ".jpg");
     }
     return imageIndexList;
 }
