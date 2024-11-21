@@ -1053,8 +1053,6 @@ void setupLogger(
         std::cerr.rdbuf(errOutFile.rdbuf());
     }
 
-    std::cout << 1 / 0 << std::endl;
-
     // Create and configure logger
     logger = std::make_shared<spdlog::logger>("container_agent", begin(loggerSinks), end(loggerSinks));
     spdlog::register_logger(logger);
