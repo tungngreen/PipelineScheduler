@@ -120,9 +120,9 @@ void concatConfigsGenerator(
 class BasePreprocessor : public Microservice {
 public:
     BasePreprocessor(const json &jsonConfigs);
-    ~BasePreprocessor() {
+    virtual ~BasePreprocessor() override {
         waitStop();
-        spdlog::get("container_agent")->info("{0:s} has stopped", msvc_name);
+        spdlog::get("container_agent")->info("{0:s}::{1:s} has stopped", typeid(*this).name(), msvc_name);
     }
 
     BasePreprocessor(const BasePreprocessor &other);
@@ -163,9 +163,9 @@ protected:
 class BaseBatcher : public Microservice {
 public:
     BaseBatcher(const json &jsonConfigs);
-    ~BaseBatcher() {
+    virtual ~BaseBatcher() override {
         waitStop();
-        spdlog::get("container_agent")->info("{0:s} has stopped", msvc_name);
+        spdlog::get("container_agent")->info("{0:s}::{1:s} has stopped", typeid(*this).name(), msvc_name);
     }
 
     virtual void batchRequests();
@@ -214,9 +214,9 @@ typedef uint16_t BatchSizeType;
 class BaseBatchInferencer : public Microservice {
 public:
     BaseBatchInferencer(const json &jsonConfigs);
-    ~BaseBatchInferencer() {
+    virtual ~BaseBatchInferencer() override {
         waitStop();
-        spdlog::get("container_agent")->info("{0:s} has stopped", msvc_name);
+        spdlog::get("container_agent")->info("{0:s}::{1:s} has stopped", typeid(*this).name(), msvc_name);
     }
     virtual void inference();
     virtual void inferenceProfiling();
@@ -294,9 +294,9 @@ public:
     BasePostprocessor(const json &jsonConfigs) : Microservice(jsonConfigs) {
         loadConfigs(jsonConfigs, true);
     };
-    ~BasePostprocessor() {
+    virtual ~BasePostprocessor() override {
         waitStop();
-        spdlog::get("container_agent")->info("{0:s} has stopped", msvc_name);
+        spdlog::get("container_agent")->info("{0:s}::{1:s} has stopped", typeid(*this).name(), msvc_name);
     }
 
     BasePostprocessor(const BasePostprocessor &other) : Microservice(other) {
@@ -390,9 +390,9 @@ protected:
 class BaseBBoxCropper : public BasePostprocessor {
 public:
     BaseBBoxCropper(const json &jsonConfigs);
-    ~BaseBBoxCropper() {
+    virtual ~BaseBBoxCropper() override {
         waitStop();
-        spdlog::get("container_agent")->info("{0:s} has stopped", msvc_name);
+        spdlog::get("container_agent")->info("{0:s}::{1:s} has stopped", typeid(*this).name(), msvc_name);
     }
 
     BaseBBoxCropper(const BaseBBoxCropper &other) : BasePostprocessor(other) {};
@@ -430,9 +430,9 @@ public:
 class BaseBBoxCropperAugmentation : public BasePostprocessor {
 public:
     BaseBBoxCropperAugmentation(const json &jsonConfigs);
-    ~BaseBBoxCropperAugmentation() {
+    virtual ~BaseBBoxCropperAugmentation() override {
         waitStop();
-        spdlog::get("container_agent")->info("{0:s} has stopped", msvc_name);
+        spdlog::get("container_agent")->info("{0:s}::{1:s} has stopped", typeid(*this).name(), msvc_name);
     }
 
     BaseBBoxCropperAugmentation(const BaseBBoxCropperAugmentation &other) : BasePostprocessor(other) {};
@@ -467,9 +467,9 @@ public:
 class BaseBBoxCropperVerifier : public BasePostprocessor {
 public:
     BaseBBoxCropperVerifier(const json& jsonConfigs);
-    ~BaseBBoxCropperVerifier() {
+    virtual ~BaseBBoxCropperVerifier() override {
         waitStop();
-        spdlog::get("container_agent")->info("{0:s} has stopped", msvc_name);
+        spdlog::get("container_agent")->info("{0:s}::{1:s} has stopped", typeid(*this).name(), msvc_name);
     }
 
     void cropping();
@@ -495,9 +495,9 @@ public:
 class BaseClassifier : public BasePostprocessor {
 public:
     BaseClassifier(const json &jsonConfigs);
-    ~BaseClassifier() {
+    virtual ~BaseClassifier() override {
         waitStop();
-        spdlog::get("container_agent")->info("{0:s} has stopped", msvc_name);
+        spdlog::get("container_agent")->info("{0:s}::{1:s} has stopped", typeid(*this).name(), msvc_name);
     }
 
     BaseClassifier(const BaseClassifier &other) : BasePostprocessor(other) {
@@ -534,9 +534,9 @@ protected:
 class BaseSoftmaxClassifier : public BaseClassifier {
 public:
     BaseSoftmaxClassifier(const json &jsonConfigs);
-    ~BaseSoftmaxClassifier() {
+    virtual ~BaseSoftmaxClassifier() override {
         waitStop();
-        spdlog::get("container_agent")->info("{0:s} has stopped", msvc_name);
+        spdlog::get("container_agent")->info("{0:s}::{1:s} has stopped", typeid(*this).name(), msvc_name);
     }
 
     BaseSoftmaxClassifier(const BaseSoftmaxClassifier &other) : BaseClassifier(other) {};
@@ -548,9 +548,9 @@ public:
 class BaseKPointExtractor : public BasePostprocessor {
 public:
     BaseKPointExtractor(const json &jsonConfigs);
-    ~BaseKPointExtractor() {
+    virtual ~BaseKPointExtractor() override {
         waitStop();
-        spdlog::get("container_agent")->info("{0:s} has stopped", msvc_name);
+        spdlog::get("container_agent")->info("{0:s}::{1:s} has stopped", typeid(*this).name(), msvc_name);
     }
 
     BaseKPointExtractor(const BaseKPointExtractor &other) : BasePostprocessor(other) {};
