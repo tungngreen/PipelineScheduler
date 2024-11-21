@@ -39,6 +39,8 @@ std::vector<int> getBaseResolution(ModelType m) {
             return {3, 112, 112};
         case Emotionnet:
             return {1, 64, 64};
+        default:
+            throw std::invalid_argument("Unknown Model Type: " + std::to_string(m));
     }
 }
 
@@ -100,19 +102,20 @@ int main(int argc, char **argv) {
 
     if (algorithm == "bcedge") {
         for (auto &deviceType : deviceTypes) {
-            BCEdgeAgent *bcedge = new BCEdgeAgent(deviceType, 20000, torch::kF32, steps);
+            BCEdgeAgent *bcedge = new BCEdgeAgent(deviceType, 4000, torch::kF32, steps);
             for (int i = 0; i < epochs; i++) {
                 for (int j = 0; j < steps; j++) {
                     MsvcSLOType modifiedSLO = slo + ((rand() % 10 - 5));
                     auto model = modelNames[deviceType][rand() % modelNames[deviceType].size()];
                     bcedge->setState(model.second, getBaseResolution(model.second), modifiedSLO);
                     auto [batch_size, scaling, memory] = bcedge->runStep();
+                    batch_size = std::min((BatchSizeType) batch_size, profiles[deviceType][model.first].maxBatchSize);
                     double avg_latency = (double) (profiles[deviceType][model.first].batchInfer[batch_size].p95prepLat +
                             profiles[deviceType][model.first].batchInfer[batch_size].p95inferLat * batch_size +
                             profiles[deviceType][model.first].batchInfer[batch_size].p95postLat +
                             ((rand() % 500) - 250.0) + 0.1);
                     bcedge->rewardCallback((double) TIME_PRECISION_TO_SEC / avg_latency, avg_latency, modifiedSLO,
-                                           profiles[deviceType][model.first].batchInfer[batch_size].memUsage * scaling);
+                                           profiles[deviceType][model.first].batchInfer[batch_size].gpuMemUsage * scaling);
                 }
             }
             delete bcedge;

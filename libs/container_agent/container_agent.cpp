@@ -85,7 +85,9 @@ void manageJsonConfigs(json &configs) {
     json metricsServerConfigs = json::parse(metricsServerCfgsFile);
 
     (*containerConfigs)["cont_metricsServerConfigs"] = metricsServerConfigs;
-    if (containerConfigs->at("cont_taskName") != "dsrc") {
+    if (containerConfigs->at("cont_taskName") == "dsrc") {
+        (*containerConfigs)["cont_maxBatchSize"] = 30; // we only support 30 fps for one source
+    } else {
         (*containerConfigs)["cont_inferModelName"] = splitString(containerConfigs->at("cont_pipeline")[3]["path"], "/").back();
         containerConfigs->at("cont_inferModelName") = splitString(containerConfigs->at("cont_inferModelName"), ".").front();
         // The maximum batch size supported by the model (for TensorRT)
@@ -121,8 +123,8 @@ void manageJsonConfigs(json &configs) {
         containerConfigs->at(
                 "cont_pipeline")[i]["cont_metricsScrapeIntervalMillisec"] = metricsServerConfigs["metricsServer_metricsReportIntervalMillisec"];
         containerConfigs->at("cont_pipeline")[i]["msvc_numWarmUpBatches"] = containerConfigs->at("cont_numWarmUpBatches");
+        containerConfigs->at("cont_pipeline")[i]["msvc_maxBatchSize"] = containerConfigs->at("cont_maxBatchSize");
         if (containerConfigs->at("cont_taskName") != "dsrc") {
-            containerConfigs->at("cont_pipeline")[i]["msvc_maxBatchSize"] = containerConfigs->at("cont_maxBatchSize");
             containerConfigs->at("cont_pipeline")[i]["msvc_allocationMode"] = containerConfigs->at("cont_allocationMode");
         }
 
@@ -1065,7 +1067,7 @@ void ContainerAgent::collectRuntimeMetrics() {
             request.set_latency(latencyEWMA / TIME_PRECISION_TO_SEC);
             Status status = stub->BCEdgeConfigUpdate(&context, request, &reply);
             if (status.ok()) {
-                applyBatchSize(reply.batch_size());
+                applyBatchSize(std::min((BatchSizeType) reply.batch_size(), cont_msvcsGroups["batcher"].msvcList[0]->msvc_maxBatchSize));
             } else {
                 spdlog::get("container_agent")->warn("{0:s} BCEdgeConfigUpdate failed: {1:d} - {2:s}", cont_name, status.error_code(), status.error_message());
             }
