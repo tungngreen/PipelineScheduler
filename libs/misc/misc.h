@@ -1,6 +1,9 @@
 #ifndef MISC_H
 #define MISC_H
 
+#include <csignal>
+#include <execinfo.h>
+#include <unistd.h>
 #include <vector>
 #include <string>
 #include <cuda_runtime.h>
@@ -608,6 +611,9 @@ public:
         return start_time;
     }
 };
+
+// Unified signal handler
+void signalHandler(int signal);
 
 void setupLogger(
     const std::string &logPath,

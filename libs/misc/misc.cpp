@@ -969,6 +969,41 @@ uint64_t getTimestamp() {
     return std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
 }
 
+void signalHandler(int signal) {
+    switch (signal) {
+        case SIGSEGV:
+        std::cerr << "Error: Segmentation fault detected (signal " << signal << ")." << std::endl;
+        break;
+    case SIGFPE:
+        std::cerr << "Error: Arithmetic error (e.g., division by zero) detected (signal " << signal << ")." << std::endl;
+        break;
+    case SIGABRT:
+        std::cerr << "Error: Program aborted (signal " << signal << ")." << std::endl;
+        break;
+    case SIGILL:
+        std::cerr << "Error: Illegal instruction detected (signal " << signal << ")." << std::endl;
+        break;
+    case SIGTERM:
+        std::cerr << "Error: Termination request detected (signal " << signal << ")." << std::endl;
+        break;
+    default:
+        std::cerr << "Error: Unknown signal " << signal << " received." << std::endl;
+    }
+    // Capture the backtrace
+    void* callStack[128];
+    int stackSize = backtrace(callStack, 128);
+
+    // Print the backtrace
+    std::cerr << "Backtrace (most recent calls first):" << std::endl;
+    char** symbols = backtrace_symbols(callStack, stackSize);
+    for (int i = 0; i < stackSize; ++i) {
+        std::cerr << symbols[i] << std::endl;
+    }
+    free(symbols);
+
+    std::exit(signal); // Graceful termination
+}
+
 void setupLogger(
     const std::string &logPath,
     const std::string &loggerName,
@@ -977,6 +1012,12 @@ void setupLogger(
     std::vector<spdlog::sink_ptr> &loggerSinks,
     std::shared_ptr<spdlog::logger> &logger
 ) {
+    std::signal(SIGSEGV, signalHandler);
+    std::signal(SIGFPE, signalHandler);
+    std::signal(SIGABRT, signalHandler);
+    std::signal(SIGILL, signalHandler);
+    std::signal(SIGTERM, signalHandler);
+
     std::string path = logPath + "/" + loggerName + "_" + getTimestampString() + ".log";
 
     // Console sink setup
@@ -990,6 +1031,9 @@ void setupLogger(
         bool auto_flush = true;
         auto file_sink = std::make_shared<spdlog::sinks::basic_file_sink_mt>(path, auto_flush);
         loggerSinks.emplace_back(file_sink);
+
+        std::ofstream outFile(path + "_err");
+        std::cerr.rdbuf(outFile.rdbuf());
     }
 
     // Create and configure logger

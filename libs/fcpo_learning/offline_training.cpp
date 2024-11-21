@@ -100,21 +100,22 @@ int main(int argc, char **argv) {
 
     if (algorithm == "bcedge") {
         for (auto &deviceType : deviceTypes) {
-            BCEdgeAgent *bcedge = new BCEdgeAgent(deviceType, torch::kF32, steps);
+            BCEdgeAgent *bcedge = new BCEdgeAgent(deviceType, 20000, torch::kF32, steps);
             for (int i = 0; i < epochs; i++) {
                 for (int j = 0; j < steps; j++) {
-                    MsvcSLOType modifiedSLO = slo + ((rand() % 100 - 50) * 10);
+                    MsvcSLOType modifiedSLO = slo + ((rand() % 10 - 5));
                     auto model = modelNames[deviceType][rand() % modelNames[deviceType].size()];
                     bcedge->setState(model.second, getBaseResolution(model.second), modifiedSLO);
                     auto [batch_size, scaling, memory] = bcedge->runStep();
-                    uint64_t avg_latency = profiles[deviceType][model.first].batchInfer[batch_size].p95prepLat +
+                    double avg_latency = (double) (profiles[deviceType][model.first].batchInfer[batch_size].p95prepLat +
                             profiles[deviceType][model.first].batchInfer[batch_size].p95inferLat * batch_size +
                             profiles[deviceType][model.first].batchInfer[batch_size].p95postLat +
-                            ((rand() % 500 - 250));
-                    bcedge->rewardCallback((double) TIME_PRECISION_TO_SEC / ((double) avg_latency + 0.1), avg_latency, modifiedSLO,
+                            ((rand() % 500) - 250.0) + 0.1);
+                    bcedge->rewardCallback((double) TIME_PRECISION_TO_SEC / avg_latency, avg_latency, modifiedSLO,
                                            profiles[deviceType][model.first].batchInfer[batch_size].memUsage * scaling);
                 }
             }
+            delete bcedge;
         }
     } else if (algorithm == "fcpo") {
         FCPOAgent *fcpo = new FCPOAgent(algorithm, rl_conf["state_size"], rl_conf["resolution_size"],
