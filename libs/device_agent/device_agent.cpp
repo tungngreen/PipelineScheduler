@@ -160,7 +160,7 @@ DeviceAgent::DeviceAgent(const std::string &controller_url) : DeviceAgent() {
     }
 
     if (dev_system_name == "bce") {
-        dev_bcedge_agent = new BCEdgeAgent(dev_name, torch::kF32);
+        dev_bcedge_agent = new BCEdgeAgent(dev_name, 20000, torch::kF32);
     }
 
     running = true;
