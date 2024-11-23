@@ -51,13 +51,14 @@ void Sender::Process() {
         }
         auto request = msvc_InQueue[0]->pop1();
         // Meaning the the timeout in pop() has been reached and no request was actually popped
-        if (strcmp(request.req_travelPath[0].c_str(), "empty") == 0) {
-            continue;
+        // before comparing, check if the re_travelPath size = 0, if so, continue
+        if (request.req_travelPath.size() == 0) continue;
+        if (strcmp(request.req_travelPath[0].c_str(), "empty") == 0) continue;
             /**
              * @brief ONLY IN PROFILING MODE
              * Check if the profiling is to be stopped, if true, then send a signal to the downstream microservice to stop profiling
              */
-        } else if (strcmp(request.req_travelPath[0].c_str(), "STOP_PROFILING") == 0) {
+        if (strcmp(request.req_travelPath[0].c_str(), "STOP_PROFILING") == 0) {
             STOP_THREADS = true;
             msvc_OutQueue[0]->emplace(request);
             continue;
