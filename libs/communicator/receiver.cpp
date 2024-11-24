@@ -203,6 +203,7 @@ void Receiver::SerializedDataRequestHandler::Proceed() {
     } else if (status == PROCESS) {
         spdlog::get("container_agent")->trace("SerializedDataRequestHandler::{0:s} is processing request {1:s}...", __func__, request.mutable_elements()->at(0).path());
         new SerializedDataRequestHandler(service, cq, OutQueue, msvc_inReqCount, receiverInstance);
+        std::vector<Request<LocalCPUReqDataType>> requests = {};
         std::vector<RequestData<LocalCPUReqDataType>> elements = {};
 
         for (const auto &el: *request.mutable_elements()) {
@@ -229,17 +230,24 @@ void Receiver::SerializedDataRequestHandler::Proceed() {
                 image = cv::Mat(el.height(), el.width(), CV_8UC3,const_cast<char *>(el.data().c_str())).clone();
             }
             elements = {{{image.channels(), el.height(), el.width()}, image}};
-
-            Request<LocalCPUReqDataType> req = {
+            requests.emplace_back(Request<LocalCPUReqDataType>{
                     {timestamps},
                     {el.slo()},
                     {el.path()},
                     1,
                     elements
-            };
+            });
 
-            OutQueue->emplace(req);
-            spdlog::get("container_agent")->trace("SerializedDataRequestHandler::{0:s} emplaced request with path: {1:s}", __func__, el.path());
+//            Request<LocalCPUReqDataType> req = {
+//                    {timestamps},
+//                    {el.slo()},
+//                    {el.path()},
+//                    1,
+//                    elements
+//            };
+//
+//            OutQueue->emplace(req);
+            spdlog::get("container_agent")->trace("SerializedDataRequestHandler::{0:s} unpacked request with path: {1:s}", __func__, el.path());
 
             /**
              * @brief Request now should carry 4 timestamps
@@ -249,6 +257,7 @@ void Receiver::SerializedDataRequestHandler::Proceed() {
              * 4. The moment request is received by the receiver. (FOURTH_TIMESTAMP)
              */
         }
+        OutQueue->emplace(requests);
 
         status = FINISH;
         responder.Finish(reply, Status::OK, this);
