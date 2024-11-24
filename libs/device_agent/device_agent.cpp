@@ -312,7 +312,11 @@ void DeviceAgent::testNetwork(float min_size, float max_size, int num_loops) {
         CompletionQueue* sending_cq = controller_sending_cq;
         void *got_tag;
         bool ok = false;
-        if (sending_cq != nullptr) GPR_ASSERT(sending_cq->Next(&got_tag, &ok));
+        if (sending_cq != nullptr) {
+            GPR_ASSERT(sending_cq->Next(&got_tag, &ok));
+        } else {
+            i--;
+        }
     }
     spdlog::get("container_agent")->info("Network test completed");
 }
