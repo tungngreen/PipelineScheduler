@@ -323,16 +323,16 @@ std::string RemoteCPUSender::SendData(std::vector<RequestData<LocalCPUReqDataTyp
     std::unique_ptr<ClientAsyncResponseReader<EmptyMessage>> rpc(
             stubs[rand_int(0, stubs.size() - 1)]->AsyncSerializedDataTransfer(&context, request, &cq));
     rpc->Finish(&reply, &status, (void *) 1);
-//    void *got_tag;
-//    bool ok = false;
-//    GPR_ASSERT(cq.Next(&got_tag, &ok));
-//    GPR_ASSERT(ok);
-//
-//    if (status.ok()) {
-//        return "Complete";
-//    } else {
-//        spdlog::get("container_agent")->error("{0:s} error {1:d}: {2:s}", msvc_name, status.error_code(), status.error_message());
-//        return "RPC failed";
-//    }
+    void *got_tag;
+    bool ok = false;
+    GPR_ASSERT(cq.Next(&got_tag, &ok));
+    GPR_ASSERT(ok);
+
+    if (status.ok()) {
+        return "Complete";
+    } else {
+        spdlog::get("container_agent")->error("{0:s} error {1:d}: {2:s}", msvc_name, status.error_code(), status.error_message());
+        return "RPC failed";
+    }
     return "Complete";
 }
