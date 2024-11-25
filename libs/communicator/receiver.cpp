@@ -92,15 +92,10 @@ void Receiver::GpuPointerRequestHandler::Proceed() {
             for (auto ts: el.timestamp()) {
                 timestamps.push_back(std::chrono::time_point<std::chrono::system_clock>(TimePrecisionType(ts)));
             }
-            if (validateReq(timestamps[0])) {
+            if (validateReq(timestamps[0], el.path())) {
                 continue;
             }
             timestamps.push_back(std::chrono::system_clock::now());
-
-            if (receiverInstance->checkProfileEnd(el.path())) {
-                receiverInstance->STOP_THREADS = true;
-                break;
-            };
             void* data;
             cudaIpcMemHandle_t ipcHandle;
             memcpy(&ipcHandle, el.data().c_str(), sizeof(cudaIpcMemHandle_t));
@@ -160,14 +155,10 @@ void Receiver::SharedMemoryRequestHandler::Proceed() {
             for (auto ts: el.timestamp()) {
                 timestamps.emplace_back(std::chrono::time_point<std::chrono::system_clock>(TimePrecisionType(ts)));
             }
-            if (validateReq(timestamps[0])) {
+            if (validateReq(timestamps[0], el.path())) {
                 continue;
             }
             timestamps.push_back(std::chrono::system_clock::now());
-            if (receiverInstance->checkProfileEnd(el.path())) {
-                receiverInstance->STOP_THREADS = true;
-                break;
-            };
             auto name = el.data().c_str();
             boost::interprocess::shared_memory_object shm{open_only, name, read_only};
             boost::interprocess::mapped_region region{shm, read_only};
@@ -211,11 +202,19 @@ void Receiver::SerializedDataRequestHandler::Proceed() {
                                                this);
     } else if (status == PROCESS) {
         spdlog::get("container_agent")->trace("SerializedDataRequestHandler::{0:s} is processing request {1:s}...", __func__, request.mutable_elements()->at(0).path());
-        if (OutQueue->getActiveQueueIndex() != 1) OutQueue->setActiveQueueIndex(1);
         new SerializedDataRequestHandler(service, cq, OutQueue, msvc_inReqCount, receiverInstance);
-
+        std::vector<Request<LocalCPUReqDataType>> requests = {};
         std::vector<RequestData<LocalCPUReqDataType>> elements = {};
+
         for (const auto &el: *request.mutable_elements()) {
+            if (!validateReq(ClockType(TimePrecisionType(el.timestamp(0))), el.path())) {
+                continue;
+            }
+            uint length = el.data().length();
+            if (length != el.datalen()) {
+                spdlog::get("container_agent")->error("SerializedDataRequestHandler::{0:s} data length does not match", __func__);
+                continue;
+            }
             auto timestamps = std::vector<ClockType>();
             for (auto ts: el.timestamp()) {
                 timestamps.emplace_back(TimePrecisionType(ts));
@@ -223,19 +222,6 @@ void Receiver::SerializedDataRequestHandler::Proceed() {
             auto receivedTime = std::chrono::system_clock::now();
             receiverInstance->updateStats(receivedTime);
             timestamps.push_back(receivedTime);
-            if (!validateReq(timestamps[0])) {
-                continue;
-            }
-            if (receiverInstance->checkProfileEnd(el.path())) {
-                receiverInstance->STOP_THREADS = true;
-                break;
-            };
-            uint length = el.data().length();
-            if (length != el.datalen()) {
-                responder.Finish(reply, Status(grpc::INVALID_ARGUMENT, "Data length does not match"), this);
-                spdlog::get("container_agent")->error("SerializedDataRequestHandler::{0:s} data length does not match", __func__);
-                continue;
-            }
             cv::Mat image;
             if (el.is_encoded()){
                 std::vector<uchar> buf(el.data().c_str(), el.data().c_str() + length);
@@ -244,17 +230,24 @@ void Receiver::SerializedDataRequestHandler::Proceed() {
                 image = cv::Mat(el.height(), el.width(), CV_8UC3,const_cast<char *>(el.data().c_str())).clone();
             }
             elements = {{{image.channels(), el.height(), el.width()}, image}};
-
-            Request<LocalCPUReqDataType> req = {
+            requests.emplace_back(Request<LocalCPUReqDataType>{
                     {timestamps},
                     {el.slo()},
                     {el.path()},
                     1,
                     elements
-            };
+            });
 
-            OutQueue->emplace(req);
-            spdlog::get("container_agent")->trace("SerializedDataRequestHandler::{0:s} emplaced request with path: {1:s}", __func__, el.path());
+//            Request<LocalCPUReqDataType> req = {
+//                    {timestamps},
+//                    {el.slo()},
+//                    {el.path()},
+//                    1,
+//                    elements
+//            };
+//
+//            OutQueue->emplace(req);
+            spdlog::get("container_agent")->trace("SerializedDataRequestHandler::{0:s} unpacked request with path: {1:s}", __func__, el.path());
 
             /**
              * @brief Request now should carry 4 timestamps
@@ -264,6 +257,7 @@ void Receiver::SerializedDataRequestHandler::Proceed() {
              * 4. The moment request is received by the receiver. (FOURTH_TIMESTAMP)
              */
         }
+        OutQueue->emplace(requests);
 
         status = FINISH;
         responder.Finish(reply, Status::OK, this);
@@ -309,9 +303,7 @@ void Receiver::HandleRpcs() {
         }
         GPR_ASSERT(cq->Next(&tag, &ok));
         GPR_ASSERT(ok);
-        std::thread thread_([tag]() {
-            static_cast<RequestHandler *>(tag)->Proceed();
-        });
+        std::thread thread_([tag]() {static_cast<RequestHandler *>(tag)->Proceed();});
         thread_.detach();
     }
     msvc_logFile.close();

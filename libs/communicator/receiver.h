@@ -114,13 +114,17 @@ private:
          * @brief Check if this request is still valid or its too old and should be discarded
          * 
          * @param timestamps 
-         * @return true 
-         * @return false 
+         * @return true
+         * @return false
          */
-        inline bool validateReq(ClockType &originalGenTime) {
+        inline bool validateReq(ClockType originalGenTime, const std::string &path) {
             auto now = std::chrono::high_resolution_clock::now();
             auto diff = std::chrono::duration_cast<TimePrecisionType>(now - originalGenTime).count();
             if (receiverInstance->msvc_RUNMODE == RUNMODE::PROFILING) {
+                if (receiverInstance->checkProfileEnd(path)) {
+                    receiverInstance->STOP_THREADS = true;
+                    return false;
+                };
                 return true;
             }
             if (diff > receiverInstance->msvc_pipelineSLO - receiverInstance->msvc_timeBudgetLeft && 
