@@ -255,8 +255,10 @@ Controller::Controller(int argc, char **argv) {
     }
 
 
-    std::thread networkCheckThread(&Controller::checkNetworkConditions, this);
-    networkCheckThread.detach();
+    if (ctrl_systemName != "fcpo") {
+        std::thread networkCheckThread(&Controller::checkNetworkConditions, this);
+        networkCheckThread.detach();
+    }
 
     running = true;
 
