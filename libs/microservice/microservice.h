@@ -220,6 +220,39 @@ public:
     }
 
     /**
+     * @brief Emplacing Type 1 requests with fairness for producers and ticket wraparound
+     *
+     * @param request
+     */
+    void emplace(std::vector<Request<LocalCPUReqDataType>> request) {
+        // Get a ticket for this producer and handle overflow if necessary
+        uint32_t my_ticket = producer_ticket.fetch_add(1);
+        handleTicketOverflow();
+
+        // Wait until it's this producer's turn and the consumer is not waiting
+        while (current_ticket.load() != my_ticket || consumer_waiting.load()) {
+            std::this_thread::yield();
+        }
+
+        // Enter critical section only for queue operations
+        {
+            std::unique_lock<std::mutex> lock(q_mutex);
+            for (auto &req : request) {
+                if (q_cpuQueue.size() == q_MaxSize) {
+                    dropedCount += q_cpuQueue.front().req_batchSize;
+                    spdlog::get("container_agent")->warn("Queue {0:s} is full, dropping request", q_name);
+                    q_cpuQueue.pop();
+                }
+                q_cpuQueue.emplace(std::move(req)); // Use move semantics for efficiency
+            }
+        } // Mutex is released here
+
+        // Move to the next producer and notify consumer, outside the critical section
+        current_ticket.fetch_add(1);
+        q_condition_consumer.notify_one();
+    }
+
+    /**
      * @brief Emplacing Type 2 requests with fairness for producers and ticket wraparound
      * 
      * @param request 
