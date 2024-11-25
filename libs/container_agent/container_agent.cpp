@@ -686,11 +686,7 @@ bool ContainerAgent::addPreprocessor(uint8_t totalNumInstances) {
         msvc_name = msvc_name.substr(0, msvc_name.find_last_of("_")) + "_" + std::to_string(numCurrentInstances + i);
         msvc->msvc_name = msvc_name;
         cont_msvcsGroups["preprocessor"].msvcList.push_back(msvc);
-        for (auto &receiver: cont_msvcsGroups["receiver"].msvcList) {
-            std::vector<ThreadSafeFixSizedDoubleQueue *> inQueueList;
-            inQueueList.push_back(receiver->GetOutQueue()[0]);
-            msvc->SetInQueue(inQueueList);
-        }
+        msvc->SetInQueue(cont_msvcsGroups["receiver"].outQueue);
         for (auto &inferencer: cont_msvcsGroups["inference"].msvcList) {
             inferencer->msvc_InQueue.push_back(msvc->GetOutQueue()[0]);
         }
@@ -728,12 +724,9 @@ bool ContainerAgent::removePreprocessor(uint8_t numLeftInstances) {
     }
     for (uint8_t i = 0; i < numRemoveInstances; i++) {
         Microservice *msvc = cont_msvcsGroups["preprocessor"].msvcList.back();
-        for (auto &inferencer: cont_msvcsGroups["inference"].msvcList) {
-            inferencer->msvc_InQueue.pop_back();
-        }
-        cont_msvcsGroups["preprocessor"].msvcList.pop_back();
         msvc->stopThread();
         delete msvc;
+        cont_msvcsGroups["preprocessor"].msvcList.pop_back();
     }
     spdlog::get("container_agent")->info("{0:s} Removed {1:d} preprocessors.", __func__, numRemoveInstances);
     return true;
@@ -776,14 +769,7 @@ bool ContainerAgent::addPostprocessor(uint8_t totalNumInstances) {
         msvc_name = msvc_name.substr(0, msvc_name.find_last_of("_")) + "_" + std::to_string(numCurrentInstances + i);
         msvc->msvc_name = msvc_name;
         cont_msvcsGroups["postprocessor"].msvcList.push_back(msvc);
-        for (auto &inferencer: cont_msvcsGroups["inference"].msvcList) {
-            std::vector<ThreadSafeFixSizedDoubleQueue *> inQueueList;
-            inQueueList.push_back(inferencer->GetOutQueue()[0]);
-            msvc->SetInQueue(inQueueList);
-        }
-        for (auto &sender: cont_msvcsGroups["sender"].msvcList) {
-            sender->msvc_InQueue.push_back(msvc->GetOutQueue()[0]);
-        }
+        msvc->SetInQueue(cont_msvcsGroups["inference"].outQueue);
         newMsvcList.push_back(msvc);
         msvc->pauseThread();
         msvc->dispatchThread();
@@ -818,12 +804,9 @@ bool ContainerAgent::removePostprocessor(uint8_t numLeftInstances) {
     }
     for (uint8_t i = 0; i < numRemoveInstances; i++) {
         Microservice *msvc = cont_msvcsGroups["postprocessor"].msvcList.back();
-        for (auto &sender: cont_msvcsGroups["sender"].msvcList) {
-            sender->msvc_InQueue.pop_back();
-        }
-        cont_msvcsGroups["postprocessor"].msvcList.pop_back();
         msvc->stopThread();
         delete msvc;
+        cont_msvcsGroups["postprocessor"].msvcList.pop_back();
     }
     spdlog::get("container_agent")->info("{0:s} Removed {1:d} postprocessors.", __func__, numRemoveInstances);
     return true;
