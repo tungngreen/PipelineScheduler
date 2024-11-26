@@ -6,7 +6,6 @@ ABSL_FLAG(std::string, algorithm, "bcedge", "model you want to train");
 ABSL_FLAG(MsvcSLOType, slo, 0, "base slo for bcedge training in ms");
 ABSL_FLAG(uint16_t, epochs, 0, "number of epochs to train");
 ABSL_FLAG(uint16_t, steps, 0, "number of steps per epoch");
-ABSL_FLAG(std::string, fcpo_json, "{}", "json configuration for fcpo training");
 
 torch::Dtype getTorchDtype(const std::string& type_str) {
     auto it = DTYPE_MAP.find(type_str);
@@ -51,7 +50,6 @@ int main(int argc, char **argv) {
     MsvcSLOType slo = absl::GetFlag(FLAGS_slo) * 1000;
     uint16_t epochs = absl::GetFlag(FLAGS_epochs);
     uint16_t steps = absl::GetFlag(FLAGS_steps);
-    nlohmann::json rl_conf = nlohmann::json::parse(absl::GetFlag(FLAGS_fcpo_json));
 
     nlohmann::json metricsCfgs = nlohmann::json::parse(std::ifstream("../jsons/metricsserver.json"));
     MetricsServerConfigs metricsServerConfigs;
@@ -75,6 +73,7 @@ int main(int argc, char **argv) {
     std::map<std::string, PerDeviceModelProfileType> profiles = {};
     std::vector<std::string> tasks = {"traffic", "people"};
     std::vector<std::string> deviceTypes = {"serv", "agx", "nx", "orn", "onp"};
+    std::map<std::string, double> deviceMemLimits = {{"serv", 3500}, {"agx", 3000000}, {"nx", 2000000}, {"orn", 2000000}, {"onp", 3000}};
     std::map<std::string, std::vector<std::pair<std::string, ModelType>>> modelNames;
     modelNames["serv"] = {{"yolov5n_dynamic_nms_3090_fp32_16_1.engine", Yolov5n}, {"platedet_dyn_nms_3090_fp32_64_1.engine", PlateDet}, {"carbrand_dynamic_3090_fp32_64_1.engine", CarBrand}, {"retina1face_3090_fp32_64_1.engine", Retinaface}, {"retina_multiface_640_3090_fp32_16_1.engine", RetinaMtface}, {"pose_3090_fp32_64_1.engine", Movenet}, {"age_dynamic_3090_fp32_64_1.engine", Age}, {"gender_dynamic_3090_fp32_64_1.engine", Gender}, {"arcface_dynamic_3090_fp32_64_1.engine", Arcface}, {"emotion_dyn_3090_fp32_64_1.engine", Emotionnet}};
     modelNames["agx"] = {{"yolov5n_dynamic_nms_agx_fp32_16_1.engine", Yolov5n}, {"platedet_dyn_nms_agx_fp32_16_1.engine", PlateDet}, {"carbrand_dynamic_agx_fp32_16_1.engine", CarBrand}, {"retina1face_agx_fp32_16_1.engine", Retinaface}, {"pose_agx_fp32_16_1.engine", Movenet}, {"age_dynamic_agx_fp32_16_1.engine", Age}, {"gender_dynamic_agx_fp32_16_1.engine", Gender}, {"arcface_dynamic_agx_fp32_16_1.engine", Arcface}};
@@ -102,7 +101,7 @@ int main(int argc, char **argv) {
 
     if (algorithm == "bcedge") {
         for (auto &deviceType : deviceTypes) {
-            BCEdgeAgent *bcedge = new BCEdgeAgent(deviceType, 4000, torch::kF32, steps);
+            BCEdgeAgent *bcedge = new BCEdgeAgent(deviceType, deviceMemLimits[deviceType], torch::kF32, steps);
             for (int i = 0; i < epochs; i++) {
                 for (int j = 0; j < steps; j++) {
                     MsvcSLOType modifiedSLO = slo + ((rand() % 10 - 5));
@@ -114,25 +113,37 @@ int main(int argc, char **argv) {
                             profiles[deviceType][model.first].batchInfer[batch_size].p95inferLat * batch_size +
                             profiles[deviceType][model.first].batchInfer[batch_size].p95postLat +
                             ((rand() % 500) - 250.0) + 0.1);
-                    bcedge->rewardCallback((double) TIME_PRECISION_TO_SEC / avg_latency, avg_latency, modifiedSLO,
+                    bcedge->rewardCallback((double) TIME_PRECISION_TO_SEC / avg_latency, avg_latency / TIME_PRECISION_TO_SEC, modifiedSLO,
                                            profiles[deviceType][model.first].batchInfer[batch_size].gpuMemUsage * scaling);
                 }
             }
             delete bcedge;
         }
-    } else if (algorithm == "fcpo") {
-        FCPOAgent *fcpo = new FCPOAgent(algorithm, rl_conf["state_size"], rl_conf["resolution_size"],
-                                        rl_conf["batch_size"], rl_conf["threads_size"], nullptr, nullptr,
-                                        getTorchDtype(rl_conf["precision"]), rl_conf["update_steps"],
-                                        0, epochs + 1, rl_conf["lambda"],
-                                        rl_conf["gamma"], rl_conf["clip_epsilon"], rl_conf["penalty_weight"]);
+
+
+    } else if (algorithm == "fcpo") { // only used for testing the convergence in simulation to tune hyperparameters
+        FCPOAgent *fcpo = new FCPOAgent(algorithm, 7, 2,
+                                        16, 2, nullptr, nullptr,
+                                        torch::kF32, steps,
+                                        0, epochs + 2, .95,
+                                        .99, .75, .15);
         for (int i = 0; i < epochs; i++) {
+            int last_resolution = 0, last_batch_size = 0, last_threading = 0;
             for (int j = 0; j < steps; j++) {
-                //fcpo->setState();
-                fcpo->runStep();
-                //fcpo->rewardCallback();
+                double arrival = 30.0;
+                auto device = deviceTypes[rand() % deviceTypes.size()];
+                auto model = modelNames[device][0];
+                fcpo->setState(last_resolution, last_batch_size, last_threading, arrival, 0.0, 0.0, 0.0);
+                std::tie(last_resolution, last_batch_size, last_threading) = fcpo->runStep();
+                double avg_latency = (double) (profiles[device][model.first].batchInfer[last_batch_size].p95prepLat +
+                                               profiles[device][model.first].batchInfer[last_batch_size].p95inferLat * last_batch_size +
+                                               profiles[device][model.first].batchInfer[last_batch_size].p95postLat +
+                                               ((rand() % 500) - 250.0) + 0.1);
+                fcpo->rewardCallback(std::max(arrival, (double) TIME_PRECISION_TO_SEC / avg_latency), 0.0, avg_latency / TIME_PRECISION_TO_SEC, last_batch_size / arrival);
             }
         }
+
+
     } else {
         std::cerr << "Invalid algorithm: " << algorithm << std::endl;
         return 1;
