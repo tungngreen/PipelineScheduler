@@ -578,6 +578,7 @@ ContainerAgent::ContainerAgent(const json& configs) {
 void ContainerAgent::initiateMicroservices(const json &configs) {
     std::vector<Microservice *> msvcsList;
     json pipeConfigs = configs["container"]["cont_pipeline"];
+    uint8_t numSenders = 0;
     for (auto &pipeConfig: pipeConfigs) {
         std::string groupName = pipeConfig.at("msvc_name");
         if (groupName == "data_reader") {
@@ -645,10 +646,11 @@ void ContainerAgent::initiateMicroservices(const json &configs) {
                     throw std::runtime_error("Unknown communication method" + std::to_string((int)pipeConfig.at("msvc_dnstreamMicroservices")[0].at("nb_commMethod")));
                 }
                 if (pipeConfigs.size() == 2) { // If this is a data source container
-                    msvcsList.back()->SetInQueue(cont_msvcsGroups["receiver"].outQueue);
+                    msvcsList.back()->SetInQueue({cont_msvcsGroups["receiver"].outQueue[numSenders]});
                 } else {
-                    msvcsList.back()->SetInQueue(cont_msvcsGroups["postprocessor"].outQueue);
+                    msvcsList.back()->SetInQueue({cont_msvcsGroups["postprocessor"].outQueue[numSenders]});
                 }
+                numSenders++;
             } else {
                 spdlog::get("container_agent")->error("Unknown microservice type: {0:d}", msvc_type);
                 throw std::runtime_error("Unknown microservice type");
@@ -1027,7 +1029,6 @@ void ContainerAgent::collectRuntimeMetrics() {
             cont_fcpo_agent->setState(cont_msvcsGroups["preprocessor"].msvcList[0]->msvc_concat.numImgs,
                                       cont_msvcsGroups["batcher"].msvcList[0]->msvc_idealBatchSize,cont_threadingAction,
                                       avgRequestRate, pre_queueDrops, inf_queueDrops, post_queueDrops);
-//            cont_fcpo_agent->setState(avgRequestRate, pre_queueDrops, inf_queueDrops, post_queueDrops);
             auto [targetRes, newBS, scaling] = cont_fcpo_agent->runStep();
             spdlog::get("container_agent")->info("RL Decision Output: Resolution: {0:d}, Batch Size: {1:d}, Scaling: {2:d}",
                                                  targetRes, newBS, scaling);

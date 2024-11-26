@@ -61,7 +61,6 @@ void BaseKPointExtractor::extractor() {
 
 
     cudaStream_t postProcStream;
-    cv::cuda::Stream postProcCVStream;
 
     NumQueuesType queueIndex = 0;
 
@@ -92,7 +91,6 @@ void BaseKPointExtractor::extractor() {
 
                 setDevice();
                 checkCudaErrorCode(cudaStreamCreate(&postProcStream), __func__);
-                postProcCVStream = cv::cuda::StreamAccessor::wrapStream(postProcStream);
 
                 BatchSizeType batchSize = msvc_allocationMode == AllocationMode::Conservative ? msvc_idealBatchSize : msvc_maxBatchSize;
                 keyPoints = new float[batchSize * msvc_dataShape[0][0] * msvc_dataShape[0][1] * msvc_dataShape[0][2]];
@@ -176,6 +174,7 @@ void BaseKPointExtractor::extractor() {
 
                 if (msvc_activeOutQueueIndex.at(0) == 1) { //Local CPU
                     cv::Mat out;
+                    cv::cuda::Stream postProcCVStream = cv::cuda::Stream();
                     currReq.upstreamReq_data[imageIndexInBatch].data.download(out, postProcCVStream);
                     postProcCVStream.waitForCompletion();
                     if (msvc_OutQueue.at(0)->getEncoded()) {
