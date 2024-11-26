@@ -189,7 +189,7 @@ void Controller::Scheduling() {
         if (ctrl_controlTimings.currSchedulingTime >= ctrl_controlTimings.nextRescalingTime &&
             (ctrl_controlTimings.currSchedulingTime < ctrl_controlTimings.nextSchedulingTime &&
              std::chrono::duration_cast<std::chrono::seconds>(ctrl_controlTimings.nextSchedulingTime - ctrl_controlTimings.currSchedulingTime).count() >= 30)) {
-            Rescaling();
+            //Rescaling();
             schedulingSW.stop();
             ctrl_controlTimings.nextRescalingTime = ctrl_controlTimings.currSchedulingTime + std::chrono::seconds(ctrl_controlTimings.rescalingIntervalSec -
                                                                                                                   schedulingSW.elapsed_microseconds() / 1000000);
@@ -930,9 +930,16 @@ bool Controller::mergeModels(PipelineModel *mergedModel, PipelineModel* toBeMerg
         }
         return true;
     }
+
     // If the devices are different, we should not merge the models
     if (mergedModel->device != toBeMergedModel->device ||
         toBeMergedModel->merged || mergedModel->device != device || toBeMergedModel->device != device) {
+        return false;
+    }
+
+    mergedModel->datasourceName.push_back(toBeMergedModel->datasourceName[0]);
+    if (mergedModel->name.find("datasource") != std::string::npos ||
+        mergedModel->name.find("dsrc") != std::string::npos) {
         return false;
     }
 
@@ -994,15 +1001,38 @@ TaskHandle* Controller::mergePipelines(const std::string& taskName) {
             }
             // If model is not scheduled to be run on the server, we should not merge it.
             // However, the model is still
-            if (task.second->tk_pipelineModels[i]->device != "server") {
+            /*if (task.second->tk_pipelineModels[i]->device != "server") {
                 mergedPipeline->tk_pipelineModels.emplace_back(new PipelineModel(*task.second->tk_pipelineModels[i]));
                 task.second->tk_pipelineModels[i]->merged = true;
                 task.second->tk_pipelineModels[i]->toBeRun = false;
                 mergedPipeline->tk_pipelineModels.back()->toBeRun = false;
                 continue;
+            }*/
+            // If the model devices are different from another we should not merge it.
+            if (mergedPipeline->tk_pipelineModels[i]->device != task.second->tk_pipelineModels[i]->device) {
+                // search the vector of models in the merged pipeline to find another merge candidate
+                bool candidate_found = false;
+                for (auto &candidate : mergedPipeline->tk_pipelineModels) {
+                    if (candidate->device == task.second->tk_pipelineModels[i]->device) {
+                        if (candidate->type == task.second->tk_pipelineModels[i]->type) {
+                            bool merged = mergeModels(candidate, task.second->tk_pipelineModels.at(i), task.second->tk_pipelineModels[i]->device);
+                            task.second->tk_pipelineModels.at(i)->merged = true;
+                            task.second->tk_pipelineModels.at(i)->toBeRun = false;
+                            candidate_found = true;
+                            break;
+                        }
+                    }
+                }
+                if (!candidate_found) {
+                    mergedPipeline->tk_pipelineModels.emplace_back(new PipelineModel(*task.second->tk_pipelineModels[i]));
+                    task.second->tk_pipelineModels[i]->merged = true;
+                    task.second->tk_pipelineModels[i]->toBeRun = false;
+                    mergedPipeline->tk_pipelineModels.back()->toBeRun = false;
+                }
+                continue;
             }
             // We attempt to merge to model i of this unscheduled task into the model i of the merged pipeline
-            bool merged = mergeModels(mergedPipeline->tk_pipelineModels[i], task.second->tk_pipelineModels.at(i), "server");
+            bool merged = mergeModels(mergedPipeline->tk_pipelineModels[i], task.second->tk_pipelineModels.at(i), task.second->tk_pipelineModels[i]->device);
             task.second->tk_pipelineModels.at(i)->merged = true;
             task.second->tk_pipelineModels.at(i)->toBeRun = false;
         }
@@ -1065,7 +1095,7 @@ TaskHandle* Controller::mergePipelines(const std::string& taskName) {
 }
 
 void Controller::mergePipelines() {
-    std::vector<std::string> toMerge = {"traffic", "people"};
+    std::vector<std::string> toMerge = {"traffic", "people", "indoor"};
     TaskHandle* mergedPipeline;
 
     for (const auto &taskName : toMerge) {
@@ -1191,8 +1221,13 @@ void Controller::crossDeviceWorkloadDistributor(TaskHandle *task, uint64_t slo) 
 
         estimateModelLatency(m);
         if (m->name.find("datasource") == std::string::npos) {
-            m->device = "server";
-            m->deviceTypeName = "server";
+            for (auto &d: m->possibleDevices) {
+                if (d == "server") {
+                    m->device = "server";
+                    m->deviceTypeName = "server";
+                    break;
+                }
+            }
         }
     }
 
