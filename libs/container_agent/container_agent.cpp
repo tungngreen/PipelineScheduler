@@ -573,6 +573,7 @@ ContainerAgent::ContainerAgent(const json& configs) {
 void ContainerAgent::initiateMicroservices(const json &configs) {
     std::vector<Microservice *> msvcsList;
     json pipeConfigs = configs["container"]["cont_pipeline"];
+    uint8_t numSenders = 0;
     for (auto &pipeConfig: pipeConfigs) {
         std::string groupName = pipeConfig.at("msvc_name");
         if (groupName == "data_reader") {
@@ -640,10 +641,11 @@ void ContainerAgent::initiateMicroservices(const json &configs) {
                     throw std::runtime_error("Unknown communication method" + std::to_string((int)pipeConfig.at("msvc_dnstreamMicroservices")[0].at("nb_commMethod")));
                 }
                 if (pipeConfigs.size() == 2) { // If this is a data source container
-                    msvcsList.back()->SetInQueue(cont_msvcsGroups["receiver"].outQueue);
+                    msvcsList.back()->SetInQueue({cont_msvcsGroups["receiver"].outQueue[numSenders]});
                 } else {
-                    msvcsList.back()->SetInQueue(cont_msvcsGroups["postprocessor"].outQueue);
+                    msvcsList.back()->SetInQueue({cont_msvcsGroups["postprocessor"].outQueue[numSenders]});
                 }
+                numSenders++;
             } else {
                 spdlog::get("container_agent")->error("Unknown microservice type: {0:d}", msvc_type);
                 throw std::runtime_error("Unknown microservice type");
