@@ -28,15 +28,6 @@ bool GPUPortion::assignContainer(ContainerHandle *container) {
     return true;
 }
 
-// GPUPortion::~GPUPortion() {
-//     if (container != nullptr) {
-//         throw std::runtime_error("Portion cannot be destroyed while it is still assigned to a container %s" + container->name);
-//     }
-//     lane->removePortion(this);
-//     // TODO: remove from the list of free portions
-//     spdlog::get("container_agent")->info("Portion is destroyed.");
-// }
-
 bool GPULane::removePortion(GPUPortion *portion) {
     if (portion->lane != this) {
         throw std::runtime_error("Lane %d cannot remove portion %s, which does not belong to it." + portion->container->name + std::to_string(laneNum));
@@ -741,7 +732,8 @@ void Controller::StartContainer(ContainerHandle *container, bool easy_allocation
         start_config["container"]["cont_name"] = container->name;
         start_config["container"]["cont_allocationMode"] = easy_allocation ? 1 : 0;
         if (ctrl_systemName == "ppp" || ctrl_systemName == "fcpo") {
-            start_config["container"]["cont_batchMode"] = 2;
+            //TODO: set back to 2 after OURs working again with batcher
+            start_config["container"]["cont_batchMode"] = 0;
         }
         if (ctrl_systemName == "ppp" || ctrl_systemName == "fcpo" || ctrl_systemName == "jlf") {
             start_config["container"]["cont_dropMode"] = 1;
