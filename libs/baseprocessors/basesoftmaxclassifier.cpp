@@ -49,7 +49,6 @@ void BaseSoftmaxClassifier::classify() {
 
 
     cudaStream_t postProcStream;
-    cv::cuda::Stream postProcCVStream;
 
     NumQueuesType queueIndex = 0;
 
@@ -80,7 +79,6 @@ void BaseSoftmaxClassifier::classify() {
 
                 setDevice();
                 checkCudaErrorCode(cudaStreamCreate(&postProcStream), __func__);
-                postProcCVStream = cv::cuda::StreamAccessor::wrapStream(postProcStream);
 
                 BatchSizeType batchSize = msvc_allocationMode == AllocationMode::Conservative ? msvc_idealBatchSize : msvc_maxBatchSize;
                 predictedProbs = new float[batchSize * msvc_numClasses];
@@ -154,6 +152,7 @@ void BaseSoftmaxClassifier::classify() {
 
             if (msvc_activeOutQueueIndex.at(queueIndex) == 1) { //Local CPU
                 cv::Mat out;
+                cv::cuda::Stream postProcCVStream = cv::cuda::Stream();
                 currReq.upstreamReq_data[i].data.download(out, postProcCVStream);
                 postProcCVStream.waitForCompletion();
                 if (msvc_OutQueue.at(queueIndex)->getEncoded()) {

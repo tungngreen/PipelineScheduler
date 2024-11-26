@@ -397,7 +397,7 @@ void BaseBBoxCropperAugmentation::cropping() {
                         // std::cout << singleImageBBoxList[j].type() << std::endl;
                         // // Synchronize the cuda stream right away to avoid any race condition
                         // checkCudaErrorCode(cudaStreamSynchronize(postProcStream), __func__);
-                        cv::cuda::Stream cvStream = cv::cuda::StreamAccessor::wrapStream(postProcStream);
+                        cv::cuda::Stream cvStream = cv::cuda::Stream();
                         singleImageBBoxList[j].download(cpuBox, cvStream);
                         cvStream.waitForCompletion();
                     }
