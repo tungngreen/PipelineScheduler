@@ -3,9 +3,9 @@
         "cont_experimentName": "rl1",
         "cont_systemName": "fcpo",
         "cont_pipeName": "traffic",
-        "cont_taskName": "yolov5",
-        "cont_hostDevice": "agx",
-        "cont_hostDeviceType": "agx",
+        "cont_taskName": "yolov5n",
+        "cont_hostDevice": "agxavier",
+        "cont_hostDeviceType": "agxavier",
         "cont_name": "yolov5_0",
         "cont_pipeline": [
             {

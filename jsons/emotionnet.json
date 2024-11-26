@@ -4,8 +4,8 @@
         "cont_systemName": "fcpo",
         "cont_pipeName": "videocall",
         "cont_taskName": "emotionnet",
-        "cont_hostDevice": "agx",
-        "cont_hostDeviceType": "agx",
+        "cont_hostDevice": "agxavier",
+        "cont_hostDeviceType": "agxavier",
         "cont_name": "emotionnet_0",
         "cont_pipeline": [
             {

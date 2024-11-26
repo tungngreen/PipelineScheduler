@@ -115,6 +115,16 @@ protected:
     std::string runDocker(const std::string &executable, const std::string &cont_name, const std::string &start_string,
                          const int &device, const int &port) {
         std::string command;
+        if (dev_type == SystemDeviceType::AGXXavier) {
+            command = "agx";
+        } else if (dev_type == SystemDeviceType::NXXavier) {
+            command = "nx";
+        } else if (dev_type == SystemDeviceType::OrinNano) {
+            command = "orin-nano";
+        } else {
+            spdlog::get("container_agent")->error("Unknown edge device type while trying to start container!");
+            return "";
+        }
         command =
                 "docker run --network=host -u 0:0 --privileged -v /home/cdsn:/home/soulsaver "
                 "-v /home/cdsn/pipe/data:/home/soulsaver/FCPO/data "
@@ -122,8 +132,8 @@ protected:
                 "-v /run/jtop.sock:/run/jtop.sock  -v /usr/bin/tegrastats:/usr/bin/tegrastats "
                 "-d --rm --runtime nvidia --gpus all --name " +
                 absl::StrFormat(
-                        R"(%s pipeline-scheduler-agx:trt-libtorch %s --json '%s' --device %i --port %i --port_offset %i)",
-                        cont_name, executable, start_string, device, port, dev_port_offset) +
+                        R"(%s pipeline-scheduler-%s:trt-libtorch %s --json '%s' --device %i --port %i --port_offset %i)",
+                        cont_name, command, executable, start_string, device, port, dev_port_offset) +
                 " --log_dir ../logs";
         command += deploy_mode? " --logging_mode 1" : " --verbose 0 --logging_mode 2";
 

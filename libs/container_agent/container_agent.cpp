@@ -212,12 +212,17 @@ std::vector<BaseMicroserviceConfigs> msvcconfigs::LoadFromJson() {
 }
 
 json msvcconfigs::loadJson() {
-    json containerConfigs, profilingConfigs;
     if (!absl::GetFlag(FLAGS_json).has_value()) {
         spdlog::trace("{0:s} attempts to load Json Configs from file.", __func__);
         if (absl::GetFlag(FLAGS_json_path).has_value()) {
             std::ifstream file(absl::GetFlag(FLAGS_json_path).value());
             auto json_file = json::parse(file);
+            file = std::ifstream("../jsons/container_lib.json");
+            auto containerLibs = json::parse(file);
+            std::string d = json_file["container"]["cont_taskName"].get<std::string>() + "_" +
+                            json_file["container"]["cont_hostDeviceType"].get<std::string>();
+            json_file["container"]["cont_pipeline"][3]["path"] = containerLibs[d]["modelPath"];
+            json_file["profiling"]["profile_templateModelPath"] = containerLibs[d]["modelPath"];
             spdlog::trace("{0:s} finished loading Json Configs from file.", __func__);
             return json_file;
         } else {
@@ -231,7 +236,6 @@ json msvcconfigs::loadJson() {
             exit(1);
         } else {
             auto json_file = json::parse(absl::GetFlag(FLAGS_json).value());
-            containerConfigs = json_file.at("container");
             spdlog::trace("{0:s} finished loading Json Configs from command line.", __func__);
             return json_file;
         }
