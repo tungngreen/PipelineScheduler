@@ -487,7 +487,6 @@ void Controller::ApplyScheduling() {
                             std::remove(model->task->tk_subTasks[model->name].begin(),
                                         model->task->tk_subTasks[model->name].end(), candidates[i]),
                             model->task->tk_subTasks[model->name].end());
-                    candidates.erase(candidates.begin() + i);
                 }
             }
         }
