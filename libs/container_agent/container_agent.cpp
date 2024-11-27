@@ -1011,7 +1011,7 @@ void ContainerAgent::collectRuntimeMetrics() {
             } else {
                 avgRequestRate = std::max(0.1, avgRequestRate); // prevent negative values in the case of many drops or no requests
                 cont_fcpo_agent->rewardCallback((double) aggExecutedBatchSize / avgRequestRate,
-                                         0.0,
+                                         queueDrops / 100.0,
                                          latencyEWMA / TIME_PRECISION_TO_SEC,
 //                                         std::max( 1.0, (double) cont_msvcsGroups["batcher"].msvcList[0]->msvc_idealBatchSize
 //                                                            / (aggExecutedBatchSize / miniBatchCount)));
@@ -1021,8 +1021,10 @@ void ContainerAgent::collectRuntimeMetrics() {
                                                  miniBatchCount, avgRequestRate, latencyEWMA / TIME_PRECISION_TO_SEC, aggExecutedBatchSize);
             cont_fcpo_agent->setState(cont_msvcsGroups["preprocessor"].msvcList[0]->msvc_concat.numImgs,
                                       cont_msvcsGroups["batcher"].msvcList[0]->msvc_idealBatchSize,cont_threadingAction,
-                                      avgRequestRate, cont_msvcsGroups["receiver"].msvcList[0]->msvc_OutQueue[0]->size(),
-                                      cont_msvcsGroups["preprocessor"].msvcList[0]->msvc_OutQueue[0]->size(), cont_msvcsGroups["inference"].msvcList[0]->msvc_OutQueue[0]->size());
+                                      avgRequestRate / 250.0,
+                                      cont_msvcsGroups["receiver"].msvcList[0]->msvc_OutQueue[0]->size(),
+                                      cont_msvcsGroups["preprocessor"].msvcList[0]->msvc_OutQueue[0]->size(),
+                                      cont_msvcsGroups["inference"].msvcList[0]->msvc_OutQueue[0]->size());
             auto [targetRes, newBS, scaling] = cont_fcpo_agent->runStep();
             spdlog::get("container_agent")->info("RL Decision Output: Resolution: {0:d}, Batch Size: {1:d}, Scaling: {2:d}",
                                                  targetRes, newBS, scaling);

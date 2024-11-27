@@ -1,13 +1,13 @@
 #include "fcpo_learning.h"
 
 FCPOAgent::FCPOAgent(std::string& cont_name, uint state_size, uint resolution_size, uint max_batch,  uint scaling_size,
-                   CompletionQueue *cq, std::shared_ptr<InDeviceMessages::Stub> stub, torch::Dtype precision, 
-                   uint update_steps, uint update_steps_inc, uint federated_steps, double lambda, double gamma,
-                   double clip_epsilon, double penalty_weight)
-                   : precision(precision), cont_name(cont_name), cq(cq), stub(stub), lambda(lambda), gamma(gamma),
-                     clip_epsilon(clip_epsilon), penalty_weight(penalty_weight), state_size(state_size),
-                     resolution_size(resolution_size), max_batch(max_batch), scaling_size(scaling_size),
-                     update_steps(update_steps), update_steps_inc(update_steps_inc), federated_steps(federated_steps) {
+                     CompletionQueue *cq, std::shared_ptr<InDeviceMessages::Stub> stub, torch::Dtype precision,
+                     uint update_steps, uint update_steps_inc, uint federated_steps, double lambda, double gamma,
+                     double clip_epsilon, double penalty_weight)
+        : precision(precision), cont_name(cont_name), cq(cq), stub(stub), lambda(lambda), gamma(gamma),
+          clip_epsilon(clip_epsilon), penalty_weight(penalty_weight), state_size(state_size),
+          resolution_size(resolution_size), max_batch(max_batch), scaling_size(scaling_size),
+          update_steps(update_steps), update_steps_inc(update_steps_inc), federated_steps(federated_steps) {
     path = "../models/fcpo_learning/" + cont_name;
     std::filesystem::create_directories(std::filesystem::path(path));
     out.open(path + "/latest_log_" + getTimestampString() + ".csv");
@@ -29,7 +29,7 @@ FCPOAgent::FCPOAgent(std::string& cont_name, uint state_size, uint resolution_si
         }
     };
     model->to(precision);
-    optimizer = std::make_unique<torch::optim::Adam>(model->parameters(), torch::optim::AdamOptions(1e-3));
+    optimizer = std::make_unique<torch::optim::AdamW>(model->parameters(), torch::optim::AdamWOptions(1e-3));
 
     cumu_reward = 0.0;
     experiences = ExperienceBuffer(200);
@@ -70,6 +70,7 @@ void FCPOAgent::update() {
     try {
         T clipped_ratio = torch::clamp(ratio, 1 - clip_epsilon, 1 + clip_epsilon);
         T advantages = computeGae();
+        advantages = (advantages - advantages.mean()) / (advantages.std() + 1e-8);
         policy_loss = -torch::min(ratio * advantages, clipped_ratio * advantages).to(precision).mean();
 
         value_loss = torch::mse_loss(val.squeeze(), computeCumuRewards());
@@ -94,7 +95,7 @@ void FCPOAgent::update() {
     std::cout << "Training: " << sw.elapsed_microseconds() << std::endl;
     double avg_reward = cumu_reward / (double) update_steps;
     out << "episodeEnd," << sw.elapsed_microseconds() << "," << federated_steps_counter << "," << steps_counter
-    << "," << cumu_reward << "," << avg_reward << "," << loss.item<double>() << "," << policy_loss.item<double>() << "," << value_loss.item<double>() << std::endl;
+        << "," << cumu_reward << "," << avg_reward << "," << loss.item<double>() << "," << policy_loss.item<double>() << "," << value_loss.item<double>() << std::endl;
     if (last_avg_reward < avg_reward) {
         last_avg_reward = avg_reward;
         torch::save(model, path + "/latest_model.pt");
@@ -240,7 +241,7 @@ std::tuple<int, int, int> FCPOAgent::runStep() {
 
 
 FCPOServer::FCPOServer(std::string run_name, uint state_size, torch::Dtype precision)
-                       : precision(precision), state_size(state_size) {
+        : precision(precision), state_size(state_size) {
     path = "../models/fcpo_learning/" + run_name;
     std::filesystem::create_directories(std::filesystem::path(path));
     out.open(path + "/latest_log.csv");
@@ -251,11 +252,11 @@ FCPOServer::FCPOServer(std::string run_name, uint state_size, torch::Dtype preci
     std::string model_save = path + "/latest_model.pt";
     if (std::filesystem::exists(model_save)) torch::load(model, model_save);
     model->to(precision);
-    optimizer = std::make_unique<torch::optim::Adam>(model->parameters(), torch::optim::AdamOptions(1e-3));
+    optimizer = std::make_unique<torch::optim::AdamW>(model->parameters(), torch::optim::AdamWOptions(1e-3));
 
-    lambda = 0.95;
-    gamma = 0.99;
-    clip_epsilon = 0.75;
+    lambda = 0.75;
+    gamma = 0.75;
+    clip_epsilon = 0.5;
     penalty_weight = 0.15;
     federated_clients = {};
     run = true;
@@ -268,7 +269,7 @@ bool FCPOServer::addClient(FlData &request, std::shared_ptr<ControlCommands::Stu
     federated_clients.push_back({request,
                                  std::make_shared<MultiPolicyNet>(request.state_size(), request.resolution_size(),
                                                                   request.max_batch(), request.threading_size()),
-                                                                      stub, cq});
+                                 stub, cq});
     try {
         torch::load(federated_clients.back().model, iss);
         federated_clients.back().model->to(precision);

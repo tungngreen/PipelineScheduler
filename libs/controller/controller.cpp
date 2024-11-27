@@ -846,9 +846,8 @@ void Controller::StartContainer(ContainerHandle *container, bool easy_allocation
                 if (container->model_file.find("yolov5") != std::string::npos) {
                     start_config["fcpo"]["resolution_size"] =
                             (deviceTypeName == "server" || deviceTypeName == "agx") ? 4 : 2;
-                } else {
-                    start_config["fcpo"]["resolution_size"] = 1;
                 }
+                start_config["fcpo"]["resolution_size"] = 1;
                 start_config["fcpo"]["batch_size"] = container->pipelineModel->processProfiles[deviceTypeName].maxBatchSize;
                 start_config["fcpo"]["threads_size"] = (deviceTypeName == "server") ? 4 : 2;
             }
