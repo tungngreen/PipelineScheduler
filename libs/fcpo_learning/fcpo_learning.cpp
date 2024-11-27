@@ -164,15 +164,16 @@ void FCPOAgent::rewardCallback(double throughput, double drops, double latency_p
         first = false;
         return;
     }
-    double reward = 4 * throughput - drops - 5 * latency_penalty + (1.5 - oversize_penalty);
-    reward = std::max(-10.0, std::min(10.0, reward)) / 5.0; // Clip reward to [-10, 10] and then scale it to [-2, 2]
+    double reward = 4 * throughput - 10 * latency_penalty - 2 * oversize_penalty;
+    reward = std::max(-10.0, std::min(10.0, reward)) / 10.0; // Clip reward to [-10, 10] and then scale it to [-1, 1]
     experiences.add_reward(reward);
     cumu_reward += reward;
 }
 
 void FCPOAgent::setState(double curr_resolution, double curr_batch, double curr_scaling,  double arrival,
                          double pre_queue_size, double inf_queue_size, double post_queue_size) {
-    state = torch::tensor({curr_resolution, curr_batch / max_batch, curr_scaling, arrival, pre_queue_size, inf_queue_size, post_queue_size}, precision);
+    state = torch::tensor({curr_resolution / resolution_size, curr_batch / max_batch, curr_scaling / scaling_size,
+                           arrival, pre_queue_size / 100.0, inf_queue_size / 100.0, post_queue_size / 100.0}, precision);
 }
 
 //void FCPOAgent::setState(double curr_resolution, double curr_batch, double curr_scaling, double arrival) {
