@@ -16,8 +16,8 @@ def reward_plot(directory):
     agents = natsorted(os.listdir(directory))
     rewards = {}
     for agent in agents:
-        rewards[agent] = []
         if not os.path.isdir(os.path.join(directory, agent)): continue
+        rewards[agent] = []
         instances = natsorted(os.listdir(os.path.join(directory, agent)))
         for instance in instances:
             logs = natsorted(os.listdir(os.path.join(directory, agent, instance)))
@@ -45,12 +45,13 @@ def reward_plot(directory):
     # plot the results
     plt.figure()
     for agent in agents:
+        if not os.path.isdir(os.path.join(directory, agent)): continue
         plt.plot(rewards[agent], label=agent)
     plt.legend(fontsize=12)
     plt.title('Rewards', size=12)
     plt.xlabel('Episodes', size=12)
     plt.ylabel('Reward', size=12)
-    plt.ylim(0, 2)
+    plt.ylim(-1, 1)
     plt.show()
 
 def total_performance(directory):
