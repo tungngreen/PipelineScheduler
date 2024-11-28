@@ -246,7 +246,7 @@ Controller::Controller(int argc, char **argv) {
     }
 
 
-    if (ctrl_systemName != "fcpo") {
+    if (ctrl_systemName != "fcpo" && ctrl_systemName != "bce") {
         std::thread networkCheckThread(&Controller::checkNetworkConditions, this);
         networkCheckThread.detach();
     }

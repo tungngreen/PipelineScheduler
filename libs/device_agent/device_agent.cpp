@@ -161,15 +161,15 @@ DeviceAgent::DeviceAgent(const std::string &controller_url) : DeviceAgent() {
 
     if (dev_system_name == "bce") {
         if (dev_type == SystemDeviceType::Server) {
-            dev_bcedge_agent = new BCEdgeAgent(dev_name, 3500, torch::kF32);
+            dev_bcedge_agent = new BCEdgeAgent(dev_name, 3500, torch::kF32, 150);
         } else if (dev_type == SystemDeviceType::OnPremise) {
-            dev_bcedge_agent = new BCEdgeAgent(dev_name, 3000, torch::kF32);
+            dev_bcedge_agent = new BCEdgeAgent(dev_name, 3000, torch::kF32, 150);
         } else if (dev_type == SystemDeviceType::NXXavier) {
-            dev_bcedge_agent = new BCEdgeAgent(dev_name, 2000000, torch::kF32);
+            dev_bcedge_agent = new BCEdgeAgent(dev_name, 2000000, torch::kF32, 150);
         } else if (dev_type == SystemDeviceType::AGXXavier) {
-            dev_bcedge_agent = new BCEdgeAgent(dev_name, 3000000, torch::kF32);
+            dev_bcedge_agent = new BCEdgeAgent(dev_name, 3000000, torch::kF32, 150);
         } else if (dev_type == SystemDeviceType::OrinNano) {
-            dev_bcedge_agent = new BCEdgeAgent(dev_name, 2000000, torch::kF32);
+            dev_bcedge_agent = new BCEdgeAgent(dev_name, 2000000, torch::kF32, 150);
         }
     }
 

@@ -59,9 +59,10 @@ void BCEdgeAgent::update() {
     optimizer->step();
     sw.stop();
 
-    out << "episodeEnd," << sw.elapsed_microseconds() << "," << 0 << "," << steps_counter << "," << cumu_reward << "," << cumu_reward / (double) steps_counter << std::endl;
+    double avg_reward = cumu_reward / (double) update_steps;
+    out << "episodeEnd," << sw.elapsed_microseconds() << "," << 0 << "," << steps_counter
+        << "," << cumu_reward << "," << avg_reward << "," << loss.item<double>() << "," << policy_loss.item<double>() << "," << value_loss.item<double>() << std::endl;
     steps_counter = 0;
-
     reset();
 }
 
@@ -134,9 +135,8 @@ std::tuple<int, int, int> BCEdgeAgent::runStep() {
     out << "step," << sw.elapsed_microseconds() << "," << 0 << "," << steps_counter << "," << cumu_reward  << "," << batching << "," << scaling << "," << memory << std::endl;
 
     if (steps_counter%update_steps == 0) {
-//        std::thread t(&BCEdgeAgent::update, this);
-//        t.detach();
-        update();
+        std::thread t(&BCEdgeAgent::update, this);
+        t.detach();
     }
     return std::make_tuple(batching + 1, scaling + 1, memory);
 }
