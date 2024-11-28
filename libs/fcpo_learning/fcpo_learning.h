@@ -326,9 +326,9 @@ public:
                 {"clip_epsilon", clip_epsilon},
                 {"penalty_weight", penalty_weight},
                 {"precision", boost::algorithm::to_lower_copy(p)},
-                {"update_steps", 100},
-                {"update_step_incs", 2},
-                {"federated_steps", 50}
+                {"update_steps", 150},
+                {"update_step_incs", 10},
+                {"federated_steps", 20}
         };
     }
 

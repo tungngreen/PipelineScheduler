@@ -78,7 +78,7 @@ void FCPOAgent::update() {
         T policy3_penalty = penalty_weight * torch::mean(torch::tensor(experiences.get_scaling()).to(precision));
         spdlog::get("container_agent")->info("RL Agent Policy Loss: {}, Value Loss: {}, Policy1 Penalty: {}, Policy3 Penalty: {}",
                                              policy_loss.item<double>(), value_loss.item<double>(), policy1_penalty.item<double>(), policy3_penalty.item<double>());
-        loss = (policy_loss + 0.5 * value_loss + policy1_penalty + policy3_penalty);
+        loss = (policy_loss + 0.5 * value_loss + policy1_penalty + policy3_penalty + std::pow(M_E, -cumu_reward));
     } catch (const std::exception& e) {
         spdlog::get("container_agent")->error("Error in loss computation: {}", e.what());
         reset();
@@ -254,10 +254,10 @@ FCPOServer::FCPOServer(std::string run_name, uint state_size, torch::Dtype preci
     model->to(precision);
     optimizer = std::make_unique<torch::optim::AdamW>(model->parameters(), torch::optim::AdamWOptions(1e-3));
 
-    lambda = 0.75;
-    gamma = 0.75;
-    clip_epsilon = 0.5;
-    penalty_weight = 0.15;
+    lambda = 0.8;
+    gamma = 0.9;
+    clip_epsilon = 0.8;
+    penalty_weight = 0.2;
     federated_clients = {};
     run = true;
     std::thread t(&FCPOServer::proceed, this);
