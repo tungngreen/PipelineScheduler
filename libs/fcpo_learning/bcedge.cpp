@@ -4,7 +4,7 @@ BCEdgeAgent::BCEdgeAgent(std::string& dev_name, double max_memory, torch::Dtype 
                          uint update_steps, double lambda, double gamma, double clip_epsilon)
                          : precision(precision), dev_name(dev_name), max_memory(max_memory), lambda(lambda),
                            gamma(gamma), clip_epsilon(clip_epsilon), update_steps(update_steps) {
-    path = "../models/bcedge/" + dev_name;
+    path = "../../pipe/models/bcedge/" + dev_name;
     std::filesystem::create_directories(std::filesystem::path(path));
     out.open(path + "/latest_log_" + getTimestampString() + ".csv");
 
