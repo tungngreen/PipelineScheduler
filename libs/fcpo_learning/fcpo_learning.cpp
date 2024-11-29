@@ -71,21 +71,14 @@ void FCPOAgent::update() {
         T clipped_ratio = torch::clamp(ratio, 1 - clip_epsilon, 1 + clip_epsilon);
         T advantages = computeGae();
         advantages = (advantages - advantages.mean()) / (advantages.std() + 1e-8);
-        policy_loss = -10 * clipped_ratio * advantages.to(precision).mean();
-        // add the value of the exponential function e^(-r) for every reward r to the policy loss
-        std::cout << "Policy Loss: " << policy_loss << std::endl;
-        T rewards = torch::tensor(experiences.get_rewards()).to(precision);
-        std::cout << "Rewards: " << rewards << std::endl;
-        policy_loss += torch::exp(-rewards).mean();
-        std::cout << "Policy Loss: " << policy_loss << std::endl;
-
+        policy_loss = (-10 * clipped_ratio * advantages.to(precision) + torch::exp(-torch::tensor(experiences.get_rewards()).to(precision))).mean();
 
         value_loss = torch::mse_loss(val.squeeze(), computeCumuRewards());
         T policy1_penalty = penalty_weight * torch::mean(torch::tensor(experiences.get_resolution()).to(precision));
         T policy3_penalty = penalty_weight * torch::mean(torch::tensor(experiences.get_scaling()).to(precision));
         spdlog::get("container_agent")->info("RL Agent Policy Loss: {}, Value Loss: {}, Policy1 Penalty: {}, Policy3 Penalty: {}",
                                              policy_loss.item<double>(), value_loss.item<double>(), policy1_penalty.item<double>(), policy3_penalty.item<double>());
-        loss = (10 * policy_loss + 0.5 * value_loss + policy1_penalty + policy3_penalty);
+        loss = (20 * policy_loss + 0.5 * value_loss + policy1_penalty + policy3_penalty);
     } catch (const std::exception& e) {
         spdlog::get("container_agent")->error("Error in loss computation: {}", e.what());
         reset();
@@ -99,7 +92,6 @@ void FCPOAgent::update() {
     optimizer->step();
     sw.stop();
 
-    std::cout << "Training: " << sw.elapsed_microseconds() << std::endl;
     double avg_reward = cumu_reward / (double) update_steps;
     out << "episodeEnd," << sw.elapsed_microseconds() << "," << federated_steps_counter << "," << steps_counter
         << "," << cumu_reward << "," << avg_reward << "," << loss.item<double>() << "," << policy_loss.item<double>() << "," << value_loss.item<double>() << std::endl;
