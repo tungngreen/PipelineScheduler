@@ -734,7 +734,7 @@ void Controller::StartContainer(ContainerHandle *container, bool easy_allocation
             //TODO: set back to 2 after OURs working again with batcher
             start_config["container"]["cont_batchMode"] = 0;
         }
-        if (ctrl_systemName == "ppp" || ctrl_systemName == "fcpo" || ctrl_systemName == "bce" || ctrl_systemName == "jlf") {
+        if (ctrl_systemName == "ppp" || ctrl_systemName == "fco" || ctrl_systemName == "bce" || ctrl_systemName == "jlf") {
             start_config["container"]["cont_dropMode"] = 1;
         }
         start_config["container"]["cont_pipelineSLO"] = container->task->tk_slo;

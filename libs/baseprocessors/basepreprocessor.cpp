@@ -320,7 +320,7 @@ void BasePreprocessor::preprocess() {
     auto timeNow = std::chrono::high_resolution_clock::now();
 
     spdlog::get("container_agent")->info("{0:s} STARTS.", msvc_name);
-    cv::cuda::Stream *preProcStream = nullptr;
+    cv::cuda::Stream preProcStream;
     // uint8_t randomNumImgs = 0;
     while (true) {
         // Allowing this thread to naturally come to an end
@@ -342,7 +342,7 @@ void BasePreprocessor::preprocess() {
                 msvc_logFile.open(msvc_microserviceLogPath, std::ios::out);
 
                 setDevice();
-                preProcStream = new cv::cuda::Stream();
+                preProcStream = cv::cuda::Stream();
                 outReq = {};
 
                 spdlog::get("container_agent")->info("{0:s} is (RE)LOADED.", msvc_name);
@@ -411,7 +411,7 @@ void BasePreprocessor::preprocess() {
         data.data = convertColor(currReq.req_data[0].data,
                                  msvc_imgType,
                                  msvc_colorCvtType,
-                                 *preProcStream);
+                                 preProcStream);
 
         ConcatConfig &currConcatConfig = msvc_concat.list[msvc_concat.numImgs];
 
@@ -422,7 +422,7 @@ void BasePreprocessor::preprocess() {
             currConcatConfig[msvc_concat.currIndex].y1,
             currConcatConfig[msvc_concat.currIndex].height,
             currConcatConfig[msvc_concat.currIndex].width,
-            *preProcStream,
+            preProcStream,
             msvc_imgType,
             msvc_colorCvtType,
             msvc_resizeInterpolType
@@ -480,10 +480,6 @@ void BasePreprocessor::preprocess() {
             );
             continue;
         }
-    }
-    if (preProcStream) {
-        delete preProcStream;
-        preProcStream = nullptr;
     }
     msvc_logFile.close();
     STOPPED = true;

@@ -73,11 +73,15 @@ void BCEdgeAgent::rewardCallback(double throughput, double latency, MsvcSLOType 
     } else {
         tmp_reward = exp(-latency * (memory_usage));
     }
+    if (std::isnan(tmp_reward)) tmp_reward = 0.0;
     rewards.push_back(std::min(25.0, std::max(-25.0, tmp_reward / 25.0))); // Normalize reward to be almost always in the range of [-1, 1] for better training
 }
 
 void BCEdgeAgent::setState(ModelType model_type, std::vector<int> data_shape, MsvcSLOType slo) {
     state = torch::tensor({model_type, data_shape[0], data_shape[1], data_shape[2], (int) slo}, precision);
+    if (torch::any(torch::isnan(state)).item<bool>()) {
+        state = torch::nan_to_num(state);
+    }
 }
 
 void BCEdgeAgent::selectAction() {

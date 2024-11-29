@@ -252,7 +252,7 @@ public:
 
         // Move to the next producer and notify consumer, outside the critical section
         // current_ticket.fetch_add(1);
-        q_condition_consumer.notify_all();
+        q_condition_consumer.notify_one();
     }
 
     /**
@@ -291,7 +291,8 @@ public:
      */
     Request<LocalCPUReqDataType> pop1(uint32_t timeout = 100000) { // 100ms
         Request<LocalCPUReqDataType> request;
-        QueueLengthType size = 0;
+        bool notify = false;
+
         {
             std::unique_lock<std::mutex> lock(q_mutex);
             isEmpty = !q_condition_consumer.wait_for(
@@ -304,11 +305,15 @@ public:
             if (!isEmpty) {
                 request = q_cpuQueue.front();
                 q_cpuQueue.pop();
+
+                // Check if there's more work to notify another consumer
+                notify = !q_cpuQueue.empty();
             }
-            
-            if (!q_cpuQueue.empty()) {
-                q_condition_consumer.notify_one();
-            }
+        }
+
+        // Notify outside the critical section
+        if (notify) {
+            q_condition_consumer.notify_one();
         }
 
         // If the queue was empty, set a default value outside the critical section
@@ -326,23 +331,27 @@ public:
      */
     Request<LocalGPUReqDataType> pop2(uint32_t timeout = 100000) { // 100ms
         Request<LocalGPUReqDataType> request;
-        QueueLengthType size = 0;
+        bool notify = false;
+
         {
             std::unique_lock<std::mutex> lock(q_mutex);
             isEmpty = !q_condition_consumer.wait_for(
-                    lock,
-                    TimePrecisionType(timeout),
-                    [this]() { return !q_gpuQueue.empty(); }
+                lock,
+                TimePrecisionType(timeout),
+                [this]() { return !q_gpuQueue.empty(); }
             );
 
+            // Only proceed if the queue is not empty
             if (!isEmpty) {
                 request = q_gpuQueue.front();
                 q_gpuQueue.pop();
-            }
 
-            if (!q_gpuQueue.empty()) {
-                q_condition_consumer.notify_one();
+                // Check if there's more work to notify another consumer
+                notify = !q_gpuQueue.empty();
             }
+        }
+        if (notify) {
+            q_condition_consumer.notify_one();
         }
         if (isEmpty) {
             request.req_travelPath = {"empty"};
