@@ -256,8 +256,8 @@ FCPOServer::FCPOServer(std::string run_name, uint state_size, torch::Dtype preci
     model->to(precision);
     optimizer = std::make_unique<torch::optim::AdamW>(model->parameters(), torch::optim::AdamWOptions(1e-3));
 
-    lambda = 0.8;
-    gamma = 0.9;
+    lambda = 0.1;
+    gamma = 0.1;
     clip_epsilon = 0.9;
     penalty_weight = 0.2;
     federated_clients = {};
