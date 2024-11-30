@@ -3,7 +3,7 @@
 FCPOAgent::FCPOAgent(std::string& cont_name, uint state_size, uint resolution_size, uint max_batch,  uint scaling_size,
                      CompletionQueue *cq, std::shared_ptr<InDeviceMessages::Stub> stub, torch::Dtype precision,
                      uint update_steps, uint update_steps_inc, uint federated_steps, double lambda, double gamma,
-                     double clip_epsilon, double penalty_weight)
+                     double clip_epsilon, double penalty_weight, int seed)
         : precision(precision), cont_name(cont_name), cq(cq), stub(stub), lambda(lambda), gamma(gamma),
           clip_epsilon(clip_epsilon), penalty_weight(penalty_weight), state_size(state_size),
           resolution_size(resolution_size), max_batch(max_batch), scaling_size(scaling_size),
@@ -17,7 +17,7 @@ FCPOAgent::FCPOAgent(std::string& cont_name, uint state_size, uint resolution_si
     if (std::filesystem::exists(model_save)) {
         torch::load(model, model_save);
     } else {
-        torch::manual_seed(1337);
+        torch::manual_seed(seed);
         for (auto& p : model->named_parameters()) {
             if(p.key().find("norm") != std::string::npos) continue;
             // Initialize weights and biases

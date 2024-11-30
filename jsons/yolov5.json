@@ -392,16 +392,17 @@
     },
     "fcpo": {
         "state_size": 7,
-        "resolution_size": 1,
+        "resolution_size": 4,
         "batch_size": 16,
         "threads_size": 4,
-        "lambda": 0.95,
-        "gamma": 0.99,
-        "clip_epsilon": 0.2,
-        "penalty_weight": 0.1,
+        "lambda": 0.2,
+        "gamma": 0.2,
+        "clip_epsilon": 0.9,
+        "penalty_weight": 0.2,
         "precision": "float",
-        "update_steps": 60,
-        "update_step_incs": 5,
-        "federated_steps": 5
+        "update_steps": 150,
+        "update_step_incs": 10,
+        "federated_steps": 10,
+        "seed": 42
     }
 }
