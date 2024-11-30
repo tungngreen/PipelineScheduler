@@ -239,7 +239,7 @@ public:
     FCPOAgent(std::string& cont_name, uint state_size, uint resolution_size, uint max_batch, uint scaling_size,
              CompletionQueue *cq, std::shared_ptr<InDeviceMessages::Stub> stub, torch::Dtype precision = torch::kF64,
              uint update_steps = 60, uint update_steps_inc = 5, uint federated_steps = 5, double lambda = 0.95,
-             double gamma = 0.99, double clip_epsilon = 0.2, double penalty_weight = 0.1);
+             double gamma = 0.99, double clip_epsilon = 0.2, double penalty_weight = 0.1, int seed = 42);
 
     ~FCPOAgent() {
         torch::save(model, path + "/latest_model.pt");
@@ -326,9 +326,10 @@ public:
                 {"clip_epsilon", clip_epsilon},
                 {"penalty_weight", penalty_weight},
                 {"precision", boost::algorithm::to_lower_copy(p)},
-                {"update_steps", 150},
+                {"update_steps", 100},
                 {"update_step_incs", 10},
-                {"federated_steps", 20}
+                {"federated_steps", 10},
+                {"seed", 42}
         };
     }
 
