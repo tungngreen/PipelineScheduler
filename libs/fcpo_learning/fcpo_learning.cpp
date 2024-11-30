@@ -70,15 +70,18 @@ void FCPOAgent::update() {
     try {
         T clipped_ratio = torch::clamp(ratio, 1 - clip_epsilon, 1 + clip_epsilon);
         T advantages = computeGae();
-        advantages = (advantages - advantages.mean()) / (advantages.std() + 1e-8);
-        policy_loss = (-10 * clipped_ratio * advantages.to(precision) + torch::exp(-torch::tensor(experiences.get_rewards()).to(precision))).mean();
+        // advantages = (advantages - advantages.mean()) / (advantages.std() + 1e-8);
+        T policy_loss_1 = -torch::min(ratio * advantages, clipped_ratio * advantages).to(precision);
+        T policy_loss_2 = torch::exp(-torch::tensor(experiences.get_rewards()).to(precision));
+        policy_loss_2 = torch::min((10 / ratio) * policy_loss_2, (10 / clipped_ratio) * policy_loss_2);
+        policy_loss = 10 * torch::mean(policy_loss_1 + policy_loss_2);
 
         value_loss = torch::mse_loss(val.squeeze(), computeCumuRewards());
         T policy1_penalty = penalty_weight * torch::mean(torch::tensor(experiences.get_resolution()).to(precision));
         T policy3_penalty = penalty_weight * torch::mean(torch::tensor(experiences.get_scaling()).to(precision));
         spdlog::get("container_agent")->info("RL Agent Policy Loss: {}, Value Loss: {}, Policy1 Penalty: {}, Policy3 Penalty: {}",
                                              policy_loss.item<double>(), value_loss.item<double>(), policy1_penalty.item<double>(), policy3_penalty.item<double>());
-        loss = (20 * policy_loss + 0.5 * value_loss + policy1_penalty + policy3_penalty);
+        loss = (policy_loss + value_loss + policy1_penalty + policy3_penalty);
     } catch (const std::exception& e) {
         spdlog::get("container_agent")->error("Error in loss computation: {}", e.what());
         reset();
@@ -255,7 +258,7 @@ FCPOServer::FCPOServer(std::string run_name, uint state_size, torch::Dtype preci
 
     lambda = 0.8;
     gamma = 0.9;
-    clip_epsilon = 0.8;
+    clip_epsilon = 0.9;
     penalty_weight = 0.2;
     federated_clients = {};
     run = true;
