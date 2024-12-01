@@ -25,6 +25,7 @@ BCEdgeAgent::BCEdgeAgent(std::string& dev_name, double max_memory, torch::Dtype 
 }
 
 void BCEdgeAgent::update() {
+    std::unique_lock<std::mutex> lock(model_mutex);
     spdlog::get("container_agent")->info("Locally training RL agent at cumulative Reward {}!", cumu_reward);
     Stopwatch sw;
     sw.start();
@@ -55,7 +56,6 @@ void BCEdgeAgent::update() {
     // Backpropagation
     optimizer->zero_grad();
     loss.backward();
-    std::unique_lock<std::mutex> lock(model_mutex);
     optimizer->step();
     sw.stop();
 
@@ -74,11 +74,11 @@ void BCEdgeAgent::rewardCallback(double throughput, double latency, MsvcSLOType 
         tmp_reward = exp(-latency * (memory_usage));
     }
     if (std::isnan(tmp_reward)) tmp_reward = 0.0;
-    rewards.push_back(std::min(25.0, std::max(-25.0, tmp_reward / 25.0))); // Normalize reward to be almost always in the range of [-1, 1] for better training
+    rewards.push_back(std::min(25.0, std::max(-25.0, tmp_reward / 25.0))); // Normalize reward to be in the range of [-1, 1] for better training
 }
 
 void BCEdgeAgent::setState(ModelType model_type, std::vector<int> data_shape, MsvcSLOType slo) {
-    state = torch::tensor({model_type, data_shape[0], data_shape[1], data_shape[2], (int) slo}, precision);
+    state = torch::tensor({(double)model_type / (double)ModelType::End, (double) data_shape[0] / 3.0,(double) data_shape[1] / 1000.0, (double)data_shape[2] / 1000.0, (double) slo / (double)TIME_PRECISION_TO_SEC}, precision);
     if (torch::any(torch::isnan(state)).item<bool>()) {
         state = torch::nan_to_num(state);
     }
@@ -139,8 +139,7 @@ std::tuple<int, int, int> BCEdgeAgent::runStep() {
     out << "step," << sw.elapsed_microseconds() << "," << 0 << "," << steps_counter << "," << cumu_reward  << "," << batching << "," << scaling << "," << memory << std::endl;
 
     if (steps_counter%update_steps == 0) {
-        std::thread t(&BCEdgeAgent::update, this);
-        t.detach();
+        update();
     }
     return std::make_tuple(batching + 1, scaling + 1, memory);
 }
