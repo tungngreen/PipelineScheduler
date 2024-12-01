@@ -510,7 +510,8 @@ enum ModelType {
     Emotionnet,
     Gender,
     Age,
-    CarBrand
+    CarBrand,
+    End
 };
 
 extern std::map<std::string, std::string> keywordAbbrs;
