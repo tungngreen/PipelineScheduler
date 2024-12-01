@@ -421,7 +421,7 @@ void Controller::ApplyScheduling() {
      */
     for (auto &[pipeName, pipe]: ctrl_scheduledPipelines.getMap()) {
         for (auto &model: pipe->tk_pipelineModels) {
-            if (ctrl_systemName != "ppp" && ctrl_systemName != "jlf" && ctrl_systemName != "fcpo") {
+            if (ctrl_systemName != "ppp" && ctrl_systemName != "jlf" && ctrl_systemName != "fcpo" && ctrl_systemName != "bce") {
                 model->cudaDevices.emplace_back(0);
                 model->numReplicas = 1;
             }
@@ -514,7 +514,7 @@ void Controller::ApplyScheduling() {
         }
     }
 
-    if (ctrl_systemName != "ppp" && ctrl_systemName != "fcpo") {
+    if (ctrl_systemName != "ppp" && ctrl_systemName != "fcpo" && ctrl_systemName != "bce") {
         basicGPUScheduling(new_containers);
     } else {
         colocationTemporalScheduling();
@@ -730,7 +730,7 @@ void Controller::StartContainer(ContainerHandle *container, bool easy_allocation
         start_config["container"]["cont_hostDeviceType"] = ctrl_sysDeviceInfo[container->device_agent->type];
         start_config["container"]["cont_name"] = container->name;
         start_config["container"]["cont_allocationMode"] = easy_allocation ? 1 : 0;
-        if (ctrl_systemName == "ppp" || ctrl_systemName == "fcpo") {
+        if (ctrl_systemName == "ppp" || ctrl_systemName == "fcpo" || ctrl_systemName == "bce") {
             //TODO: set back to 2 after OURs working again with batcher
             start_config["container"]["cont_batchMode"] = 0;
         }
