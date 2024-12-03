@@ -1,13 +1,14 @@
 #include "data_reader.h"
 
 inline cv::Mat resizePadRightBottom(
+        const std::string &callerName,
         const cv::Mat &input,
         const size_t height,
         const size_t width,
         const std::vector<float> &bgcolor,
         uint8_t RESIZE_INTERPOL_TYPE
 ) {
-    spdlog::get("container_agent")->trace("Going into {0:s}", __func__);
+    spdlog::get("container_agent")->trace("Going into {0:s}", callerName + "::" + __func__);
 
     float r = std::min((float) width / (input.cols * 1.0), height / (input.rows * 1.0));
     int unpad_w = r * input.cols;
@@ -19,7 +20,7 @@ inline cv::Mat resizePadRightBottom(
     // Copy resized image to output Mat
     resized.copyTo(out(cv::Rect(0, 0, resized.cols, resized.rows)));
 
-    spdlog::get("container_agent")->trace("Finished {0:s}", __func__);
+    spdlog::get("container_agent")->trace("Finished {0:s}", callerName + "::" + __func__);
 
     return out;
 }
@@ -86,7 +87,7 @@ void DataReader::Process() {
             readFrames++;
             msvc_currFrameID = (int) source.get(cv::CAP_PROP_POS_FRAMES);
             if (msvc_dataShape[0][1] != -1 && msvc_dataShape[0][2] != -1) {
-                frame = resizePadRightBottom(frame, msvc_dataShape[0][1], msvc_dataShape[0][2],
+                frame = resizePadRightBottom(msvc_name, frame, msvc_dataShape[0][1], msvc_dataShape[0][2],
                                              {128, 128, 128}, cv::INTER_AREA);
             }
             RequestMemSizeType frameMemSize = frame.channels() * frame.rows * frame.cols * CV_ELEM_SIZE1(frame.type());
