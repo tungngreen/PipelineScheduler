@@ -46,6 +46,7 @@ inline cv::cuda::GpuMat resizePadRightBottom(
 );
 
 inline bool resizeIntoFrame(
+    const std::string &callerName,
     const cv::cuda::GpuMat &input,
     cv::cuda::GpuMat &frame,
     const uint16_t left,
@@ -59,6 +60,7 @@ inline bool resizeIntoFrame(
 );
 
 inline cv::cuda::GpuMat normalize(
+    const std::string &callerName,
     const cv::cuda::GpuMat &input,
     cv::cuda::Stream &stream = cv::cuda::Stream::Null(),
     const std::vector<float>& subVals = {0.f, 0.f, 0.f},
@@ -67,6 +69,7 @@ inline cv::cuda::GpuMat normalize(
 );
 
 inline cv::cuda::GpuMat cvtHWCToCHW(
+    const std::string &callerName,
     const cv::cuda::GpuMat &input,
     cv::cuda::Stream &stream = cv::cuda::Stream::Null(),
     uint8_t IMG_TYPE = 16 //CV_8UC3

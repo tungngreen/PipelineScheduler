@@ -525,11 +525,12 @@ void Engine::copyFromBuffer(
 }
 
 inline cv::cuda::GpuMat Engine::cvtHWCToCHW(
+    const std::string &callerName,
     const std::vector<cv::cuda::GpuMat>& batch,
     cv::cuda::Stream &stream,
     uint8_t IMG_TYPE
 ) {
-    spdlog::get("container_agent")->trace("[{0:s}] going in. ", __func__);
+    spdlog::get("container_agent")->trace("[{0:s}] going in. ", callerName + "::" + __func__);
     const BatchSizeType batchSize = batch.size();
     cv::cuda::GpuMat transposed(1, batch[0].rows * batch[0].cols * batchSize, IMG_TYPE);
 
@@ -559,12 +560,13 @@ inline cv::cuda::GpuMat Engine::cvtHWCToCHW(
     }
 
     stream.waitForCompletion();
-    spdlog::get("container_agent")->trace("[{0:s}] Finished. Comming out. ", __func__);
+    spdlog::get("container_agent")->trace("[{0:s}] Finished. Comming out. ", callerName + "::" + __func__);
 
     return transposed;
 }
 
 inline void Engine::normalize(
+    const std::string &callerName,
     const cv::cuda::GpuMat &transposedBatch, // NCHW
     const BatchSizeType batchSize,
     cv::cuda::Stream &stream,
@@ -572,7 +574,7 @@ inline void Engine::normalize(
     const std::array<float, 3>& divVals,
     const float normalizedScale
 ) {
-    spdlog::get("container_agent")->trace("[{0:s}] going in. ", __func__);
+    spdlog::get("container_agent")->trace("[{0:s}] going in. ", callerName + "::" + __func__);
     
     float * inputBufferPtr = (float *)(m_inputBuffers[0]);
     cv::cuda::GpuMat batch(1, m_inputDims.at(0).d[1] * m_inputDims.at(0).d[2] * batchSize, CV_32FC3, inputBufferPtr);
@@ -581,7 +583,7 @@ inline void Engine::normalize(
     cv::cuda::divide(batch, cv::Scalar(divVals[0], divVals[1], divVals[2]), batch, 1, -1, stream);
     stream.waitForCompletion();
 
-    spdlog::get("container_agent")->trace("[{0:s}] Finished. Comming out. ", __func__);
+    spdlog::get("container_agent")->trace("[{0:s}] Finished. Comming out. ", callerName + "::" + __func__);
 }
 
 /**
@@ -633,8 +635,8 @@ bool Engine::runInference(
     // is copied to the allocated buffers
 
     cv::cuda::Stream cvInferenceStream;
-    cv::cuda::GpuMat transposedBatch = cvtHWCToCHW(batch, cvInferenceStream, CV_8UC3);
-    normalize(transposedBatch, batchSize, cvInferenceStream, m_subVals, m_divVals, m_normalizedScale);
+    cv::cuda::GpuMat transposedBatch = cvtHWCToCHW("inferencer", batch, cvInferenceStream, CV_8UC3);
+    normalize("inferencer", transposedBatch, batchSize, cvInferenceStream, m_subVals, m_divVals, m_normalizedScale);
 
     // checkCudaErrorCode(cudaMemcpyAsync
     //     (

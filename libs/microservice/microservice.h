@@ -285,13 +285,16 @@ public:
     }
 
     /**
-     * @brief popping Type 1 requests with priority for the consumer
+     * @brief Pop CPU requests
      * 
-     * @param request 
+     * @param getQueueSize Whether the queue size should be piggybacked on the shape of the first data element
+     * @param timeout 
+     * @return Request<LocalCPUReqDataType> 
      */
-    Request<LocalCPUReqDataType> pop1(uint32_t timeout = 100000) { // 100ms
+    Request<LocalCPUReqDataType> pop1(bool getQueueSize = false, uint32_t timeout = 100000) { // 100ms
         Request<LocalCPUReqDataType> request;
         bool notify = false;
+        uint16_t queueSize = 0;
 
         {
             std::unique_lock<std::mutex> lock(q_mutex);
@@ -306,6 +309,8 @@ public:
                 request = q_cpuQueue.front();
                 q_cpuQueue.pop();
 
+                queueSize = q_cpuQueue.size();
+
                 // Check if there's more work to notify another consumer
                 notify = !q_cpuQueue.empty();
             }
@@ -319,19 +324,27 @@ public:
         // If the queue was empty, set a default value outside the critical section
         if (isEmpty) {
             request.req_travelPath = {"empty"};
+        } else {
+            // We piggyback the queue size on the shape of the first data element
+            if (getQueueSize) {
+                request.req_data[0].shape.emplace_back(queueSize);
+            }
         }
 
         return request;
     }
 
     /**
-     * @brief popping Type 2 requests with priority for the consumer
+     * @brief Pop GPU requests
      * 
-     * @param request 
+     * @param getQueueSize Whether the queue size should be piggybacked on the shape of the first data element
+     * @param timeout 
+     * @return Request<LocalGPUReqDataType> 
      */
-    Request<LocalGPUReqDataType> pop2(uint32_t timeout = 100000) { // 100ms
+    Request<LocalGPUReqDataType> pop2(bool getQueueSize = false, uint32_t timeout = 100000) { // 100ms
         Request<LocalGPUReqDataType> request;
         bool notify = false;
+        uint16_t queueSize = 0;
 
         {
             std::unique_lock<std::mutex> lock(q_mutex);
@@ -346,6 +359,8 @@ public:
                 request = q_gpuQueue.front();
                 q_gpuQueue.pop();
 
+                queueSize = q_gpuQueue.size();
+
                 // Check if there's more work to notify another consumer
                 notify = !q_gpuQueue.empty();
             }
@@ -355,6 +370,11 @@ public:
         }
         if (isEmpty) {
             request.req_travelPath = {"empty"};
+        } else {
+            // We piggyback the queue size on the shape of the first data element
+            if (getQueueSize) {
+                request.req_data[0].shape.emplace_back(queueSize);
+            }
         }
         return request;
     }
