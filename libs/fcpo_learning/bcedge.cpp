@@ -67,14 +67,18 @@ void BCEdgeAgent::update() {
 }
 
 void BCEdgeAgent::rewardCallback(double throughput, double latency, MsvcSLOType slo, double memory_usage) {
-    double tmp_reward;
-    if (latency <= slo && memory_usage <= max_memory) {
-        tmp_reward = log(throughput/(latency/slo));
-    } else {
-        tmp_reward = exp(-latency * (memory_usage));
+    if (update_steps > 0 ) {
+        double tmp_reward;
+        if (latency <= slo && memory_usage <= max_memory) {
+            tmp_reward = log(throughput / (latency / slo));
+        } else {
+            tmp_reward = exp(-latency * (memory_usage));
+        }
+        if (std::isnan(tmp_reward)) tmp_reward = 0.0;
+        if (update_steps > 0 ) {
+            rewards.push_back(std::min(25.0, std::max(-25.0, tmp_reward)) / 25.0); // Normalize reward to be in the range of [-1, 1] for better training
+        }
     }
-    if (std::isnan(tmp_reward)) tmp_reward = 0.0;
-    rewards.push_back(std::min(25.0, std::max(-25.0, tmp_reward / 25.0))); // Normalize reward to be in the range of [-1, 1] for better training
 }
 
 void BCEdgeAgent::setState(ModelType model_type, std::vector<int> data_shape, MsvcSLOType slo) {
@@ -95,14 +99,15 @@ void BCEdgeAgent::selectAction() {
     action_dist = torch::multinomial(policy3, 1);
     memory = action_dist.item<int>();
 
-
-    log_prob = torch::log(policy1[batching]) + torch::log(policy2[scaling]) + torch::log(policy3[memory]);
-    states.push_back(state);
-    log_probs.push_back(log_prob);
-    values.push_back(val);
-    batching_actions.push_back(batching);
-    scaling_actions.push_back(scaling);
-    memory_actions.push_back(memory);
+    if (update_steps > 0 ) {
+        log_prob = torch::log(policy1[batching]) + torch::log(policy2[scaling]) + torch::log(policy3[memory]);
+        states.push_back(state);
+        log_probs.push_back(log_prob);
+        values.push_back(val);
+        batching_actions.push_back(batching);
+        scaling_actions.push_back(scaling);
+        memory_actions.push_back(memory);
+    }
 }
 
 T BCEdgeAgent::computeCumuRewards() const {
@@ -134,12 +139,14 @@ std::tuple<int, int, int> BCEdgeAgent::runStep() {
     selectAction();
     cumu_reward += (steps_counter) ? rewards[steps_counter - 1] : 0;
 
-    steps_counter++;
+    if (update_steps > 0 ) steps_counter++;
     sw.stop();
     out << "step," << sw.elapsed_microseconds() << "," << 0 << "," << steps_counter << "," << cumu_reward  << "," << batching << "," << scaling << "," << memory << std::endl;
 
-    if (steps_counter%update_steps == 0) {
-        update();
+    if (update_steps > 0 ) {
+        if (steps_counter % update_steps == 0) {
+            update();
+        }
     }
     return std::make_tuple(batching + 1, scaling + 1, memory);
 }
