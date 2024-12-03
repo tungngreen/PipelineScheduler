@@ -22,13 +22,14 @@ inline cv::Scalar vectorToScalar(const std::vector<float> &vec) {
  * @param stream an opencv stream for asynchronous operation on cuda
  */
 inline cv::cuda::GpuMat normalize(
+        const std::string &callerName,
         const cv::cuda::GpuMat &input,
         cv::cuda::Stream &stream,
         const std::vector<float> &subVals,
         const std::vector<float> &divVals,
         const float normalized_scale
 ) {
-    spdlog::get("container_agent")->trace("Going into {0:s}", __func__);
+    spdlog::get("container_agent")->trace("Going into {0:s}", callerName + "::" + __func__);
     cv::cuda::GpuMat normalized;
     cv::Scalar subValsScalar = vectorToScalar(subVals);
     cv::Scalar divValsScalar = vectorToScalar(divVals);
@@ -45,18 +46,19 @@ inline cv::cuda::GpuMat normalize(
     }
 
     stream.waitForCompletion();
-    spdlog::get("container_agent")->trace("Finished {0:s}", __func__);
+    spdlog::get("container_agent")->trace("Finished {0:s}", callerName + "::" + __func__);
 
     return normalized;
 }
 
 inline cv::cuda::GpuMat cvtHWCToCHW(
+        const std::string &callerName,
         const cv::cuda::GpuMat &input,
         cv::cuda::Stream &stream,
         uint8_t IMG_TYPE
 ) {
 
-    spdlog::get("container_agent")->trace("Going into {0:s}", __func__);
+    spdlog::get("container_agent")->trace("Going into {0:s}", callerName + "::" + __func__);
     uint16_t height = input.rows;
     uint16_t width = input.cols;
     /**
@@ -89,18 +91,19 @@ inline cv::cuda::GpuMat cvtHWCToCHW(
 
     stream.waitForCompletion();
 
-    spdlog::get("container_agent")->trace("Finished {0:s}", __func__);
+    spdlog::get("container_agent")->trace("Finished {0:s}", callerName + "::" + __func__);
 
     return transposed;
 }
 
 inline cv::cuda::GpuMat convertColor(
+        const std::string &callerName,
         const cv::cuda::GpuMat &input,
         uint8_t IMG_TYPE,
         uint8_t COLOR_CVT_TYPE,
         cv::cuda::Stream &stream
 ) {
-    spdlog::get("container_agent")->trace("Going into {0:s}", __func__);
+    spdlog::get("container_agent")->trace("Going into {0:s}", callerName + "::" + __func__);
     // If the image is grayscale, then the target image type should be 0
     uint16_t TARGET_IMG_TYPE;
     if (GRAYSCALE_CONVERSION_CODES.count(COLOR_CVT_TYPE)) {
@@ -113,7 +116,7 @@ inline cv::cuda::GpuMat convertColor(
     cv::cuda::cvtColor(input, color_cvt_image, COLOR_CVT_TYPE, 0, stream);
 
     stream.waitForCompletion();
-    spdlog::get("container_agent")->trace("Finished {0:s}", __func__);
+    spdlog::get("container_agent")->trace("Finished {0:s}", callerName + "::" + __func__);
 
     return color_cvt_image;
 }
@@ -128,6 +131,7 @@ inline cv::cuda::GpuMat convertColor(
  * @return cv::cuda::GpuMat 
  */
 inline cv::cuda::GpuMat resizePadRightBottom(
+        const std::string &callerName,
         const cv::cuda::GpuMat &input,
         const size_t height,
         const size_t width,
@@ -138,7 +142,7 @@ inline cv::cuda::GpuMat resizePadRightBottom(
         uint8_t RESIZE_INTERPOL_TYPE
 
 ) {
-    spdlog::get("container_agent")->trace("Going into {0:s}", __func__);
+    spdlog::get("container_agent")->trace("Going into {0:s}", callerName + "::" + __func__);
 
     float r = std::min(width / (input.cols * 1.0), height / (input.rows * 1.0));
     int unpad_w = r * input.cols;
@@ -151,12 +155,13 @@ inline cv::cuda::GpuMat resizePadRightBottom(
     resized.copyTo(out(cv::Rect(0, 0, resized.cols, resized.rows)), stream);
 
     stream.waitForCompletion();
-    spdlog::get("container_agent")->trace("Finished {0:s}", __func__);
+    spdlog::get("container_agent")->trace("Finished {0:s}", callerName + "::" + __func__);
 
     return out;
 }
 
 inline bool resizeIntoFrame(
+        const std::string &callerName,
         const cv::cuda::GpuMat &input,
         cv::cuda::GpuMat &frame,
         const uint16_t left,
@@ -168,7 +173,7 @@ inline bool resizeIntoFrame(
         uint8_t COLOR_CVT_TYPE,
         uint8_t RESIZE_INTERPOL_TYPE
 ) {
-    spdlog::get("container_agent")->trace("Going into {0:s}", __func__);
+    spdlog::get("container_agent")->trace("Going into {0:s}", callerName + "::" + __func__);
 
     float r = std::min(width / (input.cols * 1.0), height / (input.rows * 1.0));
     int unpad_w = r * input.cols;
@@ -178,7 +183,7 @@ inline bool resizeIntoFrame(
 
     resized.copyTo(frame(cv::Rect(left, top, resized.cols, resized.rows)), stream);
     stream.waitForCompletion();
-    spdlog::get("container_agent")->trace("Finished {0:s}", __func__);
+    spdlog::get("container_agent")->trace("Finished {0:s}", callerName + "::" + __func__);
 
     return true;
 }
@@ -371,12 +376,17 @@ void BasePreprocessor::preprocess() {
             });
         }
 
-        currCPUReq = msvc_InQueue.at(0)->pop1();
+        currCPUReq = msvc_InQueue.at(0)->pop1(true);
 
         if (!validateRequest<LocalCPUReqDataType>(currCPUReq)) {
             continue;
         }
         currReq = uploadReq(currCPUReq);
+        // We use the last element of the shape to piggyback the queue size
+        // This option is only available when pop1 is parsed with `true`
+        uint16_t queueSize = currReq.req_data[0].shape.back();
+        currReq.req_data[0].shape.pop_back();
+
 
         msvc_overallTotalReqCount++;
 
@@ -402,13 +412,14 @@ void BasePreprocessor::preprocess() {
         outReq.req_travelPath.emplace_back(currReq.req_travelPath[0] + "[" + msvc_hostDevice + "|" + msvc_containerName + "|" +
                                            std::to_string(msvc_overallTotalReqCount));
         outReq.upstreamReq_data.emplace_back(currReq.req_data[0]);
-        spdlog::get("container_agent")->trace("{0:s} popped a request. In queue size is {1:d}.",
-                                              msvc_name, msvc_InQueue.at(0)->size());
+        spdlog::get("container_agent")->trace("{0:s} popped a request. In queue size is {1:d}. \n Travel path: {2:s}",
+                                              msvc_name, queueSize, outReq.req_travelPath[0]);
 
         // Resize the incoming request image the padd with the grey color
         // The resize image will be copied into a reserved buffer frame
 
-        data.data = convertColor(currReq.req_data[0].data,
+        data.data = convertColor(msvc_name,
+                                 currReq.req_data[0].data,
                                  msvc_imgType,
                                  msvc_colorCvtType,
                                  *preProcStream);
@@ -416,6 +427,7 @@ void BasePreprocessor::preprocess() {
         ConcatConfig &currConcatConfig = msvc_concat.list[msvc_concat.numImgs];
 
         bool success = resizeIntoFrame(
+            msvc_name,
             data.data,
             outReq.req_data[0].data,
             currConcatConfig[msvc_concat.currIndex].x1,

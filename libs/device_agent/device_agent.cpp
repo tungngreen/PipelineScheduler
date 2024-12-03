@@ -161,9 +161,9 @@ DeviceAgent::DeviceAgent(const std::string &controller_url) : DeviceAgent() {
 
     if (dev_system_name == "bce") {
         if (dev_type == SystemDeviceType::Server || dev_type == SystemDeviceType::OnPremise) {
-            dev_bcedge_agent = new BCEdgeAgent(dev_name, 3500, torch::kF32, 200);
+            dev_bcedge_agent = new BCEdgeAgent(dev_name, 3500, torch::kF32, 0);
         } else {
-            dev_bcedge_agent = new BCEdgeAgent(dev_name, 3000000, torch::kF32, 200);
+            dev_bcedge_agent = new BCEdgeAgent(dev_name, 3000000, torch::kF32, 0);
         }
     }
 

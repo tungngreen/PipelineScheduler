@@ -100,12 +100,14 @@ public:
     static void transformOutput(std::vector<std::vector<std::vector<float>>>& input, std::vector<float>& output);
 
     inline cv::cuda::GpuMat cvtHWCToCHW(
+        const std::string &callerName,
         const std::vector<cv::cuda::GpuMat>& batch,
         cv::cuda::Stream &stream = cv::cuda::Stream::Null(),
         uint8_t IMG_TYPE = CV_8UC3 
     );
 
     inline void normalize(
+        const std::string &callerName,
         const cv::cuda::GpuMat &transposedBatch, // NCHW
         const BatchSizeType batchSize,
         cv::cuda::Stream &stream = cv::cuda::Stream::Null(),
