@@ -291,23 +291,29 @@ public:
      * @param timeout 
      * @return Request<LocalCPUReqDataType> 
      */
-    Request<LocalCPUReqDataType> pop1(bool getQueueSize = false, uint32_t timeout = 100000) { // 100ms
+    Request<LocalCPUReqDataType> pop1(const std::string& caller, bool getQueueSize = false, uint32_t timeout = 100000) { // 100ms
         Request<LocalCPUReqDataType> request;
         bool notify = false;
         uint16_t queueSize = 0;
 
         {
             std::unique_lock<std::mutex> lock(q_mutex);
+            spdlog::get("container_agent")->trace("{0:s} starts waiting for CPU queue {1:s}", caller, q_name);
             isEmpty = !q_condition_consumer.wait_for(
                 lock,
                 TimePrecisionType(timeout),
-                [this]() { return !q_cpuQueue.empty(); }
+                [&caller, this]() {
+                    spdlog::get("container_agent")->trace("{0:s} checks if CPU queue {1:s} is empty? {2:d}", caller, q_name, q_cpuQueue.empty());
+                    return !q_cpuQueue.empty();
+                }
             );
 
             // Only proceed if the queue is not empty
             if (!isEmpty) {
                 request = q_cpuQueue.front();
                 q_cpuQueue.pop();
+
+                spdlog::get("container_agent")->trace("{0:s} pops a request from CPU queue {1:s}", caller, q_name);
 
                 queueSize = q_cpuQueue.size();
 
@@ -318,6 +324,7 @@ public:
 
         // Notify outside the critical section
         if (notify) {
+            spdlog::get("container_agent")->trace("{0:s} notifies another consumer for CPU queue {1:s}", caller, q_name);
             q_condition_consumer.notify_one();
         }
 
@@ -330,7 +337,7 @@ public:
                 request.req_data[0].shape.emplace_back(queueSize);
             }
         }
-
+        spdlog::get("container_agent")->trace("{0:s} exits the pop function of CPU queue {1:s}", caller, q_name);
         return request;
     }
 
@@ -341,23 +348,30 @@ public:
      * @param timeout 
      * @return Request<LocalGPUReqDataType> 
      */
-    Request<LocalGPUReqDataType> pop2(bool getQueueSize = false, uint32_t timeout = 100000) { // 100ms
+    Request<LocalGPUReqDataType> pop2(const std::string& caller, bool getQueueSize = false, uint32_t timeout = 100000) { // 100ms
         Request<LocalGPUReqDataType> request;
+        bool isEmpty = false;
         bool notify = false;
         uint16_t queueSize = 0;
 
         {
             std::unique_lock<std::mutex> lock(q_mutex);
+            spdlog::get("container_agent")->trace("{0:s} starts waiting for GPU queue {1:s}", caller, q_name);
             isEmpty = !q_condition_consumer.wait_for(
                 lock,
                 TimePrecisionType(timeout),
-                [this]() { return !q_gpuQueue.empty(); }
+                [&caller, this]() {
+                    spdlog::get("container_agent")->trace("{0:s} checks that GPU Queue {1:s} is empty? {2:b}", caller, q_name, q_gpuQueue.empty());
+                    return !q_gpuQueue.empty();
+                }
             );
 
             // Only proceed if the queue is not empty
             if (!isEmpty) {
                 request = q_gpuQueue.front();
                 q_gpuQueue.pop();
+
+                spdlog::get("container_agent")->trace("{0:s} pops a request from GPU queue {1:s}", caller, q_name);
 
                 queueSize = q_gpuQueue.size();
 
@@ -366,6 +380,7 @@ public:
             }
         }
         if (notify) {
+            spdlog::get("container_agent")->trace("{0:s} notifies another consumer for GPU queue {1:s}", caller, q_name);
             q_condition_consumer.notify_one();
         }
         if (isEmpty) {
@@ -376,6 +391,7 @@ public:
                 request.req_data[0].shape.emplace_back(queueSize);
             }
         }
+        spdlog::get("container_agent")->trace("{0:s} exits the pop function of GPU queue {1:s}", caller, q_name);
         return request;
     }
 

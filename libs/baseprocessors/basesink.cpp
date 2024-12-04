@@ -47,7 +47,7 @@ void BaseSink::sink() {
             }
             continue;
         }
-        inferTimeReport = msvc_InQueue.at(0)->pop1();
+        inferTimeReport = msvc_InQueue.at(0)->pop1(msvc_name);
         // Meaning the the timeout in pop() has been reached and no request was actually popped
         if (strcmp(inferTimeReport.req_travelPath[0].c_str(), "empty") == 0) {
             continue;
