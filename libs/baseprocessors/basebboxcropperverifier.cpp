@@ -152,7 +152,7 @@ void BaseBBoxCropperVerifier::cropping() {
             continue;
         }
         // Processing the next incoming request
-        currReq = msvc_InQueue.at(0)->pop2();
+        currReq = msvc_InQueue.at(0)->pop2(msvc_name);
         // Meaning the the timeout in pop() has been reached and no request was actually popped
         if (strcmp(currReq.req_travelPath[0].c_str(), "empty") == 0) {
             continue;
