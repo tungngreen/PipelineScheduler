@@ -334,6 +334,7 @@ void BasePreprocessor::preprocess() {
             break;
         } else if (PAUSE_THREADS) {
             if (RELOADING) {
+                spdlog::get("container_agent")->info("{0:s} is (RE)LOADING.", msvc_name);
                 if (msvc_toReloadConfigs) {
                     loadConfigs(msvc_configs, true);
                     msvc_toReloadConfigs = false;
@@ -357,6 +358,7 @@ void BasePreprocessor::preprocess() {
             //info("{0:s} is being PAUSED.", msvc_name);
             continue;
         }
+        spdlog::get("container_agent")->trace("{0:s} is entering the loop.", msvc_name);
         if (flush) {
             spdlog::get("container_agent")->trace("{0:s} is flushing the buffer.", msvc_name);
             if (msvc_concat.currIndex != 0) {
@@ -376,7 +378,7 @@ void BasePreprocessor::preprocess() {
             });
         }
 
-        currCPUReq = msvc_InQueue.at(0)->pop1(true);
+        currCPUReq = msvc_InQueue.at(0)->pop1(msvc_name, true);
 
         if (!validateRequest<LocalCPUReqDataType>(currCPUReq)) {
             continue;
@@ -471,6 +473,7 @@ void BasePreprocessor::preprocess() {
             //     saveGPUAsImg(bufferData.back().data, "concatBuffer.jpg");
             // }
         }
+        spdlog::get("container_agent")->trace("{0:s} is exiting the loop.", msvc_name);
 
         /**
          * @brief ONLY IN PROFILING MODE

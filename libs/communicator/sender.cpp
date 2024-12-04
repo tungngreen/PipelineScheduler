@@ -49,7 +49,7 @@ void Sender::Process() {
             ///spdlog::info("{0:s} is being PAUSED.", msvc_name);
             continue;
         }
-        auto request = msvc_InQueue[0]->pop1();
+        auto request = msvc_InQueue[0]->pop1(msvc_name);
         // Meaning the the timeout in pop() has been reached and no request was actually popped
         // before comparing, check if the re_travelPath size = 0, if so, continue
         if (request.req_travelPath.size() == 0) continue;
@@ -106,7 +106,7 @@ void GPUSender::Process() {
             ///spdlog::info("{0:s} is being PAUSED.", msvc_name);
             continue;
         }
-        auto request = msvc_InQueue[0]->pop2();
+        auto request = msvc_InQueue[0]->pop2(msvc_name);
         // Meaning the the timeout in pop() has been reached and no request was actually popped
         if (strcmp(request.req_travelPath[0].c_str(), "empty") == 0) {
             continue;
