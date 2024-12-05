@@ -165,7 +165,6 @@ private:
     std::uint8_t activeQueueIndex;
     QueueLengthType q_MaxSize = 100;
     std::int16_t class_of_interest;
-    bool isEmpty;
     bool isEncoded = false;
     std::atomic<unsigned int> dropedCount = 0;
 
@@ -293,6 +292,7 @@ public:
      */
     Request<LocalCPUReqDataType> pop1(const std::string& caller, bool getQueueSize = false, uint32_t timeout = 100000) { // 100ms
         Request<LocalCPUReqDataType> request;
+        bool isEmpty = false;
         bool notify = false;
         uint16_t queueSize = 0;
 
