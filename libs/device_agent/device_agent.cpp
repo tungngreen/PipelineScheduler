@@ -329,9 +329,6 @@ bool DeviceAgent::CreateContainer(ContainerConfig &c) {
     spdlog::get("container_agent")->info("Creating container: {}", c.name());
     try {
         std::string command = runDocker(c.executable(), c.name(), c.json_config(), c.device(), c.control_port());
-        if (command == "") {
-            return false;
-        }
         std::string target = absl::StrFormat("%s:%d", "localhost", c.control_port());
         if (c.name().find("sink") != std::string::npos) {
             return true;
@@ -345,6 +342,10 @@ bool DeviceAgent::CreateContainer(ContainerConfig &c) {
                 grpc::CreateChannel(target, grpc::InsecureChannelCredentials())),
                                 new CompletionQueue(), static_cast<unsigned int>(c.control_port()), 0, command,
                                 static_cast<ModelType>(c.model_type()), dims, 1, {}};
+
+        if (command == "") {
+            return false;
+        }
         return true;
     } catch (std::exception &e) {
         spdlog::get("container_agent")->error("Error creating container: {}", e.what());
@@ -372,9 +373,10 @@ void DeviceAgent::ContainersLifeCheck() {
         void *got_tag;
         bool ok = false;
         if (cq != nullptr) GPR_ASSERT(cq->Next(&got_tag, &ok));
-        if (!status.ok()){
-            container.second.pid = 0;
-            runDocker(container.second.startCommand);
+        if (!status.ok() && container.second.startCommand != "") {
+            if (runDocker(container.second.startCommand) != 0) {
+                container.second.pid = 0;
+            }
         }
     }
 }

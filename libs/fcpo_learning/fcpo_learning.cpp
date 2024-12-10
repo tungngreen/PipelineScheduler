@@ -44,6 +44,7 @@ void FCPOAgent::update() {
     }
     spdlog::get("container_agent")->info("Locally training RL Agent at cumulative Reward {}!", cumu_reward);
     Stopwatch sw;
+    std::unique_lock<std::mutex> lock(model_mutex);
     sw.start();
 
     auto [policy1, policy2, policy3, val] = model->forward(torch::stack(experiences.get_states()));
@@ -70,7 +71,6 @@ void FCPOAgent::update() {
     try {
         T clipped_ratio = torch::clamp(ratio, 1 - clip_epsilon, 1 + clip_epsilon);
         T advantages = computeGae();
-        // advantages = (advantages - advantages.mean()) / (advantages.std() + 1e-8);
         T policy_loss_1 = -torch::min(ratio * advantages, clipped_ratio * advantages).to(precision);
         T policy_loss_2 = torch::exp(-torch::tensor(experiences.get_rewards()).to(precision));
         policy_loss_2 = torch::min((10 / ratio) * policy_loss_2, (10 / clipped_ratio) * policy_loss_2);
@@ -91,7 +91,6 @@ void FCPOAgent::update() {
     // Backpropagation
     optimizer->zero_grad();
     loss.backward();
-    std::unique_lock<std::mutex> lock(model_mutex);
     optimizer->step();
     sw.stop();
 
@@ -103,7 +102,7 @@ void FCPOAgent::update() {
         torch::save(model, path + "/latest_model.pt");
     }
 
-    if (++federated_steps_counter % federated_steps == 0) {
+    if (federated_steps > 0 && ++federated_steps_counter % federated_steps == 0) {
         spdlog::get("container_agent")->info("Federated training RL agent!");
         federated_steps_counter = 0; // 0 means that we are waiting for federated update to come back
         federatedUpdate(loss.item<double>());
@@ -178,10 +177,6 @@ void FCPOAgent::setState(double curr_resolution, double curr_batch, double curr_
     state = torch::tensor({curr_resolution / resolution_size, curr_batch / max_batch, curr_scaling / scaling_size,
                            arrival, pre_queue_size / 100.0, inf_queue_size / 100.0, post_queue_size / 100.0}, precision);
 }
-
-//void FCPOAgent::setState(double curr_resolution, double curr_batch, double curr_scaling, double arrival) {
-//    state = torch::tensor({arrival, curr_resolution, curr_batch, curr_scaling}, precision);
-//}
 
 void FCPOAgent::selectAction() {
     std::unique_lock<std::mutex> lock(model_mutex);
