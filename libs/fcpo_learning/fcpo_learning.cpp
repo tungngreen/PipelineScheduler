@@ -102,7 +102,7 @@ void FCPOAgent::update() {
         torch::save(model, path + "/latest_model.pt");
     }
 
-    if (++federated_steps_counter % federated_steps == 0) {
+    if (federated_steps > 0 && ++federated_steps_counter % federated_steps == 0) {
         spdlog::get("container_agent")->info("Federated training RL agent!");
         federated_steps_counter = 0; // 0 means that we are waiting for federated update to come back
         federatedUpdate(loss.item<double>());
