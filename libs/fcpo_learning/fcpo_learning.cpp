@@ -44,7 +44,6 @@ void FCPOAgent::update() {
     }
     spdlog::get("container_agent")->info("Locally training RL Agent at cumulative Reward {}!", cumu_reward);
     Stopwatch sw;
-    std::unique_lock<std::mutex> lock(model_mutex);
     sw.start();
 
     auto [policy1, policy2, policy3, val] = model->forward(torch::stack(experiences.get_states()));
@@ -89,6 +88,7 @@ void FCPOAgent::update() {
     }
 
     // Backpropagation
+    std::unique_lock<std::mutex> lock(model_mutex);
     optimizer->zero_grad();
     loss.backward();
     optimizer->step();
@@ -166,8 +166,8 @@ void FCPOAgent::rewardCallback(double throughput, double drops, double latency_p
         first = false;
         return;
     }
-    double reward = (1.1 * throughput - 10 * latency_penalty - 2 * std::pow(oversize_penalty, 2)) / 2.0;
-    reward = std::max(-1.0, std::min(1.0, reward)); // Clip reward to [-1, 1]
+    double reward = (1.1 * throughput - 1.5 * latency_penalty - 2 * std::pow(oversize_penalty, 2)) / 2.0;
+    // reward = std::max(-1.0, std::min(1.0, reward)); // Clip reward to [-1, 1]
     experiences.add_reward(reward);
     cumu_reward += reward;
 }
@@ -230,8 +230,7 @@ std::tuple<int, int, int> FCPOAgent::runStep() {
     out << "step," << sw.elapsed_microseconds() << "," << federated_steps_counter << "," << steps_counter << "," << cumu_reward  << "," << resolution << "," << batching << "," << scaling << std::endl;
 
     if (steps_counter % update_steps == 0) {
-        std::thread t(&FCPOAgent::update, this);
-        t.detach();
+        update();
     }
     return std::make_tuple(resolution + 1, batching + 1, scaling);
 }

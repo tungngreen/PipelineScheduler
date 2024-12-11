@@ -1504,7 +1504,7 @@ uint8_t Controller::incNumReplicas(const PipelineModel *model) {
     float processRate = indiProcessRate * numReplicas;
     float preprocessRate = indiPreprocessRate * numReplicas;
     while ((processRate * 0.8 < model->arrivalProfiles.arrivalRates ||
-           preprocessRate * 0.95 < model->arrivalProfiles.arrivalRates)) {
+           preprocessRate * 0.95 < model->arrivalProfiles.arrivalRates) && numReplicas < 4) {
         numReplicas++;
         spdlog::get("container_agent")->info("Increasing the number of replicas of model {0:s} to {1:d}", model->name, numReplicas);
         processRate = indiProcessRate * numReplicas;

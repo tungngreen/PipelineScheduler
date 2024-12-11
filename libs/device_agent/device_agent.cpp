@@ -851,7 +851,6 @@ void DeviceAgent::ShutdownRequestHandler::Proceed() {
 
 // Function to run the bash script with parameters from a JSON file
 void DeviceAgent::limitBandwidth(const std::string& scriptPath, const std::string& jsonFilePath) {
-    // Read JSON file
     std::ifstream json_file(jsonFilePath);
     if (!json_file.is_open()) {
         std::cerr << "Failed to open " << jsonFilePath << std::endl;
@@ -882,18 +881,18 @@ void DeviceAgent::limitBandwidth(const std::string& scriptPath, const std::strin
             Stopwatch stopwatch;
 
             auto limit = bandwidth_limits[bwThresholdIndex];
-            int mbps = limit["mbps"];
+            float mbps = limit["mbps"];
 
             // Build and execute the command
-            std::string command = "sudo bash " + scriptPath + " " + interface + " " + std::to_string(mbps);
-            spdlog::get("container_agent")->info("{0:s} Setting BW limit to {1:d}", dev_name, mbps);
-            int result = system(command.c_str());
+            std::ostringstream command;
+            command << "sudo bash " << scriptPath << " " << interface << " " << std::fixed << std::setprecision(2) << mbps;
+            spdlog::get("container_agent")->info("{0:s} Setting BW limit to {1:f} Mbps", dev_name, mbps);
+            int result = system(command.str().c_str());
             spdlog::get("container_agent")->info("Command executed with result: {0:d}", result);
 
             if (bwThresholdIndex == bandwidth_limits.size() - 1) {
                 break;
             }
-            // TODO: resolve unsequenced modification and access to 'bwThresholdIndex'
             auto distanceToNext = bandwidth_limits[++bwThresholdIndex]["time"].get<int>() - bandwidth_limits[bwThresholdIndex - 1]["time"].get<int>();
             nextThresholdSetTime += std::chrono::seconds(distanceToNext);
 
@@ -902,7 +901,5 @@ void DeviceAgent::limitBandwidth(const std::string& scriptPath, const std::strin
 
         }
     }
-
-    // QUANG: Remove the bandwidth limit
     std::cout << "Finished bandwidth limiting." << std::endl;
 }
