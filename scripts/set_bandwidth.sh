@@ -29,7 +29,7 @@ if ! ip link show "$INTERFACE" &> /dev/null; then
 fi
 
 # Convert Mbps to kbps
-BANDWIDTH_KBPS=$((BANDWIDTH_MBPS * 1000))
+BANDWIDTH_KBPS=$(echo "$BANDWIDTH_MBPS * 1000" | bc)
 
 echo "Removing existing qdisc..."
 tc qdisc del dev "$INTERFACE" root 2> /dev/null
