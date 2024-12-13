@@ -203,7 +203,7 @@ struct ContainerHandle {
 
     float arrival_rate;
 
-    int batch_size;
+    BatchSizeType batch_size;
     int recv_port;
     std::string model_file;
 
@@ -268,7 +268,7 @@ struct ContainerHandle {
                 const std::vector<int>& dimensions = {},
                 uint64_t pipelineSLO = 0,
                 float arrival_rate = 0.0f,
-                const int batch_size = 0,
+                const BatchSizeType batch_size = 0,
                 const int recv_port = 0,
                 const std::string model_file = "",
                 NodeHandle* device_agent = nullptr,
