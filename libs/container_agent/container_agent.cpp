@@ -562,7 +562,12 @@ ContainerAgent::ContainerAgent(const json& configs) {
 
     hasDataReader = cont_msvcsGroups["receiver"].msvcList[0]->msvc_type == MicroserviceType::DataReader;
     isDataSource = hasDataReader && (cont_msvcsGroups["inference"].msvcList.size() == 0);
+    if (hasDataReader && !isDataSource) for (auto &reader : cont_msvcsGroups["receiver"].msvcList) {
+            reader->msvc_dataShape = {{-1, -1, -1}};
+    }
     if (cont_systemName == "fcpo" && !isDataSource) {
+        torch::Device device(torch::kCUDA, cont_deviceIndex);
+        torch::DeviceGuard device_guard(device);
         nlohmann::json rl_conf = configs["fcpo"];
         cont_fcpo_agent = new FCPOAgent(cont_name, rl_conf["state_size"], rl_conf["resolution_size"],
                                         rl_conf["batch_size"], rl_conf["threads_size"], sender_cq, stub,

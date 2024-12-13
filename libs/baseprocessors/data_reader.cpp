@@ -87,8 +87,10 @@ void DataReader::Process() {
             readFrames++;
             msvc_currFrameID = (int) source.get(cv::CAP_PROP_POS_FRAMES);
             if (msvc_dataShape[0][1] != -1 && msvc_dataShape[0][2] != -1) {
-                frame = resizePadRightBottom(msvc_name, frame, msvc_dataShape[0][1], msvc_dataShape[0][2],
-                                             {128, 128, 128}, cv::INTER_AREA);
+                if(frame.rows != msvc_dataShape[0][1] || frame.cols != msvc_dataShape[0][2]) {
+                    frame = resizePadRightBottom(msvc_name, frame, msvc_dataShape[0][1], msvc_dataShape[0][2],
+                                                 {128, 128, 128}, cv::INTER_AREA);
+                }
             }
             RequestMemSizeType frameMemSize = frame.channels() * frame.rows * frame.cols * CV_ELEM_SIZE1(frame.type());
             for (auto q: msvc_OutQueue) {
