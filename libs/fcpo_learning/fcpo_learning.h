@@ -265,7 +265,7 @@ private:
     T computeGae() const;
 
     std::mutex model_mutex;
-    std::shared_ptr<SinglePolicyNet> model;
+    std::shared_ptr<MultiPolicyNet> model;
     std::unique_ptr<torch::optim::Optimizer> optimizer;
     torch::Dtype precision;
     T state, log_prob, value;
@@ -328,7 +328,7 @@ public:
                 {"precision", boost::algorithm::to_lower_copy(p)},
                 {"update_steps", 100},
                 {"update_step_incs", 10},
-                {"federated_steps", 0},
+                {"federated_steps", 10},
                 {"seed", 42}
         };
     }
