@@ -178,15 +178,10 @@ inline bool resizeIntoFrame(
     float r = std::min(width / (input.cols * 1.0), height / (input.rows * 1.0));
     int unpad_w = r * input.cols;
     int unpad_h = r * input.rows;
+    cv::cuda::GpuMat resized(unpad_h, unpad_w, input.type());
+    cv::cuda::resize(input, resized, resized.size(), 0, 0, RESIZE_INTERPOL_TYPE, stream);
 
-    if (unpad_w == width && unpad_h == height) {
-        input.copyTo(frame(cv::Rect(left, top, input.cols, input.rows)), stream);
-    } else {
-        cv::cuda::GpuMat resized(unpad_h, unpad_w, input.type());
-        cv::cuda::resize(input, resized, resized.size(), 0, 0, RESIZE_INTERPOL_TYPE, stream);
-        resized.copyTo(frame(cv::Rect(left, top, resized.cols, resized.rows)), stream);
-    }
-    
+    resized.copyTo(frame(cv::Rect(left, top, resized.cols, resized.rows)), stream);
     stream.waitForCompletion();
     spdlog::get("container_agent")->trace("Finished {0:s}", callerName + "::" + __func__);
 
