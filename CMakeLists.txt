@@ -93,41 +93,39 @@ endif ()
 # Manually specify the path to the protobufprotocols
 set(protobufprotocols_DIR "${CMAKE_CURRENT_BINARY_DIR}/../protobufprotocols")
 
-if (${SYSTEM_NAME} STREQUAL "FCPO")
-    set(CUDACXX /usr/local/cuda/bin/nvcc)
-    set(CMAKE_CUDA_COMPILER ${CUDACXX})
+set(CUDACXX /usr/local/cuda/bin/nvcc)
+set(CMAKE_CUDA_COMPILER ${CUDACXX})
 
-    # list(APPEND CMAKE_PREFIX_PATH /libtorch)
-    execute_process(
-        COMMAND ${CUDA_TOOLKIT_ROOT_DIR}/bin/nvcc --list-gpu-arch
-        OUTPUT_VARIABLE DETECTED_ARCHITECTURE
-        ERROR_QUIET
-    )
-    # Parse the architecture from the nvcc output
-    string(REGEX MATCHALL "compute_([0-9]+)" DETECTED_ARCHITECTURE "${DETECTED_ARCHITECTURE}")
-    foreach(ARCH ${DETECTED_ARCHITECTURE})
-        string(REGEX REPLACE "compute_" "" ARCH_NUM ${ARCH})
-        list(APPEND CMAKE_CUDA_ARCHITECTURES ${ARCH_NUM})
-    endforeach()
-    if (CMAKE_CUDA_ARCHITECTURES STREQUAL "")
-        message(WARNING "No CUDA architectures detected, resorting to native")
-        set(CMAKE_CUDA_ARCHITECTURES 'native')
-    else ()
-        message(STATUS "Available CUDA architectures: ${CMAKE_CUDA_ARCHITECTURES}")
-    endif ()
+# list(APPEND CMAKE_PREFIX_PATH /libtorch)
+execute_process(
+    COMMAND ${CUDA_TOOLKIT_ROOT_DIR}/bin/nvcc --list-gpu-arch
+    OUTPUT_VARIABLE DETECTED_ARCHITECTURE
+    ERROR_QUIET
+)
+# Parse the architecture from the nvcc output
+string(REGEX MATCHALL "compute_([0-9]+)" DETECTED_ARCHITECTURE "${DETECTED_ARCHITECTURE}")
+foreach(ARCH ${DETECTED_ARCHITECTURE})
+    string(REGEX REPLACE "compute_" "" ARCH_NUM ${ARCH})
+    list(APPEND CMAKE_CUDA_ARCHITECTURES ${ARCH_NUM})
+endforeach()
+if (CMAKE_CUDA_ARCHITECTURES STREQUAL "")
+    message(WARNING "No CUDA architectures detected, resorting to native")
+    set(CMAKE_CUDA_ARCHITECTURES 'native')
+else ()
+    message(STATUS "Available CUDA architectures: ${CMAKE_CUDA_ARCHITECTURES}")
+endif ()
 
-    # Automatically detect the CUDA architecture using nvcc
-    if (${DEVICE_ARCH} STREQUAL "amd64")
-        list(APPEND CMAKE_PREFIX_PATH /libtorch)
+# Automatically detect the CUDA architecture using nvcc
+if (${DEVICE_ARCH} STREQUAL "amd64")
+    list(APPEND CMAKE_PREFIX_PATH /libtorch)
+else()
+    if (${ON_HOST} STREQUAL "ON")
+        set (Torch_DIR /home/cdsn/.local/lib/python3.8/site-packages/torch/share/cmake/Torch)
     else()
-        if (${ON_HOST} STREQUAL "ON")
-            set (Torch_DIR /home/cdsn/.local/lib/python3.8/site-packages/torch/share/cmake/Torch)
-        else()
-            set (Torch_DIR /usr/local/lib/python3.8/dist-packages/torch/share/cmake/Torch)
-        endif()
+        set (Torch_DIR /usr/local/lib/python3.8/dist-packages/torch/share/cmake/Torch)
     endif()
-    find_package(Torch REQUIRED)
 endif()
+find_package(Torch REQUIRED)
 
 # Boost
 find_package(Boost REQUIRED)
@@ -159,10 +157,7 @@ add_subdirectory(libs/utils/profiler)
 add_subdirectory(libs/microservice)
 add_subdirectory(libs/utils/protobufprotocols)
 
-if (${SYSTEM_NAME} STREQUAL "FCPO")
-    add_subdirectory(libs/fcpo_learning)
-endif()
-
+add_subdirectory(libs/fcpo_learning)
 add_subdirectory(libs/controller)
 add_subdirectory(libs/communicator)
 
