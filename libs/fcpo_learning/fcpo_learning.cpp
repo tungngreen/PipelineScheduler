@@ -162,14 +162,16 @@ void FCPOAgent::federatedUpdateCallback(FlData &response) {
 }
 
 void FCPOAgent::rewardCallback(double throughput, double drops, double latency_penalty, double oversize_penalty) {
-    if (first) { // First reward is not valid and needs to be discarded
-        first = false;
-        return;
+    if (update_steps > 0 ) {
+        if (first) { // First reward is not valid and needs to be discarded
+            first = false;
+            return;
+        }
+        double reward = (1.1 * throughput - 10 * latency_penalty - 2 * std::pow(oversize_penalty, 2)) / 2.0;
+        reward = std::max(-1.0, std::min(1.0, reward)); // Clip reward to [-1, 1]
+        experiences.add_reward(reward);
+        cumu_reward += reward;
     }
-    double reward = (1.1 * throughput - 10 * latency_penalty - 2 * std::pow(oversize_penalty, 2)) / 2.0;
-    reward = std::max(-1.0, std::min(1.0, reward)); // Clip reward to [-1, 1]
-    experiences.add_reward(reward);
-    cumu_reward += reward;
 }
 
 void FCPOAgent::setState(double curr_resolution, double curr_batch, double curr_scaling,  double arrival,
@@ -187,13 +189,15 @@ void FCPOAgent::selectAction() {
     batching = action_dist.item<int>();
     action_dist = torch::multinomial(policy3, 1);
     scaling = action_dist.item<int>();
-    log_prob = torch::log(policy1[resolution]) + torch::log(policy2[batching]) + torch::log(policy3[scaling]);
+    if (update_steps > 0 ) {
+        log_prob = torch::log(policy1[resolution]) + torch::log(policy2[batching]) + torch::log(policy3[scaling]);
+        experiences.add(state, log_prob, val, resolution, batching, scaling);
+    }
     // code if using SinglePolicyNet
     // auto [policy, val] = model->forward(state);
     // T action_dist = torch::multinomial(policy, 1);  // Sample from policy (discrete distribution)
     // std::tie(resolution, batching, scaling) = model->interpret_action(action_dist.item<int>(), max_batch, scaling_size);
     // log_prob = torch::log(policy[action_dist.item<int>()]);
-    experiences.add(state, log_prob, val, resolution, batching, scaling);
 }
 
 T FCPOAgent::computeCumuRewards() const {
@@ -225,12 +229,14 @@ std::tuple<int, int, int> FCPOAgent::runStep() {
     sw.start();
     selectAction();
 
-    steps_counter++;
+    if (update_steps > 0 ) steps_counter++;
     sw.stop();
     out << "step," << sw.elapsed_microseconds() << "," << federated_steps_counter << "," << steps_counter << "," << cumu_reward  << "," << resolution << "," << batching << "," << scaling << std::endl;
 
-    if (steps_counter % update_steps == 0) {
-        update();
+    if (update_steps > 0 ) {
+        if (steps_counter % update_steps == 0) {
+            update();
+        }
     }
     return std::make_tuple(resolution + 1, batching + 1, scaling);
 }
