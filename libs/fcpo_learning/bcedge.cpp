@@ -75,9 +75,7 @@ void BCEdgeAgent::rewardCallback(double throughput, double latency, MsvcSLOType 
             tmp_reward = exp(-latency * (memory_usage));
         }
         if (std::isnan(tmp_reward)) tmp_reward = 0.0;
-        if (update_steps > 0 ) {
-            rewards.push_back(std::min(25.0, std::max(-25.0, tmp_reward)) / 25.0); // Normalize reward to be in the range of [-1, 1] for better training
-        }
+        rewards.push_back(std::min(25.0, std::max(-25.0, tmp_reward)) / 25.0); // Normalize reward to be in the range of [-1, 1] for better training
     }
 }
 
