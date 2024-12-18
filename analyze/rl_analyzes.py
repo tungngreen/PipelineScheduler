@@ -114,12 +114,12 @@ def reward_plot(base_directory):
         plt.savefig(f"{algo}-learning.svg")
         plt.show()
 
-    fig1, ax1 = plt.subplots(1, 1, figsize=(4, 4), gridspec_kw={'height_ratios': [1], 'width_ratios': [1]})
-    fig2, ax2 = plt.subplots(1, 1, figsize=(4, 4), gridspec_kw={'height_ratios': [1], 'width_ratios': [1]})
+    fig1, ax1 = plt.subplots(1, 1, figsize=(2.5, 2.5), gridspec_kw={'height_ratios': [1], 'width_ratios': [1]})
+    fig2, ax2 = plt.subplots(1, 1, figsize=(2.5, 2.5), gridspec_kw={'height_ratios': [1], 'width_ratios': [1]})
+    styles = ['-', '--', 'x-']
     for j, algo in enumerate(['FCPO', 'FCPO-reduced', 'without local optimization']):
-        ax1.plot(rewards[algo], label=algo, color=colors[j], linewidth=1)
-        ax2.plot(loss[algo], label=algo, color=colors[j], linewidth=1)
-    ax2.legend(fontsize=12)
+        ax1.plot(rewards[algo], styles[j], label=algo, color=colors[j], linewidth=1)
+        ax2.plot(loss[algo], styles[j], label=algo, color=colors[j], linewidth=1)
     ax1.set_xlabel('Episodes', size=12)
     ax1.set_ylabel('Reward Avg.', size=12)
     ax2.set_xlabel('Episodes', size=12)
@@ -135,7 +135,10 @@ def reward_plot(base_directory):
 
     for algo, data in {'FCPO-rewards': fcpo_rewards, 'BCE-rewards': bce_rewards, 'FCPO-loss': fcpo_loss,
                        'BCE-loss': bce_loss, 'federated-rewards': fcpof_rewards, 'federated-loss': fcpof_loss}.items():
-        fig, ax1 = plt.subplots(1, 1, figsize=(4, 4), gridspec_kw={'height_ratios': [1], 'width_ratios': [1]})
+        if 'federated' in algo:
+            fig, ax1 = plt.subplots(1, 1, figsize=(4, 2), gridspec_kw={'height_ratios': [1], 'width_ratios': [1]})
+        else:
+            fig, ax1 = plt.subplots(1, 1, figsize=(4, 4), gridspec_kw={'height_ratios': [1], 'width_ratios': [1]})
         i = 0
         for agent, series in data.items():
             ax1.plot(series, label=agent, color=colors[i])
@@ -146,7 +149,7 @@ def reward_plot(base_directory):
             ax1.set_ylabel('Reward', size=12)
         else:
             ax1.set_ylabel('Loss', size=12)
-        if 'fed' in algo:
+        if 'federated' in algo:
             ax1.set_xlim(0, 40)
         else:
             ax1.set_xlim(0, 100)
