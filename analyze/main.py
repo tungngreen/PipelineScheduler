@@ -8,7 +8,8 @@ from natsort import natsorted
 from objectcount import objectcount
 from run_log_analyzes import full_analysis
 from final_figures import create_figures
-from rl_analyzes import reward_plot, overall_performance, perPipeline_performance
+from rl_analyzes import reward_plot, perPipeline_performance, overall_performance_timeseries, system_overhead, \
+    limited_network_performance, continual_learning_performance
 
 
 def batch(files):
@@ -138,7 +139,14 @@ if __name__ == '__main__':
     elif args.mode == 'final':
         create_figures(args, files)
     elif args.mode == 'fcpo':
+        if not os.path.exists(os.path.join(args.directory, 'processed_logs')):
+            os.makedirs(os.path.join(args.directory, 'processed_logs'))
         reward_plot(args.directory)
-        perPipeline_performance(args.directory)
-        overall_performance(args.directory)
+        overall_performance_timeseries(args.directory, 'fcpo_main') # main
+        overall_performance_timeseries(args.directory, 'fcpo_results') # ablation
+        limited_network_performance(args.directory)
+        continual_learning_performance(args.directory)
+        system_overhead(os.path.join(args.directory, 'fcpo_overhead'))
+        #perPipeline_performance(args.directory)
+
 

@@ -82,6 +82,8 @@ def analyze_single_experiment(base_dir, dirs, num_results = 3, latency_target = 
         traffic_people[d], traffic_cars[d], people_people[d], people_cars[d] = [], [], [], []
         filepath = os.path.join(base_dir, d)
         for file in natsorted(os.listdir(filepath)):
+            if not 'txt' in file:
+                continue
             cars, people, first[d], last[d] = read_file(os.path.join(filepath, file), first[d], last[d])
             if "traffic" in file:
                 traffic_people[d].extend(people)
