@@ -12,7 +12,7 @@ bar_width = 0.2
 x_labels = ['traffic', 'surveillance']
 x = np.arange(len(x_labels))
 algorithm_names = ['OURS', 'dis', 'jlf', 'rim']
-colors = ['#0072B2', '#E69F00', '#009E73', '#CC79A7', '#56B4E9', '#F0E442']
+colors = ['#0072B2', '#E69F00', '#CC79A7', '#009E73', '#56B4E9', '#F0E442']
 label_map = {'ppp': 'OctopInf', 'OURS': 'OctopInf', 'dis': 'Distream', 'jlf': 'Jellyfish', 'rim': 'Rim'}
 
 def plot_over_time(directory, include_people = True, schema = '', missed = True, memory = True, stepless = True):
@@ -75,29 +75,50 @@ def plot_over_time(directory, include_people = True, schema = '', missed = True,
     plt.tight_layout()
     plt.show()
 
-def base_plot(data, ax, title):
-    for j, a in enumerate(algorithm_names):
-        ax.bar(x + j * bar_width, [data['traffic_throughput']['total'][a], data['people_throughput']['total'][a]], bar_width, alpha=0.5, color=colors[j], hatch='//', edgecolor='white')
+def base_plot(data, ax, title, combined=False, labels=algorithm_names, use_label_map=True):
+    for j, a in enumerate(labels):
+        if combined:
+            x = np.arange(1)
+            ax.bar(x + j * bar_width, [data['traffic_throughput']['total'][a]], bar_width, alpha=0.5, color=colors[j], hatch='//', edgecolor='white')
+        else:
+            ax.bar(x + j * bar_width, [data['traffic_throughput']['total'][a], data['people_throughput']['total'][a]], bar_width, alpha=0.5, color=colors[j], hatch='//', edgecolor='white')
+            people_intime = data['people_goodput']['total'][a]
         traffic_intime = data['traffic_goodput']['total'][a]
-        people_intime = data['people_goodput']['total'][a]
-        ax.bar(x + j * bar_width, [traffic_intime, people_intime], bar_width, label=label_map[a], color=colors[j], edgecolor='white', linewidth=0.5)
+        if use_label_map:
+            if combined: # combine traffic_intime and people_intime into a single value
+                ax.bar(x + j * bar_width, [traffic_intime], bar_width, label=label_map[a], color=colors[j], edgecolor='white', linewidth=0.5)
+            else:
+                ax.bar(x + j * bar_width, [traffic_intime, people_intime], bar_width, label=label_map[a], color=colors[j], edgecolor='white', linewidth=0.5)
+        else:
+            if combined:
+                ax.bar(x + j * bar_width, [traffic_intime], bar_width, label=a, color=colors[j], edgecolor='white', linewidth=0.5)
+            else:
+                ax.bar(x + j * bar_width, [traffic_intime, people_intime], bar_width, label=a, color=colors[j], edgecolor='white', linewidth=0.5)
 
-        ax.text(x[0] + j * bar_width, traffic_intime, f'{traffic_intime:.0f}', ha='center', va='bottom', size=12)
-        ax.text(x[1] + j * bar_width, people_intime, f'{people_intime:.0f}', ha='center', va='bottom', size=12)
-
-    ax.axhline(y=data['max_traffic_throughput'], color='red', linestyle='--', linewidth=2, xmin=0.05, xmax=0.45)
-    ax.axhline(y=data['max_people_throughput'], color='red', linestyle='--', linewidth=2, xmin=0.55, xmax=0.95)
+        if combined:
+            ax.text(x[0] + j * bar_width, traffic_intime, f'{traffic_intime:.0f}', ha='center', va='bottom', size=12)
+            ax.axhline(y=data['max_traffic_throughput'], color='red', linestyle='--', linewidth=2, xmin=0.05, xmax=0.95)
+        else:
+            ax.text(x[0] + j * bar_width, traffic_intime, f'{traffic_intime:.0f}', ha='center', va='bottom', size=12)
+            ax.text(x[1] + j * bar_width, people_intime, f'{people_intime:.0f}', ha='center', va='bottom', size=12)
+            ax.axhline(y=data['max_traffic_throughput'], color='red', linestyle='--', linewidth=2, xmin=0.05, xmax=0.45)
+            ax.axhline(y=data['max_people_throughput'], color='red', linestyle='--', linewidth=2, xmin=0.55, xmax=0.95)
 
     ax.set_title(title, size=12)
-    ax.set_ylabel('Throughput (objects / s)', size=12)
+
     if data['max_traffic_throughput'] < 1500:
         yticks = np.arange(0, int(data['max_traffic_throughput']), 250).tolist()
     else:
         yticks = np.arange(0, int(data['max_traffic_throughput']), 500).tolist()
     ax.set_yticks(yticks)
     ax.set_yticklabels(yticks, size=12)
-    ax.set_xticks(x + 0.5 * bar_width * (len(algorithm_names) - 1))
-    ax.set_xticklabels(x_labels, size=12)
+    if combined:
+        ax.set_ylabel('Avg. Effective Throughput (objects / s)', size=12)
+        ax.set_xticks([])
+    else:
+        ax.set_ylabel('Throughput (objects / s)', size=12)
+        ax.set_xticks(x + 0.5 * bar_width * (len(algorithm_names) - 1))
+        ax.set_xticklabels(x_labels, size=12)
     ax.legend(fontsize=12)
 
 

@@ -609,7 +609,11 @@ ContainerHandle *Controller::TranslateToContainer(PipelineModel *model, NodeHand
             modelName + "_" + std::to_string(i);
     // the name of the container type to look it up in the container library
     std::string containerTypeName = modelName + "_" + getDeviceTypeName(device->type);
-    
+
+    if (ctrl_systemName == "ppp" || ctrl_systemName == "fcpo" || ctrl_systemName == "bce") {
+        if (model->batchSize < model->datasourceName.size()) model->batchSize = model->datasourceName.size();
+    } // ensure minimum global batch size setting for these configurations for a good comparison
+
     auto *container = new ContainerHandle{containerName, i,
                                           class_of_interest,
                                           ModelTypeReverseList[modelName],
@@ -1248,6 +1252,7 @@ NetworkEntryType Controller::initNetworkCheck(NodeHandle &node, uint32_t minPack
     spdlog::get("container_agent")->info("Finished network check for device {}.", node.name);
     std::lock_guard lock(node.nodeHandleMutex);
     node.initialNetworkCheck = true;
+    if (entries.empty()) entries = {std::pair<uint32_t, uint64_t>{1, 1}};
     node.latestNetworkEntries["server"] = entries;
     node.lastNetworkCheckTime = std::chrono::system_clock::now();
     node.networkCheckMutex.unlock();
