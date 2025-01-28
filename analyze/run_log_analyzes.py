@@ -224,3 +224,37 @@ def full_analysis(args, dirs):
     ax.legend([plt.Line2D((0, 1), (0, 0), color='C' + str(i), marker='o', linestyle='') for i in range(len(dirs))],
               dirs)
     plt.show()
+
+
+def get_bandwidths(base_dir):
+    bandwidths = {}
+    base_dir = os.path.join(base_dir, 'bandwidths')
+    max_length = 0
+    for file in os.listdir(base_dir):
+        data = json.loads(open(os.path.join(base_dir, file)).read())
+        bandwidth = []
+        timestamps = []
+        for limit in data['bandwidth_limits']:
+            bandwidth.append(limit['mbps'])
+            timestamps.append(limit['time'] / 60 - 1) # convert to minutes and remove system startup time
+        bandwidths[file] = (bandwidth, timestamps)
+        if max_length < len(bandwidth):
+            max_length = len(bandwidth)
+    bandwidth = []
+    timestamps = []
+    # get average bandwidth over all files at each timestamp
+    for i in range(max_length):
+        avg, count, timestamp = 0, 0, 0
+        for key in bandwidths:
+            try:
+                if count == 0:
+                    timestamp = bandwidths[key][1][i]
+                avg += bandwidths[key][0][i]
+                count += 1
+            except IndexError:
+                pass
+        bandwidth.append(round(avg / count, 2))
+        timestamps.append(timestamp)
+
+    bandwidths['overall'] = (bandwidth, timestamps)
+    return bandwidths

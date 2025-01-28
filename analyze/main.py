@@ -118,7 +118,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--directory', type=str, default='')
     parser.add_argument('--mode', type=str, default='')
-    parser.add_argument('--figs', type=str, default='full,bndw,thir,slo,abla,long')
+    parser.add_argument('--figs', type=str, default='full,thir,slo,abla,long')
     parser.add_argument('--num_results', type=int, default=3)
     args = parser.parse_args()
 
