@@ -4,6 +4,32 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 
+def load_data(file, bucket_size = 120, length = 15.0):
+    data = pd.read_csv(file)
+
+    frame_index = data['Frame_Index'].values
+    persons = data['person'].values
+    cars = data['car'].values
+
+    num_buckets = len(frame_index) // bucket_size
+    buckets = np.arange(num_buckets)
+    combined = []
+
+    for i in buckets:
+        start = i * bucket_size
+        end = start + bucket_size
+
+        # Extract the data for the current bucket and calculate the average
+        if 'traffic' in file:
+            for j in range(start, end): # because we only expect half of the persons to face the camera
+                persons[j] = persons[j] / 2
+        combined.append(np.sum(persons[start:end] + cars[start:end]) / (bucket_size / 30))
+
+    if length > 0.0:
+        buckets = [float(i) / length for i in buckets]
+    return buckets[:len(combined)], combined
+
+
 def moving_average_sub(a, n):
     ret = np.cumsum(a, dtype=float)
     ret[n:] = ret[n:] - ret[:-n]

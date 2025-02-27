@@ -1002,7 +1002,7 @@ void ContainerAgent::collectRuntimeMetrics() {
                 latencyEWMA += post->getLatencyEWMA();
             }
             latencyEWMA /= cont_msvcsGroups["postprocessor"].msvcList.size();
-            
+
             if (avgRequestRate == 0 || std::isnan(avgRequestRate)) {
                 cont_fcpo_agent->rewardCallback(0.0, 0.0, 0.0, (double) cont_msvcsGroups["batcher"].msvcList[0]->msvc_idealBatchSize / 10.0);
                 avgRequestRate = 0;
