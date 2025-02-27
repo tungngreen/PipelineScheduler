@@ -190,7 +190,7 @@ public:
     }
 
     /**
-     * @brief 
+     * @brief
      * 
      * @param request 
      */
@@ -287,8 +287,8 @@ public:
      * @brief Pop CPU requests
      * 
      * @param getQueueSize Whether the queue size should be piggybacked on the shape of the first data element
-     * @param timeout 
-     * @return Request<LocalCPUReqDataType> 
+     * @param timeout
+     * @return Request<LocalCPUReqDataType>
      */
     Request<LocalCPUReqDataType> pop1(const std::string& caller, bool getQueueSize = false, uint32_t timeout = 100000) { // 100ms
         Request<LocalCPUReqDataType> request;
@@ -345,8 +345,8 @@ public:
      * @brief Pop GPU requests
      * 
      * @param getQueueSize Whether the queue size should be piggybacked on the shape of the first data element
-     * @param timeout 
-     * @return Request<LocalGPUReqDataType> 
+     * @param timeout
+     * @return Request<LocalGPUReqDataType>
      */
     Request<LocalGPUReqDataType> pop2(const std::string& caller, bool getQueueSize = false, uint32_t timeout = 100000) { // 100ms
         Request<LocalGPUReqDataType> request;

@@ -103,7 +103,7 @@ public:
         const std::string &callerName,
         const std::vector<cv::cuda::GpuMat>& batch,
         cv::cuda::Stream &stream = cv::cuda::Stream::Null(),
-        uint8_t IMG_TYPE = CV_8UC3 
+        uint8_t IMG_TYPE = CV_8UC3
     );
 
     inline void normalize(

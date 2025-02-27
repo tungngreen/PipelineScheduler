@@ -69,14 +69,11 @@ endif ()
 # Threads
 find_package(Threads REQUIRED)
 
-# CUDA
-set(CUDA_TOOLKIT_ROOT_DIR /usr/local/cuda)
+# CUDA & OpenCV
 find_package(CUDA REQUIRED)
+find_package(OpenCV REQUIRED)
 find_package(CUDAToolkit REQUIRED)
 find_package(PythonLibs 3 REQUIRED)
-
-#OpenCV
-find_package(OpenCV REQUIRED)
 
 # Protobuf
 option(protobuf_MODULE_COMPATIBLE TRUE)
@@ -132,7 +129,8 @@ find_package(Torch REQUIRED)
 find_package(Boost REQUIRED)
 include_directories(${Boost_INCLUDE_DIR})
 
-# gRPC
+# Find gRPC installation
+# Looks for gRPCConfig.cmake file installed by gRPC's cmake installation.
 set(gRPC_DIR /grpc/lib/cmake/grpc)
 message(${gRPC_DIR})
 find_package(gRPC CONFIG REQUIRED)
@@ -183,6 +181,55 @@ else()
         set(TensorRT_DIR /TensorRT/)
     endif ()
     find_package(TensorRT REQUIRED)
+    find_package(CUDA REQUIRED)
+    find_package(OpenCV REQUIRED)
+    find_package(CUDAToolkit REQUIRED)
+    # find_package(LightGBM REQUIRED)
+
+    # Manually specify the path to Python
+    set(PYTHON_INCLUDE_DIR "/usr/include/python3.8")
+    include_directories(${PYTHON_INCLUDE_DIR})
+
+    # Find Protobuf installation
+    option(protobuf_MODULE_COMPATIBLE TRUE)
+    find_package(Protobuf CONFIG REQUIRED)
+    message(STATUS "Using protobuf ${Protobuf_VERSION}")
+
+    set(_PROTOBUF_LIBPROTOBUF protobuf::libprotobuf)
+    set(_REFLECTION gRPC::grpc++_reflection)
+    if (CMAKE_CROSSCOMPILING)
+    find_program(_PROTOBUF_PROTOC protoc)
+    else ()
+    set(_PROTOBUF_PROTOC $<TARGET_FILE:protobuf::protoc>)
+    endif ()
+
+    # Find Boost installation
+    find_package(Boost REQUIRED)
+    include_directories(${Boost_INCLUDE_DIR})
+
+
+    # Set the path to the gRPC installation
+    set(CMAKE_PREFIX_PATH "/grpc" ${CMAKE_PREFIX_PATH})
+    # Find gRPC installation
+    # Looks for gRPCConfig.cmake file installed by gRPC's cmake installation.
+    find_package(gRPC CONFIG REQUIRED)
+    message(STATUS "Using gRPC ${gRPC_VERSION}")
+
+    set(_GRPC_GRPCPP gRPC::grpc++)
+    if (CMAKE_CROSSCOMPILING)
+    find_program(_GRPC_CPP_PLUGIN_EXECUTABLE grpc_cpp_plugin)
+    else ()
+    set(_GRPC_CPP_PLUGIN_EXECUTABLE $<TARGET_FILE:gRPC::grpc_cpp_plugin>)
+    endif ()
+
+    find_package(spdlog REQUIRED)
+
+    find_package(PostgreSQL REQUIRED)
+    find_package(PkgConfig REQUIRED)
+    pkg_check_modules(LIBPQXX REQUIRED libpqxx)
+
+    # Manually specify the path to the protobufprotocols
+    set(protobufprotocols_DIR "${CMAKE_CURRENT_BINARY_DIR}/../protobufprotocols")
 
     add_subdirectory(libs/trtengine)
     add_subdirectory(libs/utils/onnx2trt)
@@ -272,9 +319,7 @@ else()
     add_executable(Container_CarBrand libs/workloads/carbrand/carbrand.cpp)
     target_link_libraries(Container_CarBrand carbrand)
 
-if (${SYSTEM_NAME} STREQUAL "FCPO")
-        add_executable(RL_OfflineTraining libs/fcpo_learning/offline_training.cpp)
-        target_link_libraries(RL_OfflineTraining fcpo_learning absl::flags absl::flags_parse)
-    endif()
+    add_executable(RL_OfflineTraining libs/fcpo_learning/offline_training.cpp)
+    target_link_libraries(RL_OfflineTraining fcpo_learning absl::flags absl::flags_parse)
 
 endif()
