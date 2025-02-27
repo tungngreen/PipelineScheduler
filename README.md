@@ -7,7 +7,7 @@ When using our Code please cite the following paper:
 
 ## Branches
 
-The repository has 2 main branches for the different devices used in the experiments: Edge server (this one) and Jetsons
+The repository has 2 main branches for the different devices used in the experiments: Edge server (this one) and [Jetsons](https://anonymous.4open.science/r/fcpo-jetson)
 This is because of library conflicts and easier tracking of the configurations used during the runtime.
 The sub-branches contain all changes from master, with additional device specific modifications e.g. in the profiler.
 
