@@ -962,8 +962,8 @@ void ContainerAgent::collectRuntimeMetrics() {
         uint64_t timeDiff;
         if (reportHwMetrics) {
             if (timePointCastMillisecond(startTime) >= timePointCastMillisecond(cont_metricsServerConfigs.nextHwMetricsScrapeTime) && pid > 0) {
-                Profiler::sysStats stats = profiler->reportAtRuntime(pid);
-                cont_hwMetrics = {stats.cpuUsage, stats.processMemoryUsage, stats.processMemoryUsage, stats.gpuUtilization,
+                Profiler::sysStats stats = profiler->reportAtRuntime(getpid(), pid);
+                cont_hwMetrics = {stats.cpuUsage, stats.processMemoryUsage, stats.rssMemory, stats.gpuUtilization,
                                              stats.gpuMemoryUsage};
                 metricsStopwatch.stop();
                 scrapeLatencyMillisec = (uint64_t) std::ceil(metricsStopwatch.elapsed_microseconds() / 1000.f);

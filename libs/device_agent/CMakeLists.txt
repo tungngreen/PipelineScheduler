@@ -55,7 +55,11 @@ target_compile_features(device_agent
 # we can have multiple versions installed at the same time.
 set(PROJECT_PREFIX device_agent)
 
-set (profiler_DIR "${CMAKE_CURRENT_BINARY_DIR}/../utils/profiler")
+if (DEVICE_ARCH STREQUAL "amd64")
+    set (profiler_DIR "${CMAKE_CURRENT_BINARY_DIR}/../utils/profiler")
+else ()
+    set (profiler_DIR "${CMAKE_CURRENT_BINARY_DIR}/../utils/profiler-jetson")
+endif ()
 find_package(profiler CONFIG REQUIRED)
 
 set(microservice_DIR "${CMAKE_CURRENT_BINARY_DIR}/../microservice")
