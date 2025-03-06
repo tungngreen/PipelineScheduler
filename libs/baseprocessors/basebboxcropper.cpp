@@ -457,8 +457,8 @@ void BaseBBoxCropper::cropping() {
                 } else {
                     continue;
                 }
-            }else {
-            // Otherwise, we need to do some cropping.
+            } else {
+                // Otherwise, we need to do some cropping.
 
                 // First we need to set the infer_h,w and the original h,w of the image.
                 // infer_h,w are given in the last dimension of the request data from the inferencer

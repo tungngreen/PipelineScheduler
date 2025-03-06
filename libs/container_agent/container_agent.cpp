@@ -88,7 +88,6 @@ void manageJsonConfigs(json &configs) {
     if (containerConfigs->at("cont_taskName") == "dsrc") {
         (*containerConfigs)["cont_maxBatchSize"] = 30; // we only support 30 fps for one source
     } else {
-        std::cout << containerConfigs->at("cont_pipeline")[3].dump(4) << std::endl;
         (*containerConfigs)["cont_inferModelName"] = splitString(containerConfigs->at("cont_pipeline")[3]["path"], "/").back();
         containerConfigs->at("cont_inferModelName") = splitString(containerConfigs->at("cont_inferModelName"), ".").front();
         // The maximum batch size supported by the model (for TensorRT)

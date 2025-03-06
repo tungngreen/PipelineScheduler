@@ -537,7 +537,7 @@ void BaseBBoxCropperAugmentation::cropping() {
                                     currReq_recvTime - currReq.req_origGenTime[i][3]).count());
                 }
             }
-
+            // Clearing out data of the vector
             singleImageBBoxList.clear();
         }
         // // Free all the output buffers of trtengine after cropping is done.

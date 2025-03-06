@@ -356,7 +356,7 @@
     },
     "profiling": {
         "profile_minBatch": 1,
-        "profile_maxBatch": 16,
+        "profile_maxBatch": 64,
         "profile_stepMode": 1,
         "profile_step": 1,
         "profile_templateModelPath": "../models/age_dynamic_3090_fp32_[batch]_1.engine",

@@ -17,7 +17,7 @@ bar_width = 0.2
 x_labels = ['traffic', 'surveillance']
 x = np.arange(len(x_labels))
 algorithm_names = ['OURS', 'dis', 'jlf', 'rim']
-colors = ['#0072B2', '#E69F00', '#CC79A7', '#009E73', '#56B4E9', '#F0E442', '#D55E00']
+colors = ['#0072B2', '#E69F00', '#009E73', '#CC79A7', '#56B4E9', '#F0E442', '#D55E00']
 markers = ['', 'x', 'o', '*', '//', '\\\\']  # plain, triangle, circle, star, stripes left and right
 label_map = {'ppp': 'OctopInf', 'OURS': 'OctopInf', 'dis': 'Distream', 'jlf': 'Jellyfish', 'rim': 'Rim'}
 
@@ -116,6 +116,18 @@ def base_plot(data, ax, title, sum_throughput=False, labels=algorithm_names, use
                 ax.text(x[0] + j * bar_width, traffic_intime, f'{traffic_intime:.0f}', ha='center', va='bottom', size=10)
                 ax.text(x[1] + j * bar_width, people_intime, f'{people_intime:.0f}', ha='center', va='bottom', size=10)
 
+        if a == 'OURS':
+            striped_patch = mpatches.Patch(facecolor='grey', alpha=0.5, hatch='//', edgecolor='white', label='Thrpt')
+            solid_patch = mpatches.Patch(facecolor='grey', label='Effect. Thrpt')
+            line_patch = Line2D([0], [0], color='red', linestyle='--', linewidth=2, label='Workload')
+            mpl.rcParams['hatch.linewidth'] = 2
+
+            if sum_throughput:
+                ax.legend(handles=[striped_patch, solid_patch, line_patch], loc='lower left', fontsize=10, frameon=True)
+            else:
+                ax2 = ax.twinx()
+                ax2.set_yticks([])
+                ax2.legend(handles=[striped_patch, solid_patch, line_patch], loc='upper center', fontsize=10, frameon=True)
 
     if sum_throughput:
         ax.axhline(y=data['max_traffic_throughput'] + data['max_people_throughput'], color='red', linestyle='--',

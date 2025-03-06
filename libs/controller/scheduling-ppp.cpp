@@ -189,7 +189,7 @@ void Controller::Scheduling() {
         if (ctrl_controlTimings.currSchedulingTime >= ctrl_controlTimings.nextRescalingTime &&
             (ctrl_controlTimings.currSchedulingTime < ctrl_controlTimings.nextSchedulingTime &&
              std::chrono::duration_cast<std::chrono::seconds>(ctrl_controlTimings.nextSchedulingTime - ctrl_controlTimings.currSchedulingTime).count() >= 30)) {
-            //Rescaling();
+            Rescaling();
             schedulingSW.stop();
             ctrl_controlTimings.nextRescalingTime = ctrl_controlTimings.currSchedulingTime + std::chrono::seconds(ctrl_controlTimings.rescalingIntervalSec -
                                                                                                                   schedulingSW.elapsed_microseconds() / 1000000);
@@ -999,15 +999,6 @@ TaskHandle* Controller::mergePipelines(const std::string& taskName) {
             if (task.first.find(taskName) == std::string::npos) {
                 continue;
             }
-            // If model is not scheduled to be run on the server, we should not merge it.
-            // However, the model is still
-            /*if (task.second->tk_pipelineModels[i]->device != "server") {
-                mergedPipeline->tk_pipelineModels.emplace_back(new PipelineModel(*task.second->tk_pipelineModels[i]));
-                task.second->tk_pipelineModels[i]->merged = true;
-                task.second->tk_pipelineModels[i]->toBeRun = false;
-                mergedPipeline->tk_pipelineModels.back()->toBeRun = false;
-                continue;
-            }*/
             // If the model devices are different from another we should not merge it.
             if (mergedPipeline->tk_pipelineModels[i]->device != task.second->tk_pipelineModels[i]->device) {
                 // search the vector of models in the merged pipeline to find another merge candidate
@@ -1036,14 +1027,6 @@ TaskHandle* Controller::mergePipelines(const std::string& taskName) {
             task.second->tk_pipelineModels.at(i)->merged = true;
             task.second->tk_pipelineModels.at(i)->toBeRun = false;
         }
-        // auto numIncReps = incNumReplicas(mergedPipeline.tk_pipelineModels[i]);
-        // mergedPipeline.tk_pipelineModels[i]->numReplicas += numIncReps;
-        // auto deviceList = devices.getMap();
-        // for (auto j = 0; j < mergedPipeline.tk_pipelineModels[i]->numReplicas; j++) {
-        //     mergedPipeline.tk_pipelineModels[i]->manifestations.emplace_back(new ContainerHandle{});
-        //     mergedPipeline.tk_pipelineModels[i]->manifestations.back()->task = &mergedPipeline;
-        //     mergedPipeline.tk_pipelineModels[i]->manifestations.back()->device_agent = deviceList.at(mergedPipeline.tk_pipelineModels[i]->device);
-        // }
     }
     for (auto &model : mergedPipeline->tk_pipelineModels) {
         // If toBeRun is true means the model is not a newly added one, there's no need to modify its up and downstreams

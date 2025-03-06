@@ -574,6 +574,7 @@ namespace trt {
 
     void from_json(const nlohmann::json &j, TRTConfigs &val);
 }
+
 class Stopwatch {
 private:
     std::chrono::high_resolution_clock::time_point start_time;

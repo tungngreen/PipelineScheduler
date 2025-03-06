@@ -83,6 +83,12 @@ RUN apt install libspdlog-dev libpqxx-dev -y
 # Install posgresql-client
 RUN apt install postgresql-client -y
 
+# Store load time model
+ARG upload_model="upload_model_orn.txt"
+ARG download_model="download_model_orn.txt"
+COPY ${upload_model} /ltmodel
+COPY ${download_model} /ltmodel
+
 # Install LightGBM
 ARG LIGHTGBM_SRC_DIR=/lightgbm-src
 RUN mkdir -p ${LIGHTGBM_SRC_DIR}
