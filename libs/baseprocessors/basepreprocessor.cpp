@@ -334,6 +334,7 @@ void BasePreprocessor::preprocess() {
             break;
         } else if (PAUSE_THREADS) {
             if (RELOADING) {
+                spdlog::get("container_agent")->info("{0:s} is (RE)LOADING.", msvc_name);
                 if (msvc_toReloadConfigs) {
                     loadConfigs(msvc_configs, true);
                     msvc_toReloadConfigs = false;
@@ -354,11 +355,10 @@ void BasePreprocessor::preprocess() {
                 RELOADING = false;
                 READY = true;
             }
-            //info("{0:s} is being PAUSED.", msvc_name);
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
             continue;
         }
-        currCPUReq = msvc_InQueue.at(0)->pop1();
-
+        spdlog::get("container_agent")->trace("{0:s} is entering the loop.", msvc_name);
         if (flush) {
             spdlog::get("container_agent")->trace("{0:s} is flushing the buffer.", msvc_name);
             if (msvc_concat.currIndex != 0) {
@@ -378,7 +378,7 @@ void BasePreprocessor::preprocess() {
             });
         }
 
-        currCPUReq = msvc_InQueue.at(0)->pop1(true);
+        currCPUReq = msvc_InQueue.at(0)->pop1(msvc_name, true);
 
         if (!validateRequest<LocalCPUReqDataType>(currCPUReq)) {
             continue;
@@ -394,7 +394,7 @@ void BasePreprocessor::preprocess() {
 
         if (msvc_concat.currIndex == 0) {
             // Create a new frame to hold the concatenated images
-            outReq = {};
+            outReq = Request<LocalGPUReqDataType>{};
             outReq.req_origGenTime = {};
             outReq.req_e2eSLOLatency = {};
             outReq.req_travelPath = {};
@@ -407,11 +407,6 @@ void BasePreprocessor::preprocess() {
 
             outReq.req_concatInfo = {RequestConcatInfo{msvc_concat.numImgs, 0, 0}};
             outReq.upstreamReq_data = {};
-
-            // std::mt19937 gen(std::random_device{}());
-            // std::uniform_int_distribution<int> dis(1, 4);
-            // randomNumImgs = dis(gen);
-            
         }
 
         outReq.req_origGenTime.emplace_back(currReq.req_origGenTime[0]);
@@ -478,6 +473,7 @@ void BasePreprocessor::preprocess() {
             //     saveGPUAsImg(bufferData.back().data, "concatBuffer.jpg");
             // }
         }
+        spdlog::get("container_agent")->trace("{0:s} is exiting the loop.", msvc_name);
 
         /**
          * @brief ONLY IN PROFILING MODE

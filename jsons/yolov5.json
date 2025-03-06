@@ -1,7 +1,7 @@
 {
     "container": {
-        "cont_experimentName": "run",
-        "cont_systemName": "ppp",
+        "cont_experimentName": "rl1",
+        "cont_systemName": "fcpo",
         "cont_pipeName": "traffic",
         "cont_taskName": "yolov5",
         "cont_hostDevice": "server",
@@ -389,5 +389,20 @@
         "profile_numWarmUpBatches": 10,
         "profile_numProfileBatches": 100,
         "profile_numProfileReqs": 1800
+    },
+    "fcpo": {
+        "state_size": 7,
+        "resolution_size": 4,
+        "batch_size": 16,
+        "threads_size": 4,
+        "lambda": 0.2,
+        "gamma": 0.2,
+        "clip_epsilon": 0.9,
+        "penalty_weight": 0.2,
+        "precision": "float",
+        "update_steps": 150,
+        "update_step_incs": 10,
+        "federated_steps": 10,
+        "seed": 42
     }
 }

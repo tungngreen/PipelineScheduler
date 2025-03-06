@@ -112,20 +112,6 @@ struct BaseClassifierConfigs : BaseMicroserviceConfigs {
     uint16_t msvc_numClasses;
 };
 
-struct ConcatDims {
-    int32_t x1, y1, width, height;
-};
-
-typedef std::vector<ConcatDims> ConcatConfig;
-
-struct ConcatConfigs {
-    uint8_t numImgs = 1;
-    uint8_t currIndex = 0;
-
-    std::vector<ConcatConfig> list;
-};
-
-
 void concatConfigsGenerator(
     const RequestShapeType &inferenceShapes,
     ConcatConfigs &concat,
@@ -198,10 +184,6 @@ protected:
 
     inline bool isTimeToBatch() override;
 
-    template <typename T>
-    bool validateRequest(Request<T> &req);
-
-    
     inline void executeBatching(BatchTimeType &genTime, RequestSLOType &slo, RequestPathType &path,
                              std::vector<RequestData<LocalGPUReqDataType>> &bufferData,
                              BatchConcatInfo &concatInfo,
@@ -338,6 +320,7 @@ public:
 
         msvc_concat.numImgs = jsonConfigs["msvc_concat"];
     };
+
     virtual ProcessRecordType getProcessRecords()  {
         return msvc_processRecords.getRecords();
     }

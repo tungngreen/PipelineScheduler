@@ -5,7 +5,7 @@
 PipelineScheduler is a system which enables the highest performance in terms of throughput and latency for can find the **optimal workload distribution** to split the pipelines between the server and the Edge devices, and set the **optimal batch sizes** for them to ensure the best throughput and latency against challenges such as *content dynamics* and *network instability*.
 PipelineScheduler also considers *resource contention* and is equipped with **inference spatiotemporal scheduling** to mitigate the adverse effects of *co-location interference*.
 
-The current stage of PipelineScheduler is the implementation for our [IEEE PerCom 2025](https://www.percom.org/) full paper, titled **"OCTOPINF: Workload-Aware Real-Time Inference Serving for Edge Video Analytics"**, available [here](). Future improvements will be continually updated. Architectural diagram:
+The current stage of PipelineScheduler is the implementation for our [ICDCS 2025](https://icdcs2025.icdcs.org/) full paper, titled **"FCPO: Federated Continual Policy Optimization with Heterogeneous Action Spaces for Real-Time High-Throughput Edge Video Analytics"**, available [here](). Future improvements will be continually updated. Architectural diagram:
 
 ![overall-arch](/assets/overall-arch.png)
 
@@ -89,7 +89,7 @@ It is worth taking a look at their structures before proceeding to the next part
 Besides general metadata like:
 ```json
     "cont_experimentName": "prof",
-    "cont_systemName": "ppp",
+    "cont_systemName": "fcpo",
     "cont_pipeName": "traffic",
     "cont_taskName": "retina1face",
     "cont_hostDevice": "server",
@@ -197,8 +197,8 @@ The first step is to build the source code, here you can use multiple options fo
 * The **Controller**
     ```bash
     mkdir build_host && cd build_host
-    cmake -DSYSTEM_NAME=[PPP, DIS, JLF, RIM] -DON_HOST=True -DDEVICE_ARCH=platform_name
-    # Ours is PPP (standing for PipePlusPlus)
+    cmake -DSYSTEM_NAME=[FCPO, PPP, DIS, JLF, RIM, BCE] -DON_HOST=True -DDEVICE_ARCH=platform_name
+    # Ours are FCPO and PPP (standing for PipePlusPlus ~ OctopInf)
     # Platform name is amd64 or Jetson.
     make -j 64 Controller
     ```
@@ -206,8 +206,8 @@ The first step is to build the source code, here you can use multiple options fo
 * The **Device Agent** 
     ```bash
     mkdir build_host && cd build_host
-    cmake -DSYSTEM_NAME=[PPP, DIS, JLF, RIM] -DON_HOST=True -DDEVICE_ARCH=platform_name
-    # Ours is PPP (standing for PipePlusPlus)
+    cmake -DSYSTEM_NAME=[FCPO, PPP, DIS, JLF, RIM, BCE] -DON_HOST=True -DDEVICE_ARCH=platform_name
+    # Ours are FCPO and PPP (standing for PipePlusPlus ~ OctopInf)
     # Platform name is amd64 or Jetson.
     make -j 64 Device_Agent
     ```
@@ -215,8 +215,8 @@ The first step is to build the source code, here you can use multiple options fo
 * The microservices **inside each container**
     ```bash
     mkdir build && cd build
-    cmake -DSYSTEM_NAME=[PPP, DIS, JLF, RIM] -DON_HOST=False -DDEVICE_ARCH=platform_name
-    # Ours is PPP (standing for PipePlusPlus)
+    cmake -DSYSTEM_NAME=[FCPO, PPP, DIS, JLF, RIM, BCE] -DON_HOST=False -DDEVICE_ARCH=platform_name
+    # Ours are FCPO and PPP (standing for PipePlusPlus ~ OctopInf)
     # Platform name is amd64 or Jetson.
     make -j 64 Container_[name]
     # Name of the model. YoloV5 for instance.
@@ -231,8 +231,8 @@ Models need to be prepared according to fit the current hardware and software in
 * Build
     ```bash
     mkdir build && cd build
-    cmake -DSYSTEM_NAME=[PPP, DIS, JLF, RIM] -DON_HOST=False -DDEVICE_ARCH=platform_name
-    # Ours is PPP (standing for PipePlusPlus)
+    cmake -DSYSTEM_NAME=[FCPO, PPP, DIS, JLF, RIM, BCE] -DON_HOST=False -DDEVICE_ARCH=platform_name
+    # Ours are FCPO and PPP (standing for PipePlusPlus ~ OctopInf)
     # Platform name is amd64 or Jetson.
     make -j 64 convert_onnx2trt
     ```
@@ -250,7 +250,7 @@ Models need to be prepared according to fit the current hardware and software in
 ## Running
 * Step 1: Running the **Controller**.
     ```bash
-    ./Controller --ctrl_configPath ../jsons/experiments/full-run-ppp.json
+    ./Controller --ctrl_configPath ../jsons/experiments/full-run-fcpo.json
     ```
     * The guideline to set configurations for controller run is available [here](/jsons/experiments/README).
 * Step 2: Once the **Controller** is running, run a **Device Agent** on each device.

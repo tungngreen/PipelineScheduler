@@ -39,6 +39,19 @@ if(SYSTEM_NAME STREQUAL "PPP")
                 controller.cpp
                 scheduling-ppp.cpp
         )
+elseif (SYSTEM_NAME STREQUAL "FCPO")
+        set(
+                HEADER_FILES
+                controller.h
+                scheduling-fcpo.h
+        )
+
+        # All source files and private header files go here.
+        set(
+                SOURCE_FILES
+                controller.cpp
+                scheduling-fcpo.cpp
+        )
 elseif (SYSTEM_NAME STREQUAL "JLF")
         set(
                 HEADER_FILES
@@ -99,6 +112,9 @@ target_compile_features(controller
 # we can have multiple versions installed at the same time.
 set(PROJECT_PREFIX controller)
 
+set(fcpo_learning_DIR "${CMAKE_CURRENT_BINARY_DIR}/../fcpo_learning")
+find_package(fcpo_learning CONFIG REQUIRED)
+
 set(microservice_DIR "${CMAKE_CURRENT_BINARY_DIR}/../microservice")
 find_package(microservice CONFIG REQUIRED)
 
@@ -119,6 +135,7 @@ target_include_directories(controller
 
 target_link_libraries(controller
         PUBLIC
+        device_comm_grpc_proto
         control_comm_grpc_proto
         control_mess_grpc_proto
         absl::flags
@@ -127,6 +144,7 @@ target_link_libraries(controller
         ${_REFLECTION}
         ${_PROTOBUF_LIBPROTOBUF}
         ${CMAKE_THREAD_LIBS_INIT}
+        fcpo_learning
         microservice
         # ${LIGHTGBM_LIBRARY}
 )

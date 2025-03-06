@@ -17,7 +17,7 @@ void run_receiver(Receiver &receiver, bool gpu, int size) {
     receiver.PAUSE_THREADS = false;
     while (i < 100) {
         if (gpu) {
-            auto tmp = queue->pop2();
+            auto tmp = queue->pop2("communication-main");
             if (strcmp(tmp.req_travelPath[0].c_str(), "empty") == 0) {
                 continue;
             }
@@ -28,7 +28,7 @@ void run_receiver(Receiver &receiver, bool gpu, int size) {
             }
             file << std::endl;
         } else {
-            auto tmp = queue->pop1();
+            auto tmp = queue->pop1("main");
             if (strcmp(tmp.req_travelPath[0].c_str(), "empty") == 0) {
                 continue;
             }

@@ -146,8 +146,7 @@ DeviceAgent::DeviceAgent(const std::string &controller_url) : DeviceAgent() {
             sql += "gpu_" + std::to_string(i) + "_usage INT," // percentage (1-100)
                    "gpu_" + std::to_string(i) + "_mem_usage INT,"; // Megabytes
         };
-        sql += "   PRIMARY KEY (timestamps)"
-                                                                                    ");";
+        sql += "   PRIMARY KEY (timestamps));";
         pushSQL(*dev_metricsServerConn, sql);
 
         sql = "GRANT ALL PRIVILEGES ON " + dev_hwMetricsTableName + " TO " + "controller, container_agent" + ";";
@@ -158,6 +157,14 @@ DeviceAgent::DeviceAgent(const std::string &controller_url) : DeviceAgent() {
 
         sql = "CREATE INDEX ON " + dev_hwMetricsTableName + " (timestamps);";
         pushSQL(*dev_metricsServerConn, sql);
+    }
+
+    if (dev_system_name == "bce") {
+        if (dev_type == SystemDeviceType::Server || dev_type == SystemDeviceType::OnPremise) {
+            dev_bcedge_agent = new BCEdgeAgent(dev_name, 3500, torch::kF32, 0);
+        } else {
+            dev_bcedge_agent = new BCEdgeAgent(dev_name, 3000000, torch::kF32, 0);
+        }
     }
 
     running = true;
@@ -206,7 +213,7 @@ void DeviceAgent::collectRuntimeMetrics() {
                 if (container.second.pid > 0) {
                     Profiler::sysStats stats = dev_profiler->reportAtRuntime(container.second.pid, container.second.pid);
                     container.second.hwMetrics = {stats.cpuUsage, stats.processMemoryUsage, stats.rssMemory, stats.gpuUtilization,
-                                    stats.gpuMemoryUsage};
+                                                  stats.gpuMemoryUsage};
                     spdlog::get("container_agent")->trace("{0:s} SCRAPE hardware metrics. Latency {1:d}ms.",
                                                         dev_name,
                                                         scrapeLatencyMillisec);
@@ -333,17 +340,23 @@ bool DeviceAgent::CreateContainer(ContainerConfig &c) {
     spdlog::get("container_agent")->info("Creating container: {}", c.name());
     try {
         std::string command = runDocker(c.executable(), c.name(), c.json_config(), c.device(), c.control_port());
-        if (command == "") {
-            return false;
-        }
         std::string target = absl::StrFormat("%s:%d", "localhost", c.control_port());
         if (c.name().find("sink") != std::string::npos) {
             return true;
         }
+        std::vector<int> dims = {};
+        for (auto &dim: c.input_shape()) {
+            dims.push_back(dim);
+        }
         std::lock_guard<std::mutex> lock(containers_mutex);
-        containers[c.name()] = {InDeviceCommunication::NewStub(
+        containers[c.name()] = {InDeviceCommands::NewStub(
                 grpc::CreateChannel(target, grpc::InsecureChannelCredentials())),
-                                new CompletionQueue(), static_cast<unsigned int>(c.control_port()), 0, command, {}};
+                                new CompletionQueue(), static_cast<unsigned int>(c.control_port()), 0, command,
+                                static_cast<ModelType>(c.model_type()), dims, 1, {}};
+
+        if (command == "") {
+            return false;
+        }
         return true;
     } catch (std::exception &e) {
         spdlog::get("container_agent")->error("Error creating container: {}", e.what());
@@ -371,21 +384,20 @@ void DeviceAgent::ContainersLifeCheck() {
         void *got_tag;
         bool ok = false;
         if (cq != nullptr) GPR_ASSERT(cq->Next(&got_tag, &ok));
-        if (!status.ok()){
-            container.second.pid = 0;
-            runDocker(container.second.startCommand);
+        if (!status.ok() && container.second.startCommand != "") {
+            if (runDocker(container.second.startCommand) != 0) {
+                container.second.pid = 0;
+            }
         }
     }
 }
 
-void DeviceAgent::StopContainer(const DevContainerHandle &container, bool forced) {
-    indevicecommunication::Signal request;
+void DeviceAgent::StopContainer(const DevContainerHandle &container, ContainerSignal message) {
     EmptyMessage reply;
     ClientContext context;
     Status status;
-    request.set_forced(forced);
     std::unique_ptr<ClientAsyncResponseReader<EmptyMessage>> rpc(
-            container.stub->AsyncStopExecution(&context, request, container.cq));
+            container.stub->AsyncStopExecution(&context, message, container.cq));
 
     rpc->Finish(&reply, &status, (void *)1);
     void *got_tag;
@@ -419,7 +431,7 @@ void DeviceAgent::UpdateContainerSender(int mode, const std::string &cont_name, 
 }
 
 void DeviceAgent::SyncDatasources(const std::string &cont_name, const std::string &dsrc) {
-    indevicecommunication::Int32 request;
+    indevicecommands::Int32 request;
     EmptyMessage reply;
     ClientContext context;
     Status status;
@@ -482,6 +494,10 @@ void DeviceAgent::Ready(const std::string &ip, SystemDeviceType type) {
 
 void DeviceAgent::HandleDeviceRecvRpcs() {
     new ReportStartRequestHandler(&device_service, device_cq.get(), this);
+    new StartFederatedLearningRequestHandler(&device_service, device_cq.get(), this);
+    if (dev_system_name == "bce") {
+        new BCEdgeConfigUpdateRequestHandler(&device_service, device_cq.get(), this);
+    }
     void *tag;
     bool ok;
     while (running) {
@@ -497,9 +513,11 @@ void DeviceAgent::HandleControlRecvRpcs() {
     new ExecuteNetworkTestRequestHandler(&controller_service, controller_cq.get(), this);
     new StartContainerRequestHandler(&controller_service, controller_cq.get(), this);
     new UpdateDownstreamRequestHandler(&controller_service, controller_cq.get(), this);
+    new SyncDatasourceRequestHandler(&controller_service, controller_cq.get(), this);
     new UpdateBatchsizeRequestHandler(&controller_service, controller_cq.get(), this);
     new UpdateResolutionRequestHandler(&controller_service, controller_cq.get(), this);
     new UpdateTimeKeepingRequestHandler(&controller_service, controller_cq.get(), this);
+    new ReturnFlRequestHandler(&controller_service, controller_cq.get(), this);
     new StopContainerRequestHandler(&controller_service, controller_cq.get(), this);
     new ShutdownRequestHandler(&controller_service, controller_cq.get(), this);
     void *tag;
@@ -537,12 +555,57 @@ void DeviceAgent::ReportStartRequestHandler::Proceed() {
         service->RequestReportMsvcStart(&ctx, &request, &responder, cq, cq, this);
     } else if (status == PROCESS) {
         new ReportStartRequestHandler(service, cq, device_agent);
-
         int pid = getContainerProcessPid(request.msvc_name());
         device_agent->containers[request.msvc_name()].pid = pid;
         device_agent->dev_profiler->addPid(pid);
         spdlog::get("container_agent")->info("Received start report from {} with pid: {}", request.msvc_name(), pid);
         reply.set_pid(pid);
+        status = FINISH;
+        responder.Finish(reply, Status::OK, this);
+    } else {
+        GPR_ASSERT(status == FINISH);
+        delete this;
+    }
+}
+
+void DeviceAgent::StartFederatedLearningRequestHandler::Proceed() {
+    if (status == CREATE) {
+        status = PROCESS;
+        service->RequestStartFederatedLearning(&ctx, &request, &responder, cq, cq, this);
+    } else if (status == PROCESS) {
+        new StartFederatedLearningRequestHandler(service, cq, device_agent);
+        ClientContext context;
+        Status sending_status;
+        CompletionQueue* sending_cq = device_agent->controller_sending_cq;
+        request.set_device_name(device_agent->dev_name);
+        std::unique_ptr<ClientAsyncResponseReader<EmptyMessage>> rpc(
+                device_agent->controller_stub->AsyncForwardFl(&context, request, sending_cq));
+        rpc->Finish(&reply, &sending_status, (void *)1);
+        void *got_tag;
+        bool ok = false;
+        if (sending_cq != nullptr) GPR_ASSERT(sending_cq->Next(&got_tag, &ok));
+        status = FINISH;
+        responder.Finish(reply, sending_status, this);
+    } else {
+        GPR_ASSERT(status == FINISH);
+        delete this;
+    }
+}
+
+void DeviceAgent::BCEdgeConfigUpdateRequestHandler::Proceed() {
+    if (status == CREATE) {
+        status = PROCESS;
+        service->RequestBCEdgeConfigUpdate(&ctx, &request, &responder, cq, cq, this);
+    } else if (status == PROCESS) {
+        new BCEdgeConfigUpdateRequestHandler(service, cq, device_agent);
+        DevContainerHandle *node = &device_agent->containers[request.msvc_name()];
+        device_agent->dev_bcedge_agent->rewardCallback(request.throughput(), request.latency(), request.slo(), node->hwMetrics.gpuMemUsage);
+        device_agent->dev_bcedge_agent->setState(node->modelType, node->dataShape, request.slo());
+        int batching, scaling, memory;
+        std::tie(batching, scaling, memory) = device_agent->dev_bcedge_agent->runStep();
+        reply.set_batch_size(batching);
+        node->instances = scaling;
+        reply.set_shared_mem_config(memory);
         status = FINISH;
         responder.Finish(reply, Status::OK, this);
     } else {
@@ -608,7 +671,7 @@ void DeviceAgent::StopContainerRequestHandler::Proceed() {
             unsigned int pid = device_agent->containers[request.name()].pid;
             device_agent->containers[request.name()].pid = 0;
             spdlog::get("container_agent")->info("Stopping container: {}", request.name());
-            DeviceAgent::StopContainer(device_agent->containers[request.name()], request.forced());
+            DeviceAgent::StopContainer(device_agent->containers[request.name()], request);
             std::lock_guard<std::mutex> lock(device_agent->containers_mutex);
             device_agent->containers.erase(request.name());
             device_agent->dev_profiler->removePid(pid);
@@ -659,7 +722,7 @@ void DeviceAgent::UpdateBatchsizeRequestHandler::Proceed() {
         new UpdateBatchsizeRequestHandler(service, cq, device_agent);
         ClientContext context;
         Status state;
-        indevicecommunication::Int32 bs;
+        indevicecommands::Int32 bs;
         bs.set_value(request.value().at(0));
 
         //check if cont_name is in containers
@@ -693,7 +756,7 @@ void DeviceAgent::UpdateResolutionRequestHandler::Proceed() {
         new UpdateResolutionRequestHandler(service, cq, device_agent);
         ClientContext context;
         Status state;
-        indevicecommunication::Dimensions dims;
+        indevicecommands::Dimensions dims;
         dims.set_channels(request.value().at(0));
         dims.set_height(request.value().at(1));
         dims.set_width(request.value().at(2));
@@ -731,13 +794,6 @@ void DeviceAgent::UpdateTimeKeepingRequestHandler::Proceed() {
 
         ClientContext context;
         Status state;
-        indevicecommunication::TimeKeeping tk;
-        tk.set_slo(request.slo());
-        tk.set_time_budget(request.time_budget());
-        tk.set_start_time(request.start_time());
-        tk.set_end_time(request.end_time());
-        tk.set_local_duty_cycle(request.local_duty_cycle());
-        tk.set_cycle_start_time(request.cycle_start_time());
 
         //check if cont_name is in containers
         if (device_agent->containers.find(request.name()) == device_agent->containers.end()) {
@@ -746,7 +802,7 @@ void DeviceAgent::UpdateTimeKeepingRequestHandler::Proceed() {
             return;
         }
         std::unique_ptr<ClientAsyncResponseReader<EmptyMessage>> rpc(
-                device_agent->containers[request.name()].stub->AsyncUpdateTimeKeeping(&context, tk,
+                device_agent->containers[request.name()].stub->AsyncUpdateTimeKeeping(&context, request,
                                                                                      device_agent->containers[request.name()].cq));
 
         rpc->Finish(&reply, &state, (void *)1);
@@ -754,6 +810,35 @@ void DeviceAgent::UpdateTimeKeepingRequestHandler::Proceed() {
         bool ok = false;
         if (device_agent->containers[request.name()].cq != nullptr) GPR_ASSERT(device_agent->containers[request.name()].cq->Next(&got_tag, &ok));
         status = FINISH;
+    } else {
+        GPR_ASSERT(status == FINISH);
+        delete this;
+    }
+}
+
+void DeviceAgent::ReturnFlRequestHandler::Proceed() {
+    if (status == CREATE) {
+        status = PROCESS;
+        service->RequestReturnFl(&ctx, &request, &responder, cq, cq, this);
+    } else if (status == PROCESS) {
+        new ReturnFlRequestHandler(service, cq, device_agent);
+        ClientContext context;
+        Status sending_status;
+        CompletionQueue* sending_cq = device_agent->containers[request.name()].cq;
+        if (sending_cq == nullptr) {
+            spdlog::get("container_agent")->error("ReturnFl: Container {}'s cq is null!", request.name());
+            status = FINISH;
+            responder.Finish(reply, Status::CANCELLED, this);
+            return;
+        }
+        std::unique_ptr<ClientAsyncResponseReader<EmptyMessage>> rpc(
+                device_agent->containers[request.name()].stub->AsyncFederatedLearningReturn(&context, request, sending_cq));
+        rpc->Finish(&reply, &sending_status, (void *)1);
+        void *got_tag;
+        bool ok = false;
+        if (sending_cq != nullptr) GPR_ASSERT(sending_cq->Next(&got_tag, &ok));
+        status = FINISH;
+        responder.Finish(reply, Status::OK, this);
     } else {
         GPR_ASSERT(status == FINISH);
         delete this;

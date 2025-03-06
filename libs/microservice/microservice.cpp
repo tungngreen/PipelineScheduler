@@ -58,6 +58,7 @@ void Microservice::loadConfigs(const json &jsonConfigs, bool isConstructing) {
     msvc_hostDevice = jsonConfigs.at("msvc_hostDevice");
     msvc_systemName = jsonConfigs.at("msvc_systemName");
     msvc_BATCH_MODE = jsonConfigs.at("msvc_batchMode");
+    msvc_maxBatchSize = jsonConfigs.at("msvc_maxBatchSize");
     msvc_DROP_MODE = jsonConfigs.at("msvc_dropMode");
     msvc_timeBudgetLeft = jsonConfigs.at("msvc_timeBudgetLeft");
     msvc_pipelineSLO = jsonConfigs.at("msvc_pipelineSLO");
@@ -76,7 +77,6 @@ void Microservice::loadConfigs(const json &jsonConfigs, bool isConstructing) {
     msvc_RUNMODE = configs.msvc_RUNMODE;
 
     if (msvc_taskName != "dsrc" && msvc_taskName != "datasource") {
-        msvc_maxBatchSize = jsonConfigs.at("msvc_maxBatchSize");
         msvc_allocationMode = static_cast<AllocationMode>(jsonConfigs.at("msvc_allocationMode"));
 
         if (msvc_RUNMODE == RUNMODE::DEPLOYMENT) {

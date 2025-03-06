@@ -104,7 +104,7 @@ void BaseKPointExtractor::extractor() {
         }
 
         // Processing the next incoming request
-        currReq = msvc_InQueue.at(0)->pop2();
+        currReq = msvc_InQueue.at(0)->pop2(msvc_name);
         // Meaning the the timeout in pop() has been reached and no request was actually popped
         if (strcmp(currReq.req_travelPath[0].c_str(), "empty") == 0) {
             continue;
@@ -165,7 +165,7 @@ void BaseKPointExtractor::extractor() {
 
             for (uint8_t j = 0; j < numImagesInFrame; j++) {
                 uint16_t imageIndexInBatch = currReq.req_concatInfo[i].firstImageIndex + j;
-                totalInMem[j] = (imageList[imageIndexInBatch].data.channels() * 
+                totalInMem[j] = (imageList[imageIndexInBatch].data.channels() *
                                  imageList[imageIndexInBatch].data.rows * imageList[imageIndexInBatch].data.cols *
                                  CV_ELEM_SIZE1(imageList[imageIndexInBatch].data.type()));
                 totalOutMem[j] = totalInMem.back();
@@ -227,12 +227,18 @@ void BaseKPointExtractor::extractor() {
                             originStream,
                             getSenderHost(currReq.req_travelPath[imageIndexInBatch])
                     );
+                    if (timeNow > currReq.req_origGenTime[imageIndexInBatch][3]) {
+                        addToLatencyEWMA(
+                                std::chrono::duration_cast<TimePrecisionType>(
+                                        timeNow - currReq.req_origGenTime[imageIndexInBatch][3]).count());
+                    }
                 }
             }
         }
 
         
         msvc_batchCount++;
+        msvc_miniBatchCount++;
 
         spdlog::get("container_agent")->trace("{0:s} sleeps for {1:d} millisecond", msvc_name, msvc_interReqTime);
         std::this_thread::sleep_for(std::chrono::milliseconds(msvc_interReqTime));

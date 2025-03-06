@@ -4,6 +4,10 @@ FROM pipeplusplus:dev
 ARG VERSION=Release
 
 USER root
+
+ENV TZ=Asia/Seoul
+RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
+
 RUN mkdir /app/build -p
 COPY ./cmake /app/cmake
 COPY ./src /app/src

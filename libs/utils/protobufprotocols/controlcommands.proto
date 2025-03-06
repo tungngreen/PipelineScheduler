@@ -1,5 +1,6 @@
 syntax = "proto3";
 import "google/protobuf/empty.proto";
+import "indevicecommands.proto";
 
 option java_multiple_files = true;
 option objc_class_prefix = "HLW";
@@ -13,8 +14,9 @@ service ControlCommands {
   rpc SyncDatasource(ContainerLink) returns (google.protobuf.Empty) {}
   rpc UpdateBatchSize(ContainerInts) returns (google.protobuf.Empty) {}
   rpc UpdateResolution(ContainerInts) returns (google.protobuf.Empty) {}
-  rpc UpdateTimeKeeping(TimeKeeping) returns (google.protobuf.Empty) {}
-  rpc StopContainer(ContainerSignal) returns (google.protobuf.Empty) {}
+  rpc UpdateTimeKeeping(indevicecommands.TimeKeeping) returns (google.protobuf.Empty) {}
+  rpc ReturnFl(indevicecommands.FlData) returns (google.protobuf.Empty) {}
+  rpc StopContainer(indevicecommands.ContainerSignal) returns (google.protobuf.Empty) {}
   rpc Shutdown(google.protobuf.Empty) returns (google.protobuf.Empty) {}
 }
 
@@ -24,16 +26,8 @@ message ContainerConfig {
   string executable = 3;
   int32 device = 4;
   int32 control_port = 5;
-}
-
-message TimeKeeping {
-  string name = 1;
-  int32 slo = 2;
-  uint64 time_budget = 4;
-  uint64 start_time = 5;
-  uint64 end_time = 6;
-  uint64 local_duty_cycle = 7;
-  uint64 cycle_start_time = 8;
+  int32 model_type = 6;
+  repeated int32 input_shape = 7;
 }
 
 message ContainerLink {
@@ -42,11 +36,6 @@ message ContainerLink {
   string downstream_name = 3;
   string ip = 4;
   int32 port = 5;
-}
-
-message ContainerSignal {
-  string name = 1;
-  bool forced = 2;
 }
 
 message ContainerInts {

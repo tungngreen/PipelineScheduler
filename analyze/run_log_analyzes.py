@@ -61,7 +61,7 @@ def read_file(filepath, first = None, last = None):
                 if int(timestamps.split(',')[1]) > last:
                     last = int(timestamps.split(',')[1])
             diffs = data[i].split('|')[1]
-            if "retina1face" in data[0] or "movenet" in data[0]:
+            if "retina" in data[0] or "movenet" in data[0]:
                 people.append(
                     [path[0].split('|')[1], diffs.replace('\n', '').split(',')[0], timestamps.split(',')[0]])  # store source, latency and arrival timestamp
             else:
@@ -82,6 +82,8 @@ def analyze_single_experiment(base_dir, dirs, num_results = 3, latency_target = 
         traffic_people[d], traffic_cars[d], people_people[d], people_cars[d] = [], [], [], []
         filepath = os.path.join(base_dir, d)
         for file in natsorted(os.listdir(filepath)):
+            if not 'txt' in file:
+                continue
             cars, people, first[d], last[d] = read_file(os.path.join(filepath, file), first[d], last[d])
             if "traffic" in file:
                 traffic_people[d].extend(people)

@@ -165,7 +165,6 @@ private:
     std::uint8_t activeQueueIndex;
     QueueLengthType q_MaxSize = 100;
     std::int16_t class_of_interest;
-    bool isEmpty;
     bool isEncoded = false;
     std::atomic<unsigned int> dropedCount = 0;
 
@@ -191,7 +190,7 @@ public:
     }
 
     /**
-     * @brief 
+     * @brief
      * 
      * @param request 
      */
@@ -288,26 +287,33 @@ public:
      * @brief Pop CPU requests
      * 
      * @param getQueueSize Whether the queue size should be piggybacked on the shape of the first data element
-     * @param timeout 
-     * @return Request<LocalCPUReqDataType> 
+     * @param timeout
+     * @return Request<LocalCPUReqDataType>
      */
-    Request<LocalCPUReqDataType> pop1(bool getQueueSize = false, uint32_t timeout = 100000) { // 100ms
+    Request<LocalCPUReqDataType> pop1(const std::string& caller, bool getQueueSize = false, uint32_t timeout = 100000) { // 100ms
         Request<LocalCPUReqDataType> request;
+        bool isEmpty = false;
         bool notify = false;
         uint16_t queueSize = 0;
 
         {
             std::unique_lock<std::mutex> lock(q_mutex);
+            spdlog::get("container_agent")->trace("{0:s} starts waiting for CPU queue {1:s}", caller, q_name);
             isEmpty = !q_condition_consumer.wait_for(
                 lock,
                 TimePrecisionType(timeout),
-                [this]() { return !q_cpuQueue.empty(); }
+                [&caller, this]() {
+                    spdlog::get("container_agent")->trace("{0:s} checks if CPU queue {1:s} is empty? {2:d}", caller, q_name, q_cpuQueue.empty());
+                    return !q_cpuQueue.empty();
+                }
             );
 
             // Only proceed if the queue is not empty
             if (!isEmpty) {
                 request = q_cpuQueue.front();
                 q_cpuQueue.pop();
+
+                spdlog::get("container_agent")->trace("{0:s} pops a request from CPU queue {1:s}", caller, q_name);
 
                 queueSize = q_cpuQueue.size();
 
@@ -318,6 +324,7 @@ public:
 
         // Notify outside the critical section
         if (notify) {
+            spdlog::get("container_agent")->trace("{0:s} notifies another consumer for CPU queue {1:s}", caller, q_name);
             q_condition_consumer.notify_one();
         }
 
@@ -330,7 +337,7 @@ public:
                 request.req_data[0].shape.emplace_back(queueSize);
             }
         }
-
+        spdlog::get("container_agent")->trace("{0:s} exits the pop function of CPU queue {1:s}", caller, q_name);
         return request;
     }
 
@@ -338,26 +345,33 @@ public:
      * @brief Pop GPU requests
      * 
      * @param getQueueSize Whether the queue size should be piggybacked on the shape of the first data element
-     * @param timeout 
-     * @return Request<LocalGPUReqDataType> 
+     * @param timeout
+     * @return Request<LocalGPUReqDataType>
      */
-    Request<LocalGPUReqDataType> pop2(bool getQueueSize = false, uint32_t timeout = 100000) { // 100ms
+    Request<LocalGPUReqDataType> pop2(const std::string& caller, bool getQueueSize = false, uint32_t timeout = 100000) { // 100ms
         Request<LocalGPUReqDataType> request;
+        bool isEmpty = false;
         bool notify = false;
         uint16_t queueSize = 0;
 
         {
             std::unique_lock<std::mutex> lock(q_mutex);
+            spdlog::get("container_agent")->trace("{0:s} starts waiting for GPU queue {1:s}", caller, q_name);
             isEmpty = !q_condition_consumer.wait_for(
                 lock,
                 TimePrecisionType(timeout),
-                [this]() { return !q_gpuQueue.empty(); }
+                [&caller, this]() {
+                    spdlog::get("container_agent")->trace("{0:s} checks that GPU Queue {1:s} is empty? {2:b}", caller, q_name, q_gpuQueue.empty());
+                    return !q_gpuQueue.empty();
+                }
             );
 
             // Only proceed if the queue is not empty
             if (!isEmpty) {
                 request = q_gpuQueue.front();
                 q_gpuQueue.pop();
+
+                spdlog::get("container_agent")->trace("{0:s} pops a request from GPU queue {1:s}", caller, q_name);
 
                 queueSize = q_gpuQueue.size();
 
@@ -366,6 +380,7 @@ public:
             }
         }
         if (notify) {
+            spdlog::get("container_agent")->trace("{0:s} notifies another consumer for GPU queue {1:s}", caller, q_name);
             q_condition_consumer.notify_one();
         }
         if (isEmpty) {
@@ -376,6 +391,7 @@ public:
                 request.req_data[0].shape.emplace_back(queueSize);
             }
         }
+        spdlog::get("container_agent")->trace("{0:s} exits the pop function of GPU queue {1:s}", caller, q_name);
         return request;
     }
 
@@ -658,8 +674,8 @@ public:
 
     /**
      * @brief Get records into a combined record from multiple microservices
-     * 
-     * @param overallRecords 
+     *
+     * @param overallRecords
      */
     void getRecords(ArrivalRecordType &overallRecords) {
         std::unique_lock<std::mutex> lock(mutex);
@@ -790,8 +806,8 @@ public:
 
     /**
      * @brief Get records into a combined record from multiple microservices
-     * 
-     * @param overallRecords 
+     *
+     * @param overallRecords
      */
     void getRecords(ProcessRecordType &overallRecords) {
         std::unique_lock<std::mutex> lock(mutex);
@@ -1009,6 +1025,15 @@ public:
         return msvc_totalReqCount.exchange(0);
     };
 
+    unsigned int GetMiniBatchCount() {
+        return msvc_miniBatchCount.exchange(0);
+    };
+
+    unsigned int GetAggExecutedBatchSize() {
+        msvc_miniBatchCount = 0;
+        return msvc_aggBatchSize.exchange(0);
+    }
+
     unsigned int GetQueueDrops() {
         unsigned int val = 0;
         for (auto &queue : msvc_OutQueue) {
@@ -1016,6 +1041,20 @@ public:
         }
         return val;
     };
+
+    void addToLatencyEWMA(double latency) {
+        if (msvc_totalLatencyEWMA == 0) {
+            msvc_totalLatencyEWMA = latency;
+        } else if (msvc_totalLatencyEWMA < latency) {
+            msvc_totalLatencyEWMA = (msvc_totalLatencyEWMA * 0.2) + (latency * 0.8);
+        } else {
+            msvc_totalLatencyEWMA = (msvc_totalLatencyEWMA * 0.8) + (latency * 0.2);
+        }
+    }
+
+    double getLatencyEWMA() {
+        return msvc_totalLatencyEWMA.exchange(0.0);
+    }
 
     virtual PerSecondArrivalRecord getPerSecondArrivalRecord() {
         return {};
@@ -1159,9 +1198,10 @@ protected:
     uint64_t msvc_batchCount = 0;
 
     std::atomic<unsigned int> msvc_droppedReqCount = 0;
-    std::atomic<unsigned int> msvc_avgBatchSize = 0;
+    std::atomic<unsigned int> msvc_aggBatchSize = 0;
     std::atomic<unsigned int> msvc_miniBatchCount = 0;
     std::atomic<unsigned int> msvc_totalReqCount = 0;
+    std::atomic<double> msvc_totalLatencyEWMA = 0.0;
 
     //
     NumMscvType nummsvc_upstreamMicroservices = 0;
@@ -1174,6 +1214,8 @@ protected:
     std::vector<RequestDataShapeType> msvc_dataShape;
 
     RequestShapeType msvc_inferenceShape;
+
+    ConcatConfigs msvc_concat;
 
     // Ideal batch size for this microservice, runtime batch size could be smaller though
     BatchSizeType msvc_idealBatchSize;

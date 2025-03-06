@@ -7,9 +7,6 @@ ABSL_FLAG(uint16_t, ctrl_loggingMode, 0, "Logging mode of the controller. 0:stdo
 ABSL_FLAG(std::string, ctrl_logPath, "../logs", "Path to the log dir for the controller.");
 
 
-// ======================================================================================================================================== //
-// ======================================================================================================================================== //
-// ======================================================================================================================================== //
 
 GPULane::GPULane(GPUHandle *gpu, NodeHandle *device, uint16_t laneNum) : laneNum(laneNum), gpuHandle(gpu), node(device) {
     dutyCycle = 0;
@@ -30,15 +27,6 @@ bool GPUPortion::assignContainer(ContainerHandle *container) {
     spdlog::get("container_agent")->info("Portion assigned to container {0:s}", container->name);
     return true;
 }
-
-// GPUPortion::~GPUPortion() {
-//     if (container != nullptr) {
-//         throw std::runtime_error("Portion cannot be destroyed while it is still assigned to a container %s" + container->name);
-//     }
-//     lane->removePortion(this);
-//     // TODO: remove from the list of free portions
-//     spdlog::get("container_agent")->info("Portion is destroyed.");
-// }
 
 bool GPULane::removePortion(GPUPortion *portion) {
     if (portion->lane != this) {
@@ -63,11 +51,6 @@ bool GPULane::removePortion(GPUPortion *portion) {
     portionList.list.erase(it);
     return true;
 }
-
-// ======================================================================================================================================== //
-// ======================================================================================================================================== //
-// ======================================================================================================================================== //
-
 
 // ============================================================ Configurations ============================================================ //
 // ======================================================================================================================================== //
@@ -263,8 +246,10 @@ Controller::Controller(int argc, char **argv) {
     }
 
 
-    std::thread networkCheckThread(&Controller::checkNetworkConditions, this);
-    networkCheckThread.detach();
+    if (ctrl_systemName != "fcpo" && ctrl_systemName != "bce") {
+        std::thread networkCheckThread(&Controller::checkNetworkConditions, this);
+        networkCheckThread.detach();
+    }
 
     running = true;
 
@@ -283,10 +268,13 @@ Controller::Controller(int argc, char **argv) {
                       DATA_BASE_PORT + ctrl_port_offset, {});
     devices.addDevice("sink", sink_node);
 
+    ctrl_fcpo_server = new FCPOServer(ctrl_systemName + "_" + ctrl_experimentName, 7, torch::kF32);
+
     ctrl_nextSchedulingTime = std::chrono::system_clock::now();
 }
 
 Controller::~Controller() {
+    ctrl_fcpo_server->stop();
     for (auto msvc: containers.getList()) {
         StopContainer(msvc, msvc->device_agent, true);
     }
@@ -307,16 +295,6 @@ Controller::~Controller() {
     server->Shutdown();
     cq->Shutdown();
 }
-
-// ============================================================================================================================================ //
-// ============================================================================================================================================ //
-// ============================================================================================================================================ //
-
-
-
-
-
-
 
 // ============================================================ Excutor/Maintainers ============================================================ //
 // ============================================================================================================================================= //
@@ -443,7 +421,7 @@ void Controller::ApplyScheduling() {
      */
     for (auto &[pipeName, pipe]: ctrl_scheduledPipelines.getMap()) {
         for (auto &model: pipe->tk_pipelineModels) {
-            if (ctrl_systemName != "ppp" && ctrl_systemName != "jlf") {
+            if (ctrl_systemName != "ppp" && ctrl_systemName != "jlf" && ctrl_systemName != "fcpo" && ctrl_systemName != "bce") {
                 model->cudaDevices.emplace_back(0);
                 model->numReplicas = 1;
             }
@@ -509,7 +487,6 @@ void Controller::ApplyScheduling() {
                             std::remove(model->task->tk_subTasks[model->name].begin(),
                                         model->task->tk_subTasks[model->name].end(), candidates[i]),
                             model->task->tk_subTasks[model->name].end());
-                    candidates.erase(candidates.begin() + i);
                 }
             }
         }
@@ -537,7 +514,7 @@ void Controller::ApplyScheduling() {
         }
     }
 
-    if (ctrl_systemName != "ppp") {
+    if (ctrl_systemName != "ppp" && ctrl_systemName != "fcpo" && ctrl_systemName != "bce") {
         basicGPUScheduling(new_containers);
     } else {
         colocationTemporalScheduling();
@@ -556,7 +533,7 @@ void Controller::ApplyScheduling() {
 
     // std::uniform_int_distribution<> dis(1, 100);
     // while (numReclaims < new_containers.size() - numSinks) {
-        
+
     //     for (auto container : new_containers) {
     //         if (container->model == Sink || container->executionPortion == nullptr) {
     //             continue;
@@ -632,13 +609,17 @@ ContainerHandle *Controller::TranslateToContainer(PipelineModel *model, NodeHand
             modelName + "_" + std::to_string(i);
     // the name of the container type to look it up in the container library
     std::string containerTypeName = modelName + "_" + getDeviceTypeName(device->type);
-    
+
+    if (ctrl_systemName == "ppp" || ctrl_systemName == "fcpo" || ctrl_systemName == "bce") {
+        if (model->batchSize < model->datasourceName.size()) model->batchSize = model->datasourceName.size();
+    } // ensure minimum global batch size setting for these configurations for a good comparison
+
     auto *container = new ContainerHandle{containerName, i,
                                           class_of_interest,
                                           ModelTypeReverseList[modelName],
                                           CheckMergable(modelName),
                                           {0},
-                                          model->task->tk_slo,
+                                          static_cast<uint64_t>(model->task->tk_slo),
                                           0.0,
                                           model->batchSize,
                                           device->next_free_port++,
@@ -753,10 +734,11 @@ void Controller::StartContainer(ContainerHandle *container, bool easy_allocation
         start_config["container"]["cont_hostDeviceType"] = ctrl_sysDeviceInfo[container->device_agent->type];
         start_config["container"]["cont_name"] = container->name;
         start_config["container"]["cont_allocationMode"] = easy_allocation ? 1 : 0;
-        if (ctrl_systemName == "ppp") {
-            start_config["container"]["cont_batchMode"] = 2;
+        if (ctrl_systemName == "ppp" || ctrl_systemName == "fcpo" || ctrl_systemName == "bce") {
+            //TODO: set back to 2 after OURs working again with batcher
+            start_config["container"]["cont_batchMode"] = 0;
         }
-        if (ctrl_systemName == "ppp" || ctrl_systemName == "jlf") {
+        if (ctrl_systemName == "ppp" || ctrl_systemName == "fcpo" || ctrl_systemName == "bce" || ctrl_systemName == "jlf") {
             start_config["container"]["cont_dropMode"] = 1;
         }
         start_config["container"]["cont_pipelineSLO"] = container->task->tk_slo;
@@ -780,6 +762,7 @@ void Controller::StartContainer(ContainerHandle *container, bool easy_allocation
                 spdlog::get("container_agent")->warn("Model profile not found for container: {0:s}", container->name);
             }
             start_config["container"]["cont_modelProfile"] = modelProfile;
+            ctrl_fcpo_server->incrementClientCounter();
         }
 
         json base_config = start_config["container"]["cont_pipeline"];
@@ -861,6 +844,17 @@ void Controller::StartContainer(ContainerHandle *container, bool easy_allocation
 
             postprocessor->at("msvc_dnstreamMicroservices").push_back(post_down);
             base_config.push_back(sender);
+            if (ctrl_systemName == "fcpo") {
+                start_config["fcpo"] = ctrl_fcpo_server->getConfig();
+                std::string deviceTypeName = getDeviceTypeName(container->device_agent->type);
+                if (container->model_file.find("yolov5") != std::string::npos) {
+                    start_config["fcpo"]["resolution_size"] =
+                            (deviceTypeName == "server" || deviceTypeName == "agx") ? 4 : 2;
+                }
+                start_config["fcpo"]["resolution_size"] = 1;
+                start_config["fcpo"]["batch_size"] = container->pipelineModel->processProfiles[deviceTypeName].maxBatchSize;
+                start_config["fcpo"]["threads_size"] = (deviceTypeName == "server") ? 4 : 2;
+            }
         }
 
         start_config["container"]["cont_pipeline"] = base_config;
@@ -882,7 +876,10 @@ void Controller::StartContainer(ContainerHandle *container, bool easy_allocation
         request.set_device(0);
     }
     request.set_control_port(control_port);
-
+    request.set_model_type(container->model);
+    for (auto &dim: container->dimensions) {
+        request.add_input_shape(dim);
+    }
 
     std::unique_ptr<ClientAsyncResponseReader<EmptyMessage>> rpc(
             container->device_agent->stub->AsyncStartContainer(&context, request,
@@ -1033,6 +1030,10 @@ void Controller::StopContainer(ContainerHandle *container, NodeHandle *device, b
     if (container->device_agent->cq != nullptr) GPR_ASSERT(container->device_agent->cq->Next(&got_tag, &ok));
     if (container->gpuHandle != nullptr)
         container->gpuHandle->removeContainer(container);
+    if (container->model != DataSource &&
+        container->model != Sink) {
+        ctrl_fcpo_server->decrementClientCounter();
+    }
     if (!forced) { //not forced means the container is stopped during scheduling and should be removed
         containers.removeContainer(container->name);
         container->device_agent->containers.erase(container->name);
@@ -1110,16 +1111,6 @@ void Controller::calculateQueueSizes(ContainerHandle &container, const ModelType
     container.expectedThroughput = postprocess_thrpt;
 }
 
-// ============================================================================================================================================ //
-// ============================================================================================================================================ //
-// ============================================================================================================================================ //
-
-
-
-
-
-
-
 
 // ============================================================ Communication Handlers ============================================================ //
 // ================================================================================================================================================ //
@@ -1129,6 +1120,7 @@ void Controller::calculateQueueSizes(ContainerHandle &container, const ModelType
 void Controller::HandleRecvRpcs() {
     new DeviseAdvertisementHandler(&service, cq.get(), this);
     new DummyDataRequestHandler(&service, cq.get(), this);
+    new ForwardFLRequestHandler(&service, cq.get(), this);
     void *tag;
     bool ok;
     while (running) {
@@ -1167,6 +1159,8 @@ void Controller::DeviseAdvertisementHandler::Proceed() {
         if (node->type != SystemDeviceType::Server) {
             std::thread networkCheck(&Controller::initNetworkCheck, controller, std::ref(*(controller->devices.getDevice(deviceName))), 1000, 300000, 30);
             networkCheck.detach();
+        } else {
+            node->initialNetworkCheck = true;
         }
     } else {
         GPR_ASSERT(status == FINISH);
@@ -1193,146 +1187,28 @@ void Controller::DummyDataRequestHandler::Proceed() {
     }
 }
 
-std::string DeviceNameToType(std::string name) {
-    if (name == "server" || name == "sink") {
-        return "server";
+void Controller::ForwardFLRequestHandler::Proceed() {
+    if (status == CREATE) {
+        status = PROCESS;
+        service->RequestForwardFl(&ctx, &request, &responder, cq, cq, this);
+    } else if (status == PROCESS) {
+        new ForwardFLRequestHandler(service, cq, controller);
+        for (auto &dev: controller->devices.getMap()) {
+            if (dev.first == request.device_name()) {
+                if (controller->ctrl_fcpo_server->addClient(request, dev.second->stub, dev.second->cq)) {
+                    responder.Finish(reply, Status::OK, this);
+                } else {
+                    responder.Finish(reply, Status::CANCELLED, this);
+                }
+                break;
+            }
+        }
+        status = FINISH;
     } else {
-        return name.substr(0, name.size() - 1);
+        GPR_ASSERT(status == FINISH);
+        delete this;
     }
 }
-
-// ============================================================================================================================================ //
-// ============================================================================================================================================ //
-// ============================================================================================================================================ //
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-// ============================================================ Network Conditions ============================================================ //
-
-// void Controller::optimizeBatchSizeStep(
-//         const Pipeline &models,
-//         std::map<ModelType, int> &batch_sizes, std::map<ModelType, int> &estimated_infer_times, int nObjects) {
-//     ModelType candidate;
-//     int max_saving = 0;
-//     std::vector<ModelType> blacklist;
-//     for (const auto &m: models) {
-//         int saving;
-//         if (max_saving == 0) {
-//             saving =
-//                     estimated_infer_times[m.first] - InferTimeEstimator(m.first, batch_sizes[m.first] * 2);
-//         } else {
-//             if (batch_sizes[m.first] == 64 ||
-//                 std::find(blacklist.begin(), blacklist.end(), m.first) != blacklist.end()) {
-//                 continue;
-//             }
-//             for (const auto &d: m.second) {
-//                 if (batch_sizes[d.first] > batch_sizes[m.first]) {
-//                     blacklist.push_back(d.first);
-//                 }
-//             }
-//             saving = estimated_infer_times[m.first] -
-//                      (InferTimeEstimator(m.first, batch_sizes[m.first] * 2) * (nObjects / batch_sizes[m.first] * 2));
-//         }
-//         if (saving > max_saving) {
-//             max_saving = saving;
-//             candidate = m.first;
-//         }
-//     }
-//     batch_sizes[candidate] *= 2;
-//     estimated_infer_times[candidate] -= max_saving;
-// }
-
-// double Controller::LoadTimeEstimator(const char *model_path, double input_mem_size) {
-//     // Load the pre-trained model
-//     BoosterHandle booster;
-//     int num_iterations = 1;
-//     int ret = LGBM_BoosterCreateFromModelfile(model_path, &num_iterations, &booster);
-
-//     // Prepare the input data
-//     std::vector<double> input_data = {input_mem_size};
-
-//     // Perform inference
-//     int64_t out_len;
-//     std::vector<double> out_result(1);
-//     ret = LGBM_BoosterPredictForMat(booster,
-//                                     input_data.data(),
-//                                     C_API_DTYPE_FLOAT64,
-//                                     1,  // Number of rows
-//                                     1,  // Number of columns
-//                                     1,  // Is row major
-//                                     C_API_PREDICT_NORMAL,  // Predict type
-//                                     0,  // Start iteration
-//                                     -1,  // Number of iterations, -1 means use all
-//                                     "",  // Parameter
-//                                     &out_len,
-//                                     out_result.data());
-//     if (ret != 0) {
-//         std::cout << "Failed to perform inference!" << std::endl;
-//         exit(ret);
-//     }
-
-//     // Print the predicted value
-//     std::cout << "Predicted value: " << out_result[0] << std::endl;
-
-//     // Free the booster handle
-//     LGBM_BoosterFree(booster);
-
-//     return out_result[0];
-// }
-
-
-/**
- * @brief
- *
- * @param model to specify model
- * @param batch_size for targeted batch size (binary)
- * @return int for inference time per full batch in nanoseconds
- */
-int Controller::InferTimeEstimator(ModelType model, int batch_size) {
-    return 0;
-}
-
-// std::map<ModelType, std::vector<int>> Controller::InitialRequestCount(const std::string &input, const Pipeline &models,
-//                                                                       int fps) {
-//     std::map<ModelType, std::vector<int>> request_counts = {};
-//     std::vector<int> fps_values = {fps, fps * 3, fps * 7, fps * 15, fps * 30, fps * 60};
-
-//     request_counts[models[0].first] = fps_values;
-//     json objectCount = json::parse(std::ifstream("../jsons/object_count.json"))[input];
-
-//     for (const auto &m: models) {
-//         if (m.first == ModelType::Sink) {
-//             request_counts[m.first] = std::vector<int>(6, 0);
-//             continue;
-//         }
-
-//         for (const auto &d: m.second) {
-//             if (d.second == -1) {
-//                 request_counts[d.first] = request_counts[m.first];
-//             } else {
-//                 std::vector<int> objects = (d.second == 0 ? objectCount["person"]
-//                                                           : objectCount["car"]).get<std::vector<int>>();
-
-//                 for (int j: fps_values) {
-//                     int count = std::accumulate(objects.begin(), objects.begin() + j, 0);
-//                     request_counts[d.first].push_back(request_counts[m.first][0] * count);
-//                 }
-//             }
-//         }
-//     }
-//     return request_counts;
-// }
 
 /**
  * @brief '
@@ -1376,6 +1252,7 @@ NetworkEntryType Controller::initNetworkCheck(NodeHandle &node, uint32_t minPack
     spdlog::get("container_agent")->info("Finished network check for device {}.", node.name);
     std::lock_guard lock(node.nodeHandleMutex);
     node.initialNetworkCheck = true;
+    if (entries.empty()) entries = {std::pair<uint32_t, uint64_t>{1, 1}};
     node.latestNetworkEntries["server"] = entries;
     node.lastNetworkCheckTime = std::chrono::system_clock::now();
     node.networkCheckMutex.unlock();
@@ -1430,12 +1307,13 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
     }
     switch (type) {
         case PipelineType::Traffic: {
-            auto *datasource = new PipelineModel{startDevice, "datasource", {}, true, {}, {}};
+            auto *datasource = new PipelineModel{startDevice, "datasource", ModelType::DataSource, {}, true, {}, {}};
             datasource->possibleDevices = {startDevice};
 
             auto *yolov5n = new PipelineModel{
                     "server",
                     "yolov5n",
+                    ModelType::Yolov5n,
                     {},
                     true,
                     {},
@@ -1455,6 +1333,7 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
                 yolov5n320 = new PipelineModel{
                         "server",
                         "yolov5n320",
+                        ModelType::Yolov5n320,
                         {},
                         true,
                         {},
@@ -1468,6 +1347,7 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
                 yolov5n512 = new PipelineModel{
                         "server",
                         "yolov5n512",
+                        ModelType::Yolov5n512,
                         {},
                         true,
                         {},
@@ -1480,6 +1360,7 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
                 yolov5s= new PipelineModel{
                         "server",
                         "yolov5s",
+                        ModelType::Yolov5s,
                         {},
                         true,
                         {},
@@ -1493,6 +1374,7 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
             auto *retina1face = new PipelineModel{
                     "server",
                     "retina1face",
+                    ModelType::Retinaface,
                     {},
                     false,
                     {},
@@ -1514,6 +1396,7 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
             auto *arcface = new PipelineModel{
                     "server",
                     "arcface",
+                    ModelType::Arcface,
                     {},
                     false,
                     {},
@@ -1527,6 +1410,7 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
             auto *carbrand = new PipelineModel{
                     "server",
                     "carbrand",
+                    ModelType::CarBrand,
                     {},
                     false,
                     {},
@@ -1548,6 +1432,7 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
             auto *platedet = new PipelineModel{
                     "server",
                     "platedet",
+                    ModelType::PlateDet,
                     {},
                     false,
                     {},
@@ -1569,6 +1454,7 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
             auto *sink = new PipelineModel{
                     "sink",
                     "sink",
+                    ModelType::Sink,
                     {},
                     false,
                     {},
@@ -1596,12 +1482,13 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
             return {datasource, yolov5n, retina1face, arcface, carbrand, platedet, sink};
         }
         case PipelineType::Building_Security: {
-            auto *datasource = new PipelineModel{startDevice, "datasource", {}, true, {}, {}};
+            auto *datasource = new PipelineModel{startDevice, "datasource", ModelType::DataSource, {}, true, {}, {}};
             datasource->possibleDevices = {startDevice};
 
             auto *yolov5n = new PipelineModel{
                     "server",
                     "yolov5n",
+                    ModelType::Yolov5n,
                     {},
                     true,
                     {},
@@ -1621,6 +1508,7 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
                 yolov5n320 = new PipelineModel{
                         "server",
                         "yolov5n320",
+                        ModelType::Yolov5n320,
                         {},
                         true,
                         {},
@@ -1634,6 +1522,7 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
                 yolov5n512 = new PipelineModel{
                         "server",
                         "yolov5n512",
+                        ModelType::Yolov5n512,
                         {},
                         true,
                         {},
@@ -1646,6 +1535,7 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
                 yolov5s= new PipelineModel{
                         "server",
                         "yolov5s",
+                        ModelType::Yolov5s,
                         {},
                         true,
                         {},
@@ -1659,6 +1549,7 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
             auto *retina1face = new PipelineModel{
                     "server",
                     "retina1face",
+                    ModelType::Retinaface,
                     {},
                     false,
                     {},
@@ -1680,6 +1571,7 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
             auto *movenet = new PipelineModel{
                     "server",
                     "movenet",
+                    ModelType::Movenet,
                     {},
                     false,
                     {},
@@ -1701,6 +1593,7 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
             auto *gender = new PipelineModel{
                     "server",
                     "gender",
+                    ModelType::Gender,
                     {},
                     false,
                     {},
@@ -1714,6 +1607,7 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
             auto *age = new PipelineModel{
                     "server",
                     "age",
+                    ModelType::Age,
                     {},
                     false,
                     {},
@@ -1727,6 +1621,7 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
             auto *sink = new PipelineModel{
                     "sink",
                     "sink",
+                    ModelType::Sink,
                     {},
                     false,
                     {},
@@ -1754,12 +1649,13 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
             }
             return {datasource, yolov5n, retina1face, movenet, gender, age, sink};
         }
-        case PipelineType::Video_Call: {
-            auto *datasource = new PipelineModel{startDevice, "datasource", {}, true, {}, {}};
+        case PipelineType::Indoor: {
+            auto *datasource = new PipelineModel{startDevice, "datasource", ModelType::DataSource, {}, true, {}, {}};
             datasource->possibleDevices = {startDevice};
             auto *retinamtface = new PipelineModel{
                     startDevice,
                     "retinamtface",
+                    ModelType::RetinaMtface,
                     {},
                     true,
                     {},
@@ -1773,6 +1669,7 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
             auto *emotionnet = new PipelineModel{
                     "server",
                     "emotionnet",
+                    ModelType::Emotionnet,
                     {},
                     false,
                     {},
@@ -1786,6 +1683,7 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
             auto *age = new PipelineModel{
                     "server",
                     "age",
+                    ModelType::Age,
                     {},
                     false,
                     {},
@@ -1799,6 +1697,7 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
             auto *gender = new PipelineModel{
                     "server",
                     "gender",
+                    ModelType::Gender,
                     {},
                     false,
                     {},
@@ -1812,6 +1711,7 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
             auto *arcface = new PipelineModel{
                     "server",
                     "arcface",
+                    ModelType::Arcface,
                     {},
                     false,
                     {},
@@ -1825,6 +1725,7 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
             auto *sink = new PipelineModel{
                     "sink",
                     "sink",
+                    ModelType::Sink,
                     {},
                     false,
                     {},

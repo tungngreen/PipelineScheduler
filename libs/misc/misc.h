@@ -1,6 +1,9 @@
 #ifndef MISC_H
 #define MISC_H
 
+#include <csignal>
+#include <execinfo.h>
+#include <unistd.h>
 #include <vector>
 #include <string>
 #include <cuda_runtime.h>
@@ -61,9 +64,23 @@ typedef unsigned int GpuUtilType;
 typedef int MemUsageType;
 typedef unsigned int GpuMemUsageType;
 
-const uint8_t NUM_LANES_PER_GPU = 3;
+const uint8_t NUM_LANES_PER_GPU = 4;
 const uint8_t NUM_GPUS = 4;
 const uint64_t MINIMUM_PORTION_SIZE = 1000; // microseconds = 1 millisecond
+
+
+struct ConcatDims {
+    int32_t x1, y1, width, height;
+};
+
+typedef std::vector<ConcatDims> ConcatConfig;
+
+struct ConcatConfigs {
+    uint8_t numImgs = 1;
+    uint8_t currIndex = 0;
+
+    std::vector<ConcatConfig> list;
+};
 
 struct BatchInferProfile {
     uint64_t p95inferLat = 0;
@@ -129,6 +146,22 @@ struct PerSecondArrivalRecord {
     uint32_t numRequests = 0;
     MsvcSLOType interArrivalMean = 0;
     MsvcSLOType interArrivalVariance = 0;
+
+    PerSecondArrivalRecord operator+(const PerSecondArrivalRecord &rhs) const {
+        PerSecondArrivalRecord result;
+        result.numRequests = numRequests + rhs.numRequests;
+        if (interArrivalMean == 0) {
+            result.interArrivalVariance = rhs.interArrivalVariance;
+        } else {
+            result.interArrivalVariance = (interArrivalVariance + rhs.interArrivalVariance) / 2;
+        }
+        if (interArrivalMean == 0) {
+            result.interArrivalMean = rhs.interArrivalMean;
+        } else {
+            result.interArrivalMean = (interArrivalMean + rhs.interArrivalMean) / 2;
+        }
+        return result;
+    }
 };
 
 struct RunningArrivalRecord {
@@ -379,6 +412,7 @@ struct SummarizedHardwareMetrics {
 };
 
 typedef std::chrono::microseconds TimePrecisionType;
+const int TIME_PRECISION_TO_SEC = 1e6;
 
 const std::unordered_set<uint16_t> GRAYSCALE_CONVERSION_CODES = {6, 7, 10, 11};
 
@@ -447,7 +481,7 @@ typedef std::map<SystemDeviceType, std::string> DeviceInfoType;
 
 enum PipelineType {
     Traffic,
-    Video_Call,
+    Indoor,
     Building_Security
 };
 
@@ -476,7 +510,8 @@ enum ModelType {
     Emotionnet,
     Gender,
     Age,
-    CarBrand
+    CarBrand,
+    End
 };
 
 extern std::map<std::string, std::string> keywordAbbrs;
@@ -579,6 +614,9 @@ public:
         return start_time;
     }
 };
+
+// Unified signal handler
+void signalHandler(int signal);
 
 void setupLogger(
     const std::string &logPath,

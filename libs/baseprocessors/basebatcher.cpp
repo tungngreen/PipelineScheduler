@@ -115,12 +115,13 @@ inline void BaseBatcher::executeBatching(BatchTimeType &genTime, RequestSLOType 
             prevData
     };
 
+    msvc_miniBatchCount++;
     msvc_batchCount++;
 
     spdlog::get("container_agent")->trace("{0:s} emplaced a request of batch size {1:d} ", msvc_name,
                                            msvc_onBufferBatchSize);
     msvc_OutQueue[0]->emplace(outReq);
-    // msvc_avgBatchSize += (msvc_onBufferBatchSize - msvc_avgBatchSize) / msvc_miniBatchCount;
+    msvc_aggBatchSize += msvc_onBufferBatchSize;
     msvc_onBufferBatchSize = 0;
     msvc_numImagesInBatch = 0;
     genTime.clear();
@@ -151,7 +152,7 @@ inline bool BaseBatcher::isTimeToBatch() {
     timeout = 100000;
     if ((msvc_RUNMODE == RUNMODE::PROFILING || 
          msvc_BATCH_MODE == BATCH_MODE::FIXED) && 
-        msvc_onBufferBatchSize == msvc_idealBatchSize) {
+        msvc_onBufferBatchSize >= msvc_idealBatchSize) {
         return true;
     }
 
@@ -163,7 +164,7 @@ inline bool BaseBatcher::isTimeToBatch() {
     if (msvc_onBufferBatchSize == 0) {
         return false;
     // If the batch is empty, then it doesn't really matter if it's time to batch or not
-    } else if (msvc_onBufferBatchSize == msvc_idealBatchSize) {
+    } else if (msvc_onBufferBatchSize >= msvc_idealBatchSize) {
         spdlog::get("container_agent")->trace("{0:s} got the ideal batch.", msvc_name);
         updateCycleTiming();
         return true;
@@ -273,6 +274,7 @@ void BaseBatcher::batchRequests() {
                 RELOADING = false;
                 READY = true;
             }
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
             continue;
         }
         // Processing the next incoming request
@@ -284,7 +286,7 @@ void BaseBatcher::batchRequests() {
 
         // Processing the next incoming request
         // Current incoming equest and request to be sent out to the next
-        Request<LocalGPUReqDataType> currReq = msvc_InQueue.at(0)->pop2();
+        Request<LocalGPUReqDataType> currReq = msvc_InQueue.at(0)->pop2(msvc_name);
         // Meaning the the timeout in pop() has been reached and no request was actually popped
         if (strcmp(currReq.req_travelPath[0].c_str(), "empty") == 0) {
             continue;

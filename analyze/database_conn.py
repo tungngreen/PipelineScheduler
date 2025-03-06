@@ -71,19 +71,38 @@ def arrival_metrics(schema):
     plt.show()
 
 
-def avg_memory(exp):
+def avg_memory(exp, algos=['ppp', 'dis', 'jlf', 'rim'], edge_device_count=0):
     engine = create_engine(conn_str)
     memories = {}
-    for algo in ['ppp', 'dis', 'jlf', 'rim']:
+    df = pd.DataFrame()
+    for algo in algos:
         full_schema = f"{exp}_{algo}"
         with engine.connect() as connection:
-            table_names = get_table_names(connection, full_schema, 'serv_hw')
-            for table in table_names:
-                query = text(f"SELECT timestamps, mem_usage, gpu_0_mem_usage, gpu_1_mem_usage, gpu_2_mem_usage, gpu_3_mem_usage FROM {full_schema}.{table};")
-                df = pd.read_sql(query, connection)
-        df = df.loc[(df[['gpu_0_mem_usage', 'gpu_1_mem_usage', 'gpu_2_mem_usage', 'gpu_3_mem_usage']] != 0).any(axis=1)]
-        df['total_gpu_mem'] = df[['gpu_0_mem_usage', 'gpu_1_mem_usage', 'gpu_2_mem_usage', 'gpu_3_mem_usage']].sum(axis=1)
-        memories[algo] = [df['total_gpu_mem'].mean(), df['mem_usage'].mean()]
+            if edge_device_count == 0:
+                table_names = get_table_names(connection, full_schema, 'serv_hw')
+                for table in table_names:
+                    query = text(
+                        f"SELECT timestamps, mem_usage, gpu_0_mem_usage, gpu_1_mem_usage, gpu_2_mem_usage, gpu_3_mem_usage FROM {full_schema}.{table};")
+                    df = pd.read_sql(query, connection)
+                df = df.loc[
+                    (df[['gpu_0_mem_usage', 'gpu_1_mem_usage', 'gpu_2_mem_usage', 'gpu_3_mem_usage']] != 0).any(axis=1)]
+                df['total_gpu_mem'] = df[
+                    ['gpu_0_mem_usage', 'gpu_1_mem_usage', 'gpu_2_mem_usage', 'gpu_3_mem_usage']].sum(axis=1)
+            else:
+                table_names = get_table_names(connection, full_schema, 'agx1_hw')
+                table_names.extend(get_table_names(connection, full_schema, 'nx1_hw'))
+                table_names.extend(get_table_names(connection, full_schema, 'full_orn1_hw'))
+                df = pd.DataFrame()
+                for table in table_names:
+                    query = text(f"SELECT timestamps, mem_usage, gpu_0_mem_usage FROM {full_schema}.{table};")
+                    df_tmp = pd.read_sql(query, connection)
+                    df = pd.concat([df, df_tmp], axis=0)
+                df = df.loc[(df[['gpu_0_mem_usage']] != 0).any(axis=1)]
+                df['total_gpu_mem'] = df['gpu_0_mem_usage']
+        if edge_device_count == 0:
+            memories[algo] = [df['total_gpu_mem'].mean(), df['mem_usage'].mean()]
+        else:
+            memories[algo] = [df['total_gpu_mem'].mean() * edge_device_count, df['mem_usage'].mean() * edge_device_count]
     print(memories)
     return memories
 

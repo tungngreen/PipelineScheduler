@@ -1,7 +1,7 @@
 {
     "container": {
         "cont_experimentName": "prof",
-        "cont_systemName": "ppp",
+        "cont_systemName": "fcpo",
         "cont_pipeName": "pedestrian",
         "cont_taskName": "movenet",
         "cont_hostDevice": "server",
@@ -368,5 +368,19 @@
         "profile_numWarmUpBatches": 10,
         "profile_numProfileBatches": 100,
         "profile_numProfileReqs": 1800
+    },
+    "fcpo": {
+        "state_size": 5,
+        "resolution_size": 1,
+        "batch_size": 64,
+        "threads_size": 4,
+        "lambda": 0.95,
+        "gamma": 0.99,
+        "clip_epsilon": 0.2,
+        "penalty_weight": 0.1,
+        "precision": "float",
+        "update_steps": 60,
+        "update_step_incs": 5,
+        "federated_steps": 5
     }
 }

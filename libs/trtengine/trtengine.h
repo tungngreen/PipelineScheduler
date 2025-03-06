@@ -103,7 +103,7 @@ public:
         const std::string &callerName,
         const std::vector<cv::cuda::GpuMat>& batch,
         cv::cuda::Stream &stream = cv::cuda::Stream::Null(),
-        uint8_t IMG_TYPE = CV_8UC3 
+        uint8_t IMG_TYPE = CV_8UC3
     );
 
     inline void normalize(
@@ -128,7 +128,7 @@ private:
     // Normalization, scaling, and mean subtraction of inputs
     std::array<float, 3> m_subVals{};
     std::array<float, 3> m_divVals{};
-    bool m_normalizedScale;
+    float m_normalizedScale;
 
     // Holds pointers to the input and output GPU buffers
     std::vector<void*> m_buffers, m_inputBuffers, m_outputBuffers;

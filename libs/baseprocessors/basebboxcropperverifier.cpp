@@ -120,7 +120,7 @@ void BaseBBoxCropperVerifier::cropping() {
 
                 infer_h = msvc_inferenceShape[0][1];
                 infer_w = msvc_inferenceShape[0][2];
-                
+
                 maxNumDets = msvc_dataShape[2][0];
 
                 delete num_detections;
@@ -138,7 +138,7 @@ void BaseBBoxCropperVerifier::cropping() {
                 nmsed_boxes = new float[batchSize * maxNumDets * 4];
                 nmsed_scores = new float[batchSize * maxNumDets];
                 nmsed_classes = new float[batchSize * maxNumDets];
-                
+
 
                 ptrList = {nmsed_boxes, nmsed_scores, nmsed_classes};
 
@@ -152,7 +152,7 @@ void BaseBBoxCropperVerifier::cropping() {
             continue;
         }
         // Processing the next incoming request
-        currReq = msvc_InQueue.at(0)->pop2();
+        currReq = msvc_InQueue.at(0)->pop2(msvc_name);
         // Meaning the the timeout in pop() has been reached and no request was actually popped
         if (strcmp(currReq.req_travelPath[0].c_str(), "empty") == 0) {
             continue;
@@ -169,7 +169,7 @@ void BaseBBoxCropperVerifier::cropping() {
             spdlog::get("container_agent")->info("{0:s} received the signal that the warmup is completed.", msvc_name);
             msvc_OutQueue[0]->emplace(currReq);
             continue;
-        } 
+        }
 
 
         auto timeNow = std::chrono::high_resolution_clock::now();
@@ -235,13 +235,13 @@ void BaseBBoxCropperVerifier::cropping() {
 
             for (uint8_t j = 0; j < numImagesInFrame; j++) {
                 uint16_t imageIndexInBatch = currReq.req_concatInfo[i].firstImageIndex + j;
-                totalInMem[j] = (imageList[imageIndexInBatch].data.channels() * 
+                totalInMem[j] = (imageList[imageIndexInBatch].data.channels() *
                                  imageList[imageIndexInBatch].data.rows * imageList[imageIndexInBatch].data.cols *
                                  CV_ELEM_SIZE1(imageList[imageIndexInBatch].data.type()));
                 totalOutMem[j] = totalInMem.back();
 
                 currReq_path = currReq.req_travelPath[imageIndexInBatch] + "|1|1";
-            
+
 
                 if (msvc_activeOutQueueIndex.at(0) == 1) { //Local CPU
                     cv::Mat out;
@@ -298,6 +298,11 @@ void BaseBBoxCropperVerifier::cropping() {
                             originStream,
                             getSenderHost(currReq.req_travelPath[imageIndexInBatch])
                     );
+                    if (timeNow > currReq.req_origGenTime[imageIndexInBatch][3]) {
+                        addToLatencyEWMA(
+                                std::chrono::duration_cast<TimePrecisionType>(
+                                        timeNow - currReq.req_origGenTime[imageIndexInBatch][3]).count());
+                    }
                 }
             }
 
@@ -310,6 +315,7 @@ void BaseBBoxCropperVerifier::cropping() {
         // }
 
         msvc_batchCount++;
+        msvc_miniBatchCount++;
 
         
         spdlog::get("container_agent")->trace("{0:s} sleeps for {1:d} millisecond", msvc_name, msvc_interReqTime);

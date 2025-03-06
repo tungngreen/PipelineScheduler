@@ -53,6 +53,9 @@ find_package(controller CONFIG REQUIRED)
 set(baseprocessors_DIR "${CMAKE_CURRENT_BINARY_DIR}/../baseprocessors")
 find_package(baseprocessors CONFIG REQUIRED)
 
+set(fcpo_learning_DIR "${CMAKE_CURRENT_BINARY_DIR}/../fcpo_learning")
+find_package(fcpo_learning CONFIG REQUIRED)
+
 # Defines the headers for this library.
 # https://cmake.org/cmake/help/v3.11/command/target_include_directories.html
 target_include_directories(container_agent
@@ -71,7 +74,8 @@ target_include_directories(container_agent
 
 target_link_libraries(container_agent
         PUBLIC
-        device_grpc_proto
+        device_comm_grpc_proto
+        device_mess_grpc_proto
         absl::flags
         absl::flags_parse
         ${_GRPC_GRPCPP}
@@ -87,6 +91,7 @@ target_link_libraries(container_agent
         controller
         communicator
         baseprocessors
+        fcpo_learning
 )
 
 # add_executable(ContainerAgent container_agent.cpp)

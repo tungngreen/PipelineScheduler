@@ -4,6 +4,8 @@ ABSL_FLAG(uint16_t, deploy_mode, 0, "The deployment mode of the system. 0: devel
 
 using json = nlohmann::json;
 
+std::ofstream errOutFile;
+
 std::chrono::time_point<std::chrono::_V2::system_clock, std::chrono::milliseconds> timePointCastMillisecond(
     std::chrono::system_clock::time_point tp) {
     return std::chrono::time_point_cast<std::chrono::milliseconds>(tp);
@@ -969,6 +971,56 @@ uint64_t getTimestamp() {
     return std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
 }
 
+void signalHandler(int signal) {
+    switch (signal) {
+        case SIGSEGV:
+        std::cerr << "Error: Segmentation fault detected (signal " << signal << ")." << std::endl;
+        break;
+    case SIGFPE:
+        std::cerr << "Error: Arithmetic error (e.g., division by zero) detected (signal " << signal << ")." << std::endl;
+        break;
+    case SIGABRT:
+        std::cerr << "Error: Program aborted (signal " << signal << ")." << std::endl;
+        break;
+    case SIGILL:
+        std::cerr << "Error: Illegal instruction detected (signal " << signal << ")." << std::endl;
+        break;
+    case SIGTERM:
+        std::cerr << "Error: Termination request detected (signal " << signal << ")." << std::endl;
+        break;
+    default:
+        std::cerr << "Error: Unknown signal " << signal << " received." << std::endl;
+    }
+    // Capture the backtrace
+    void* callStack[128];
+    int stackSize = backtrace(callStack, 128);
+
+// Print the backtrace
+    std::cerr << "Backtrace (most recent calls first):" << std::endl;
+    char** symbols = backtrace_symbols(callStack, stackSize);
+    for (int i = 0; i < stackSize; ++i) {
+        std::cerr << symbols[i] << std::endl;
+        // Use addr2line to convert addresses to file names and line numbers
+        std::string input = std::string(symbols[i]);
+        std::string::size_type begin = input.find("(") + 2;
+        std::string::size_type end = input.find(")", begin);
+        if (begin == std::string::npos || end == std::string::npos) continue;
+        std::string command = "addr2line -e " + std::string(program_invocation_name) + " " + input.substr(begin, end - begin);
+        std::array<char, 128> buffer;
+        std::shared_ptr<FILE> pipe(popen(command.c_str(), "r"), pclose);
+        if (pipe) {
+            std::cerr << "|---> ";
+            while (fgets(buffer.data(), buffer.size(), pipe.get()) != nullptr) {
+                std::cerr << buffer.data();
+            }
+        }
+    }
+    free(symbols);
+    errOutFile.close();
+
+    std::exit(signal); // Graceful termination
+}
+
 void setupLogger(
     const std::string &logPath,
     const std::string &loggerName,
@@ -977,6 +1029,12 @@ void setupLogger(
     std::vector<spdlog::sink_ptr> &loggerSinks,
     std::shared_ptr<spdlog::logger> &logger
 ) {
+    std::signal(SIGSEGV, signalHandler);
+    std::signal(SIGFPE, signalHandler);
+    std::signal(SIGABRT, signalHandler);
+    std::signal(SIGILL, signalHandler);
+    std::signal(SIGTERM, signalHandler);
+
     std::string path = logPath + "/" + loggerName + "_" + getTimestampString() + ".log";
 
     // Console sink setup
@@ -990,6 +1048,9 @@ void setupLogger(
         bool auto_flush = true;
         auto file_sink = std::make_shared<spdlog::sinks::basic_file_sink_mt>(path, auto_flush);
         loggerSinks.emplace_back(file_sink);
+
+        errOutFile.open(path + "_err");
+        std::cerr.rdbuf(errOutFile.rdbuf());
     }
 
     // Create and configure logger
@@ -1054,6 +1115,9 @@ pqxx::result pullSQL(pqxx::connection &conn, const std::string &sql) {
         return res;
     } catch (const pqxx::undefined_table &e) {
         spdlog::get("container_agent")->error("{0:s} Undefined table {1:s}", __func__, e.what());
+        return {};
+    } catch (const pqxx::insufficient_privilege &e) {
+        spdlog::get("container_agent")->error("{0:s} Insufficient privilege  {1:s}", __func__, e.what());
         return {};
     } catch (const pqxx::sql_error &e) {
         spdlog::get("container_agent")->error("{0:s} SQL Error: {1:s}", __func__, e.what());
@@ -1145,12 +1209,19 @@ std::map<std::string, std::string> keywordAbbrs = {
     {"datasource", "dsrc"},
     {"traffic", "trfc"},
     {"traffic1", "trfc1"},
+    {"traffic10", "trfc10"},
     {"traffic2", "trfc2"},
+    {"traffic20", "trfc20"},
     {"traffic3", "trfc3"},
+    {"traffic30", "trfc30"},
     {"traffic4", "trfc4"},
+    {"traffic40", "trfc40"},
     {"traffic5", "trfc5"},
+    {"traffic50", "trfc50"},
     {"traffic6", "trfc6"},
-    {"traffic7", "trfc8"},
+    {"traffic60", "trfc60"},
+    {"traffic7", "trfc7"},
+    {"traffic70", "trfc70"},
     {"building", "bldg"},
     {"people", "ppl"},
     {"people1", "ppl1"},
@@ -1167,6 +1238,8 @@ std::map<std::string, std::string> keywordAbbrs = {
     {"yolov5l", "y5l"},
     {"yolov5x", "y5x"},
     {"yolov5ndsrc", "y5nd"},
+    {"retina", "rt"},
+    {"multiface", "mf"},
     {"retina1face", "rt1f"},
     {"retinamtface", "rt_mf"},
     {"retinamtfacedsrc", "rtmfd"},
@@ -1180,6 +1253,7 @@ std::map<std::string, std::string> keywordAbbrs = {
     {"dynamic", "dyn"},
     {"movenet", "move"},
     {"3090", "39"}, // GPU name
+    {"1080", "18"}, // GPU name
     {"fp32", "32"},
     {"fp16", "16"},
     {"int8", "8"}

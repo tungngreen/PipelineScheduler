@@ -3,7 +3,6 @@
 
 #include "microservice.h"
 #include <grpcpp/grpcpp.h>
-#include "../utils/json.h"
 #include <thread>
 #include "controlcommands.grpc.pb.h"
 #include "controlmessages.grpc.pb.h"
@@ -12,6 +11,7 @@
 #include "absl/flags/parse.h"
 #include "absl/flags/flag.h"
 #include <random>
+#include "fcpo_learning.h"
 
 using grpc::Status;
 using grpc::CompletionQueue;
@@ -20,17 +20,17 @@ using grpc::ClientAsyncResponseReader;
 using grpc::ServerBuilder;
 using grpc::ServerContext;
 using grpc::ServerCompletionQueue;
-using controlcommands::ControlCommands;
 using controlcommands::LoopRange;
 using controlcommands::ContainerConfig;
-using controlcommands::TimeKeeping;
 using controlcommands::ContainerLink;
 using controlcommands::ContainerInts;
-using controlcommands::ContainerSignal;
 using controlmessages::ControlMessages;
 using controlmessages::ConnectionConfigs;
 using controlmessages::SystemInfo;
 using controlmessages::DummyMessage;
+using indevicecommands::FlData;
+using indevicecommands::TimeKeeping;
+using indevicecommands::ContainerSignal;
 using EmptyMessage = google::protobuf::Empty;
 
 ABSL_DECLARE_FLAG(std::string, ctrl_configPath);
@@ -38,7 +38,6 @@ ABSL_DECLARE_FLAG(uint16_t, ctrl_verbose);
 ABSL_DECLARE_FLAG(uint16_t, ctrl_loggingMode);
 
 // typedef std::vector<std::pair<ModelType, std::vector<std::pair<ModelType, int>>>> Pipeline;
-
 
 struct ContainerHandle;
 struct PipelineModel;
@@ -204,7 +203,7 @@ struct ContainerHandle {
 
     float arrival_rate;
 
-    int batch_size;
+    BatchSizeType batch_size;
     int recv_port;
     std::string model_file;
 
@@ -269,7 +268,7 @@ struct ContainerHandle {
                 const std::vector<int>& dimensions = {},
                 uint64_t pipelineSLO = 0,
                 float arrival_rate = 0.0f,
-                const int batch_size = 0,
+                const BatchSizeType batch_size = 0,
                 const int recv_port = 0,
                 const std::string model_file = "",
                 NodeHandle* device_agent = nullptr,
@@ -389,6 +388,7 @@ struct ContainerHandle {
 
 struct PipelineModel {
     std::string name;
+    ModelType type;
     TaskHandle *task;
     // Whether the upstream is on another device
     bool isSplitPoint;
@@ -458,6 +458,7 @@ struct PipelineModel {
         // Constructor with default parameters
     PipelineModel(const std::string& device = "",
                   const std::string& name = "",
+                  ModelType type = ModelType::DataSource,
                   TaskHandle *task = nullptr,
                   bool isSplitPoint = false,
                   const ModelArrivalProfile& arrivalProfiles = ModelArrivalProfile(),
@@ -478,6 +479,7 @@ struct PipelineModel {
                   const std::vector<std::string>& possibleDevices = {})
         :
           name(name),
+          type(type),
           task(task),
           isSplitPoint(isSplitPoint),
           arrivalProfiles(arrivalProfiles),
@@ -505,6 +507,7 @@ struct PipelineModel {
         std::lock_guard<std::mutex> lock2(pipelineModelMutex, std::adopt_lock);
         device = other.device;
         name = other.name;
+        type = other.type;
         task = other.task;
         isSplitPoint = other.isSplitPoint;
         arrivalProfiles = other.arrivalProfiles;
@@ -549,6 +552,7 @@ struct PipelineModel {
             std::lock_guard<std::mutex> lock2(other.pipelineModelMutex, std::adopt_lock);
             device = other.device;
             name = other.name;
+            type = other.type;
             task = other.task;
             isSplitPoint = other.isSplitPoint;
             arrivalProfiles = other.arrivalProfiles;
@@ -982,11 +986,6 @@ private:
 
     void readConfigFile(const std::string &config_path);
 
-    // double LoadTimeEstimator(const char *model_path, double input_mem_size);
-    int InferTimeEstimator(ModelType model, int batch_size);
-    // std::map<ModelType, std::vector<int>> InitialRequestCount(const std::string &input, const Pipeline &models,
-    //                                                           int fps = 30);
-
     void queryInDeviceNetworkEntries(NodeHandle *node);
 
     struct TimingControl {
@@ -1057,6 +1056,22 @@ private:
         grpc::ServerAsyncResponseWriter<EmptyMessage> responder;
     };
 
+    class ForwardFLRequestHandler : public RequestHandler {
+    public:
+        ForwardFLRequestHandler(ControlMessages::AsyncService *service, ServerCompletionQueue *cq,
+                                Controller *c)
+                : RequestHandler(service, cq, c), responder(&ctx) {
+            Proceed();
+        }
+
+        void Proceed() final;
+
+    private:
+        FlData request;
+        EmptyMessage reply;
+        grpc::ServerAsyncResponseWriter<EmptyMessage> responder;
+    };
+
     void StartContainer(ContainerHandle *container, bool easy_allocation = true);
 
     void MoveContainer(ContainerHandle *container, NodeHandle *new_device);
@@ -1081,6 +1096,7 @@ private:
     //         std::map<ModelType, int> &batch_sizes, std::map<ModelType, int> &estimated_infer_times, int nObjects);
 
     bool running;
+    ClockType startTime;
     std::string ctrl_experimentName;
     std::string ctrl_systemName;
     std::vector<TaskDescription::TaskStruct> initialTasks;
@@ -1146,6 +1162,8 @@ private:
     void estimateTimeBudgetLeft(PipelineModel *currModel);
 
     Tasks ctrl_mergedPipelines;
+
+    FCPOServer *ctrl_fcpo_server;
 };
 
 
