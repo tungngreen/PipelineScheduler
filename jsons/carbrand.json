@@ -4,8 +4,8 @@
         "cont_systemName": "fcpo",
         "cont_pipeName": "traffic",
         "cont_taskName": "carbrand",
-        "cont_hostDevice": "agxavier",
-        "cont_hostDeviceType": "agxavier",
+        "cont_hostDevice": "server",
+        "cont_hostDeviceType": "server",
         "cont_name": "carbrand_0",
         "cont_pipeline": [
             {
@@ -15,7 +15,7 @@
                 "msvc_dnstreamMicroservices": [
                     {
                         "nb_classOfInterest": -1,
-                        "nb_commMethod": 4,
+                        "nb_commMethod": 3,
                         "nb_link": [
                             ""
                         ],
@@ -42,9 +42,9 @@
                 "msvc_upstreamMicroservices": [
                     {
                         "nb_classOfInterest": -2,
-                        "nb_commMethod": 2,
+                        "nb_commMethod": 3,
                         "nb_link": [
-                            "0.0.0.0:55055"
+                            "0.0.0.0:55013"
                         ],
                         "nb_maxQueueSize": 100,
                         "nb_name": "yolov5",
@@ -229,7 +229,7 @@
                 "cbs":1, 
                 "normalize": true,
                 "obs": 1,
-                "path": "../models/carbrand_dynamic_agx_fp32_16_1.engine",
+                "path": "../models/carbrand_dynamic_3090_fp32_64_1.engine",
                 "prec": 4,
                 "msvc_imgNormScale": "1/255",
                 "msvc_subVals": [

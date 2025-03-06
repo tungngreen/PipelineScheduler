@@ -1,21 +1,19 @@
 # Builder Image
-ARG JETPACK_VERSION="r35.2.1-py3"
+FROM pipeplusplus:dev
 
-FROM pipeline-scheduler:${JETPACK_VERSION}
+ARG VERSION=Release
 
 USER root
-RUN pip install -U jetson-stats --force
-WORKDIR /home/soulsaver/FCPO/build
 
 ENV TZ=Asia/Seoul
 RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
-#RUN apt install libspdlog-dev libpqxx-dev -y
-#RUN mkdir /app/build -p
-#COPY ./cmake /app/cmake
-#COPY ./src /app/src
-#COPY ./libs /app/libs
-#COPY ./CMakeLists.txt /app/CMakeLists.txt
-#WORKDIR /app/build
-#RUN cmake ..
-#RUN make -j 8
-#COPY ./jsons /app/jsons
+
+RUN mkdir /app/build -p
+COPY ./cmake /app/cmake
+COPY ./src /app/src
+COPY ./libs /app/libs
+COPY ./CMakeLists.txt /app/CMakeLists.txt
+WORKDIR /app/build
+RUN cmake -DCMAKE_BUILD_TYPE=VERSION ..
+RUN make -j 32
+COPY ./jsons /app/jsons

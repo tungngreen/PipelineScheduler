@@ -4,8 +4,8 @@
         "cont_systemName": "fcpo",
         "cont_pipeName": "traffic",
         "cont_taskName": "arcface",
-        "cont_hostDevice": "agxavier",
-        "cont_hostDeviceType": "agxavier",
+        "cont_hostDevice": "server",
+        "cont_hostDeviceType": "server",
         "cont_name": "arcface_0",
         "cont_pipeline": [
             {
@@ -44,7 +44,7 @@
                         "nb_classOfInterest": -2,
                         "nb_commMethod": 2,
                         "nb_link": [
-                            "0.0.0.0:55055"
+                            "0.0.0.0:55015"
                         ],
                         "nb_maxQueueSize": 100,
                         "nb_name": "retinaface",
@@ -229,7 +229,7 @@
                 "cbs":1, 
                 "normalize": true,
                 "obs": 1,
-                "path": "../models/arcface_dynamic_agx_fp32_16_1.engine",
+                "path": "../models/arcface_dynamic_3090_fp32_64_1.engine",
                 "prec": 4,
                 "msvc_imgNormScale": "0.0078125/1",
                 "msvc_subVals": [

@@ -4,8 +4,8 @@
         "cont_systemName": "fcpo",
         "cont_pipeName": "videocall",
         "cont_taskName": "emotionnet",
-        "cont_hostDevice": "agxavier",
-        "cont_hostDeviceType": "agxavier",
+        "cont_hostDevice": "server",
+        "cont_hostDeviceType": "server",
         "cont_name": "emotionnet_0",
         "cont_pipeline": [
             {
@@ -44,7 +44,7 @@
                         "nb_classOfInterest": -2,
                         "nb_commMethod": 2,
                         "nb_link": [
-                            "0.0.0.0:55055"
+                            "0.0.0.0:55012"
                         ],
                         "nb_maxQueueSize": 10,
                         "nb_name": "retinaface",
@@ -229,7 +229,7 @@
                 "cbs":1, 
                 "normalize": true,
                 "obs": 1,
-                "path": "../models/emotion_dyn_agx_fp32_16_1.engine",
+                "path": "../models/emotion_dyn_3090_fp32_64_1.engine",
                 "prec": 4,
                 "msvc_imgNormScale": "1/255",
                 "msvc_subVals": [
@@ -356,7 +356,7 @@
     },
     "profiling": {
         "profile_minBatch": 1,
-        "profile_maxBatch": 16,
+        "profile_maxBatch": 64,
         "profile_stepMode": 1,
         "profile_step": 1,
         "profile_templateModelPath": "../models/emotion_dyn_3090_fp32_[batch]_1.engine",

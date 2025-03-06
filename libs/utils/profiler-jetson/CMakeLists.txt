@@ -24,6 +24,7 @@ if(CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
             FORCE)
 endif(CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
 
+
 # Only public header files go here.
 set(
         HEADER_FILES
@@ -45,6 +46,7 @@ add_library(profiler
 # the export namespace when using add_subdirectory() instead.
 add_library(profiler::profiler ALIAS profiler)
 
+find_package(Python COMPONENTS Development REQUIRED)
 
 # Required compiler features.
 # https://cmake.org/cmake/help/v3.1/manual/cmake-compile-features.7.html
@@ -55,19 +57,16 @@ target_compile_features(profiler
 # we can have multiple versions installed at the same time.
 set(PROJECT_PREFIX profiler)
 
-find_package(Python COMPONENTS Development REQUIRED)
-
 # Defines the headers for this library.
 # https://cmake.org/cmake/help/v3.11/command/target_include_directories.html
 target_include_directories(profiler
         PUBLIC
             # Used when building the library:
             $<BUILD_INTERFACE:${profiler_SOURCE_DIR}/>
-            ${PYTHON_INCLUDE_DIRS}
             # Used when installing the library:
             $<INSTALL_INTERFACE:${PROJECT_PREFIX}>
-            ${CUDA_INCLUDE_DIRS}
             ${Python_INCLUDE_DIRS}
+            ${CUDA_INCLUDE_DIRS}
         PRIVATE
             # Used only when building the library:
             src)
@@ -77,8 +76,8 @@ target_link_libraries(profiler
         absl::flags
         absl::flags_parse
         ${CMAKE_THREAD_LIBS_INIT}
-        ${CUDA_LIBRARIES}
         ${Python_LIBRARIES}
+        ${CUDA_LIBRARIES}
         CUDA::nvml
         cuda
 )

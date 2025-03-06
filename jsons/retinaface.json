@@ -3,9 +3,9 @@
         "cont_experimentName": "prof",
         "cont_systemName": "ppp",
         "cont_pipeName": "traffic",
-        "cont_taskName": "retinamtface",
-        "cont_hostDevice": "agxavier",
-        "cont_hostDeviceType": "agxavier",
+        "cont_taskName": "retina1face",
+        "cont_hostDevice": "server",
+        "cont_hostDeviceType": "server",
         "cont_name": "retinaface_0",
         "cont_pipeline": [
             {

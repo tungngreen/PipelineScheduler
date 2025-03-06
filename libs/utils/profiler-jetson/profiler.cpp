@@ -30,7 +30,7 @@ void Profiler::jtop(const std::string &cmd) {
         }
         std::lock_guard<std::mutex> lock(m);
         stats[std::stoi(result[0])] = {std::stoi(result[1]), std::stoi(result[2]), std::stoi(result[5]), std::stoi(result[4]),
-                 std::stoi(result[3])};
+                                       std::stoi(result[3])};
         m.unlock();
         result = {};
     }

@@ -3,9 +3,9 @@
         "cont_experimentName": "rl1",
         "cont_systemName": "fcpo",
         "cont_pipeName": "every",
-        "cont_taskName": "datasource",
-        "cont_hostDevice": "agxavier",
-        "cont_hostDeviceType": "agxavier",
+        "cont_taskName": "dsrc",
+        "cont_hostDevice": "server",
+        "cont_hostDeviceType": "server",
         "cont_name": "data_source_0",
         "cont_pipeline": [
             {

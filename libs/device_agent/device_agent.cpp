@@ -232,8 +232,8 @@ void DeviceAgent::collectRuntimeMetrics() {
 //                metrics.gpuUsage.emplace_back(stats.gpuUtilization);
 //                metrics.gpuMemUsage.emplace_back(stats.deviceMemoryUsage);
 //            }
-            metrics.cpuUsage = dev_profiler->getDeviceCPUInfo();
-            dev_runtimeMetrics.emplace_back(metrics);
+//            metrics.cpuUsage = dev_profiler->getDeviceCPUInfo();
+//            dev_runtimeMetrics.emplace_back(metrics);
             metricsStopwatch.stop();
             scrapeLatencyMillisec = (uint64_t) std::ceil(metricsStopwatch.elapsed_microseconds() / 1000.f);
             dev_metricsServerConfigs.nextHwMetricsScrapeTime = std::chrono::high_resolution_clock::now() +

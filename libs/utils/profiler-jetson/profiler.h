@@ -43,23 +43,28 @@ public:
     void run();
 
     struct sysStats {
+        uint64_t timestamp = 0;
         int cpuUsage = 0;
         int processMemoryUsage = 0;
+        int rssMemory = 0;
         int deviceMemoryUsage = 0;
         unsigned int gpuUtilization = 0;
         unsigned int gpuMemoryUsage = 0;
     };
 
+
+    void addPid(unsigned int pid) {};
+    void removePid(unsigned int pid) {};
     static int getGpuCount() { return 1; };
-    void addPid(unsigned int pid) { stats[pid] = sysStats(); };
     static std::vector<unsigned int> getGpuMemory(int device_count) { return {0}; };
 
-    sysStats reportAtRuntime(unsigned int pid) {
+    sysStats reportAtRuntime(unsigned int pid, unsigned int voidPid) {
         std::lock_guard<std::mutex> lock(m); return stats[pid]; };
     sysStats reportAnyMetrics() {
         std::lock_guard<std::mutex> lock(m); return stats.begin()->second; };
 
     int getDeviceCPUInfo();
+    std::vector<sysStats> reportDeviceStats() {return {reportAnyMetrics()};};
 
 private:
     void jtop(const std::string &cmd);
