@@ -12,17 +12,7 @@ The current stage of PipelineScheduler is the implementation for our [ICDCS 2025
 
 This repo is contributed and maintained by Thanh-Tung Nguyen, Lucas Liebe (equally), and other colleges at [CDSN Lab](http://cds.kaist.ac.kr) at KAIST.
 
-When using our Code please cite the following paper:
-```
-@inproceedings{nguyen2025,
-    author={Thanh-Tung Nguyen and Lucas Liebe and Tau-Nhat Quang and Yuheng Wu and Jinghan Cheng and Dongman Lee}
-    title = {{OCTOPINF: Workload-Aware Real-Time Inference Serving for Edge Video Analytics}},
-    booktitle = {The 23rd International Conference on Pervasive Computing and Communications (PerCom 2025)},
-    year = {2025},
-    publisher = {IEEE},
-    month = march,
-}
-```
+When using our Code please cite our works at the end of this [README](#citing-our-works).
 
 # Table of Contents
 
@@ -277,6 +267,7 @@ TBA
 ## Useful Scripts
 ### Bandwidth setting
 For the purpose of running the experiments with real-world 5G traces, this [script](/scripts/set_bandwidth.sh) is provided, which is invoked from the Device Agent to set the network bandwidth using Linux's *Traffic Control* (tc).
+The required json configurations can be found [here](/jsons/) or created from the original dataset using this [script](/scripts/create_json_from_5g_dataset.py). 
 
 ### Stop all containers with a keyword
 * If the experiment is not running as expected, we may want to force fully stop them.
@@ -291,12 +282,24 @@ For the purpose of running the experiments with real-world 5G traces, this [scri
 # Citing our works
 If you find the repo useful, please cite the following works which have encompassed the development of this repo.
 
+* **FCPO: Federated Continual Policy Optimization with Heterogeneous Action Spaces for Real-Time High-Throughput Edge Video Analytics** 
+    ```
+    @inproceedings{nguyen2025,
+        author={Lucas Liebe and Thanh-Tung Nguyen and Dongman Lee}
+        title = {{FCPO: Federated Continual Policy Optimization with Heterogeneous Action Spaces for Real-Time High-Throughput Edge Video Analytics}},
+        booktitle = {The 45th International Conference on Distributed Computing Systems (ICDCS)},
+        year = {2025},
+        publisher = {IEEE},
+        month = march,
+    }
+    ```
+
 * **OCTOPINF: Workload-Aware Real-Time Inference Serving for Edge Video Analytics** 
     ```
     @inproceedings{nguyen2025,
         author={Thanh-Tung Nguyen and Lucas Liebe and Tau-Nhat Quang and Yuheng Wu and Jinghan Cheng and Dongman Lee}
         title = {{OCTOPINF: Workload-Aware Real-Time Inference Serving for Edge Video Analytics}},
-        booktitle = {The 23rd International Conference on Pervasive Computing and Communications (PerCom 2025)},
+        booktitle = {The 23rd International Conference on Pervasive Computing and Communications (PerCom)},
         year = {2025},
         publisher = {IEEE},
         month = march,
