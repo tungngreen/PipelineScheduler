@@ -61,7 +61,7 @@ if (CMAKE_PROJECT_NAME STREQUAL PROJECT_NAME)
     # For finding FindTensorRT.cmake
     set(CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/cmake" ${CMAKE_MODULE_PATH})
     if (Doxygen_FOUND)
-        add_subdirectory(docs)
+        # add_subdirectory(docs)
     else ()
         message(STATUS "Doxygen not found, not building docs")
     endif ()
