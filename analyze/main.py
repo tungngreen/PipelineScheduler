@@ -142,11 +142,10 @@ if __name__ == '__main__':
         if not os.path.exists(os.path.join(args.directory, 'processed_logs')):
             os.makedirs(os.path.join(args.directory, 'processed_logs'))
         reward_plot(args.directory)
-        overall_performance_timeseries(args.directory, 'fcpo_main') # main
-        overall_performance_timeseries(args.directory, 'fcpo_results') # ablation
-        limited_network_performance(args.directory)
-        continual_learning_performance(args.directory)
-        system_overhead(os.path.join(args.directory, 'fcpo_overhead'))
-        #perPipeline_performance(args.directory)
+        overall_performance_timeseries(args.directory, 'fcpo_main', ['FCPO', 'BCE', 'Dis', 'OInf']) # main
+        #overall_performance_timeseries(args.directory, 'fcpo_results', ['FCPO', 'reduced', 'w/o loc']) # ablation
+        #limited_network_performance(args.directory)
+        #continual_learning_performance(args.directory)
+        #system_overhead(os.path.join(args.directory, 'fcpo_overhead'))
 
 

@@ -1,8 +1,6 @@
 import os
 import json
 import pickle
-from math import sqrt
-from random import randint
 
 import numpy as np
 import pandas as pd
@@ -10,10 +8,11 @@ import matplotlib.pyplot as plt
 from natsort import natsorted
 from pandas import DataFrame
 
-from final_figures import colors, base_plot
+from final_figures import colors, base_plot, x_labels
 from run_log_analyzes import read_file, get_total_objects
 from database_conn import bucket_and_average, align_timestamps, avg_memory
 
+styles = ['-', '--', 'o-', 'x-']
 
 def read_rl_logs(directory, agents, rewards, loss):
     for agent in agents:
@@ -101,25 +100,26 @@ def reward_plot(base_directory):
 
     # plot the results
     for j, algo in enumerate(['FCPO', 'BCE']):
-        fig, ax1 = plt.subplots(1, 1, figsize=(4, 2), gridspec_kw={'height_ratios': [1], 'width_ratios': [1]})
+        fig, ax1 = plt.subplots(1, 1, figsize=(4, 1.5), gridspec_kw={'height_ratios': [1], 'width_ratios': [1]})
         ax2 = ax1.twinx()
-        ax1.plot(rewards[algo], label='reward', color=colors[j], linewidth=1)
-        ax2.plot(loss[algo], label='loss', linestyle='--', color=colors[j], linewidth=1)
-        fig.legend(fontsize=12)
+        ax1.plot(rewards[algo], label='reward', color=colors[j*2], linewidth=1)
+        ax2.plot(loss[algo], label='loss', linestyle='--', color=colors[j*2+1], linewidth=1)
+        fig.legend(fontsize=12, loc='upper center')
         ax1.set_xlabel('Episodes', size=12)
         ax1.set_ylabel('Reward Avg.', size=12)
+        ax1.set_ylim([0, 1])
+        ax1.set_yticks([0, 1])
         ax2.set_ylabel('Loss Avg.', size=12)
         ax1.set_xlim(0, 100)
         plt.tight_layout()
-        plt.savefig(f"{algo}-learning.svg")
+        plt.savefig(f"{algo}-learning.pdf")
         plt.show()
 
     fig1, ax1 = plt.subplots(1, 1, figsize=(2.5, 2.5), gridspec_kw={'height_ratios': [1], 'width_ratios': [1]})
     fig2, ax2 = plt.subplots(1, 1, figsize=(2.5, 2.5), gridspec_kw={'height_ratios': [1], 'width_ratios': [1]})
-    styles = ['-', '--', 'x-']
     for j, algo in enumerate(['FCPO', 'FCPO-reduced', 'without local optimization']):
-        ax1.plot(rewards[algo], styles[j], label=algo, color=colors[j], linewidth=1)
-        ax2.plot(loss[algo], styles[j], label=algo, color=colors[j], linewidth=1)
+        ax1.plot(rewards[algo], styles[j], label=algo, color=colors[j], linewidth=1, markevery=0.2)
+        ax2.plot(loss[algo], styles[j], label=algo, color=colors[j], linewidth=1, markevery=0.2)
     ax1.set_xlabel('Episodes', size=12)
     ax1.set_ylabel('Reward Avg.', size=12)
     ax2.set_xlabel('Episodes', size=12)
@@ -127,10 +127,10 @@ def reward_plot(base_directory):
     ax1.set_xlim(0, 50)
     ax2.set_xlim(0, 50)
     fig1.tight_layout()
-    fig1.savefig("ablation-rewards.svg")
+    fig1.savefig("ablation-rewards.pdf")
     fig1.show()
     fig2.tight_layout()
-    fig2.savefig("ablation-loss.svg")
+    fig2.savefig("ablation-loss.pdf")
     fig2.show()
 
     for algo, data in {'FCPO-rewards': fcpo_rewards, 'BCE-rewards': bce_rewards, 'FCPO-loss': fcpo_loss,
@@ -143,7 +143,8 @@ def reward_plot(base_directory):
         for agent, series in data.items():
             ax1.plot(series, label=agent, color=colors[i])
             i += 1
-        ax1.legend(fontsize=12)
+        if not algo == 'federated-rewards':
+            ax1.legend(fontsize=12)
         ax1.set_xlabel('Episodes', size=12)
         if 'reward' in algo:
             ax1.set_ylabel('Reward', size=12)
@@ -154,19 +155,18 @@ def reward_plot(base_directory):
         else:
             ax1.set_xlim(0, 100)
         plt.tight_layout()
-        plt.savefig(f"{algo}.svg")
+        plt.savefig(f"{algo}.pdf")
         plt.show()
 
 
-def overall_performance_timeseries(directory, experiment):
+def overall_performance_timeseries(directory, experiment, xticks=None):
     directory = os.path.join(directory, experiment)
     fig1, ax1 = plt.subplots(1, 1, figsize=(6, 2.5), gridspec_kw={'height_ratios': [1], 'width_ratios': [1]})
     fig2, ax2 = plt.subplots(1, 1, figsize=(6, 2.5), gridspec_kw={'height_ratios': [1], 'width_ratios': [1]})
-    styles = ['-', '--', 'x-']
-    avg_throughput = {'traffic_throughput': {'total': {}}, 'traffic_goodput': {'total': {}}}
+    avg_throughput = {'traffic_throughput': {'total': {}}, 'traffic_goodput': {'total': {}}, 'people_throughput': {'total': {}}, 'people_goodput': {'total': {}}}
     systems = natsorted(os.listdir(directory))
     if 'main' in experiment:
-        systems = ['FCPO', 'BCEdge', 'Distream']
+        systems = ['FCPO', 'BCEdge', 'Distream', 'OctopInf']
     for j, d in enumerate(systems):
         if not os.path.isdir(os.path.join(directory, d)): continue
         if not os.path.exists(os.path.join(directory, d, 'df_cars.csv')) or not os.path.exists(
@@ -221,16 +221,14 @@ def overall_performance_timeseries(directory, experiment):
         experiment = 'total'
     else:
         experiment = 'ablation'
-    #ax1.set_title('Throughput over 1h', size=12)
-    ax1.set_ylabel('Throughput (objects / s)', size=12)
+    ax1.set_ylabel('Throughput (obj / s)', size=12)
     ax1.set_xlabel('Minutes Passed since Start (min)', size=12)
     ax1.set_xticks(np.arange(0, 250, 50))
     ax1.set_xlim([0, 250])
     ax1.legend(fontsize=12)
     fig1.tight_layout()
-    fig1.savefig(f"{experiment}-throughput.svg")
+    fig1.savefig(f"{experiment}-throughput.pdf")
     fig1.show()
-    #ax2.set_title('Average Latency over 1h', size=12)
     ax2.set_ylabel('Avg Latency (ms)', size=12)
     ax2.set_xlabel('Minutes Passed since Start (min)', size=12)
     ax2.set_xticks(np.arange(0, 250, 50))
@@ -238,14 +236,16 @@ def overall_performance_timeseries(directory, experiment):
     ax2.set_ylim([0, 900])
     ax2.legend(fontsize=12)
     fig2.tight_layout()
-    fig2.savefig(f"{experiment}-latency.svg")
+    fig2.savefig(f"{experiment}-latency.pdf")
     fig2.show()
 
     # plot the throughput and latency for each pipeline
-    fig, ax1 = plt.subplots(1, 1, figsize=(3, 6), gridspec_kw={'height_ratios': [1], 'width_ratios': [1]})
-    base_plot(avg_throughput, ax1, '', True, systems, False)
+    fig, ax1 = plt.subplots(1, 1, figsize=(3, 5), gridspec_kw={'height_ratios': [1], 'width_ratios': [1]})
+    if xticks is None:
+        xticks = ['FCPO', 'BCE', 'Dis']
+    base_plot(avg_throughput, ax1, '', True, systems, False, xticks, 'Avg. Effective Throughput (obj/s)')
     plt.tight_layout()
-    plt.savefig('total-throughput-comparison.svg')
+    plt.savefig(f"{experiment}-throughput-comparison.pdf")
     plt.show()
 
 
@@ -253,7 +253,6 @@ def perPipeline_performance(directory):
     directory = os.path.join(directory, 'fcpo_results')
     fig, ax1 = plt.subplots(1, 1, figsize=(8, 3), gridspec_kw={'height_ratios': [1], 'width_ratios': [1]})
     labels = ['Traffic', 'Surveillance', 'Indoor']
-    styles = ['-', '--', 'x-']
     for j, d in enumerate(natsorted(os.listdir(directory))):
         if not os.path.isdir(os.path.join(directory, d)): continue
         for f in natsorted(os.listdir(os.path.join(directory, d))):
@@ -284,20 +283,20 @@ def perPipeline_performance(directory):
             df = df.groupby('aligned_timestamp').agg({'throughput': 'mean'}).reset_index()
             df = bucket_and_average(df, ['throughput'], num_buckets=780)
             ax1.plot(df['aligned_timestamp'], df['throughput'], styles[i], label=d + ' ' + labels[i], color=colors[j],
-                         linewidth=1)
+                         linewidth=1, markevery=0.2)
 
     ax1.set_title('Throughput over 4h', size=12)
-    ax1.set_ylabel('Throughput (objects / s)', size=12)
+    ax1.set_ylabel('Throughput (obj / s)', size=12)
     ax1.set_xlabel('Minutes Passed since Start (min)', size=12)
     ax1.set_xlim([0, 260])
     ax1.legend(fontsize=12, loc='upper center')
     plt.tight_layout()
-    plt.savefig('perPipeline-throughput.svg')
+    plt.savefig('perPipeline-throughput.pdf')
     plt.show()
 
 
 def limited_network_performance(directory):
-    bandwidth_json = json.loads(open(os.path.join(directory, '..', 'jsons', 'bandwidth-limited.json')).read())
+    bandwidth_json = json.loads(open(os.path.join(directory, 'bandwidth-limited.json')).read())
     # extract the bandwidth and timestamps from the json
     bandwidth = []
     bandwidth_timestamps = []
@@ -305,9 +304,8 @@ def limited_network_performance(directory):
         bandwidth.append(limit['mbps'])
         bandwidth_timestamps.append(limit['time'] / 60 - 1.5) # remove system startup time
     directory = os.path.join(directory, 'fcpo_netw')
-    fig1, ax1 = plt.subplots(1, 1, figsize=(6, 2.5), gridspec_kw={'height_ratios': [1], 'width_ratios': [1]})
+    fig1, ax1 = plt.subplots(1, 1, figsize=(6, 2), gridspec_kw={'height_ratios': [1], 'width_ratios': [1]})
     ax2 = ax1.twinx()
-    styles = ['-', '--', 'x-']
     data = {}
     for j, d in enumerate(natsorted(os.listdir(directory), reverse=True)):
         if not os.path.exists(os.path.join(directory, 'df.csv')):
@@ -343,22 +341,21 @@ def limited_network_performance(directory):
                  markevery=0.2)
 
     ax1.set_xlabel('Minutes Passed since Start (min)', size=12)
-    ax1.set_ylabel('Throughput (objects / s)', size=12)
+    ax1.set_ylabel('Throughput (o/s)', size=12)
     ax1.set_xlim([0, 31.5])
     ax1.legend(fontsize=12)
 
     ax2.plot(bandwidth_timestamps, bandwidth, label='Bandwidth Limit', color='black', linestyle='--', linewidth=1)
-    ax2.set_ylabel('Bandwidth Limit (Mb/s)', size=12)
+    ax2.set_ylabel('Bandwidth (Mb/s)', size=12)
     ax2.set_ylim([0, 170])
     plt.tight_layout()
-    plt.savefig('network-throughput.svg')
+    plt.savefig('network-throughput.pdf')
     plt.show()
 
 
 def continual_learning_performance(base_directory):
     directory = os.path.join(base_directory, 'fcpo_continual')
     fig1, ax1 = plt.subplots(1, 1, figsize=(6, 2.5), gridspec_kw={'height_ratios': [1], 'width_ratios': [1]})
-    styles = ['-', '--', 'x-']
     data = {}
     # add a grey vertical line every 5 minutes
     for i in range(1, 50):
@@ -395,34 +392,20 @@ def continual_learning_performance(base_directory):
                  markevery=0.2)
 
     ax1.set_xlabel('Minutes Passed since Start (min)', size=12)
-    ax1.set_ylabel('Throughput (objects / s)', size=12)
+    ax1.set_ylabel('Throughput (obj / s)', size=12)
     ax1.set_xlim([0, 49])
     ax1.legend(fontsize=12)
     plt.tight_layout()
-    plt.savefig('continual-throughput.svg')
-    plt.show()
-
-    fcpo = os.path.join(base_directory, 'fcpo_continual_logs')
-    fcpo_rewards = {}
-    fcpo_loss = {}
-    read_rl_logs(fcpo, natsorted(os.listdir(fcpo)), fcpo_rewards, fcpo_loss)
-    fig, ax1 = plt.subplots(1, 1, figsize=(4, 4), gridspec_kw={'height_ratios': [1], 'width_ratios': [1]})
-    for series in fcpo_rewards.values():
-        ax1.plot(series, color=colors[0])
-    ax1.set_xlabel('Episodes', size=12)
-    ax1.set_ylabel('Reward', size=12)
-    ax1.set_xlim(0, 23)
-    plt.tight_layout()
-    plt.savefig(f"continual-rewards.svg")
+    plt.savefig('continual-throughput.pdf')
     plt.show()
 
 
 def system_overhead(directory):
     # Memory
     systems = ['fcpo', 'bce', 'ppp']
-    labels = ['FCPO', 'BCE', 'Distream']
-    fig1, ax1 = plt.subplots(1, 1, figsize=(4, 2), gridspec_kw={'height_ratios': [1], 'width_ratios': [1]})
-    fig2, ax2 = plt.subplots(1, 1, figsize=(4, 2), gridspec_kw={'height_ratios': [1], 'width_ratios': [1]})
+    labels = ['FCPO', 'BCE', 'OInf / Dis']
+    fig1, ax1 = plt.subplots(1, 1, figsize=(4, 1.75), gridspec_kw={'height_ratios': [1], 'width_ratios': [1]})
+    fig2, ax2 = plt.subplots(1, 1, figsize=(4, 1.75), gridspec_kw={'height_ratios': [1], 'width_ratios': [1]})
     if not os.path.exists(os.path.join(directory, '..', 'processed_logs', 'memory.pkl')):
         server_memory = avg_memory('full', systems, 0)
         edge_memory = avg_memory('full', systems, 1)
@@ -438,6 +421,7 @@ def system_overhead(directory):
         ax1.plot([i - 0.35, i + 0.35], [(server_memory['ppp'][0] + server_memory['ppp'][1]) / 1024,
                                          (server_memory['ppp'][0] + server_memory['ppp'][1]) / 1024], color='black')
         ax2.plot([i - 0.35, i + 0.35], [edge_memory['ppp'][0] / (1024 * 1024), edge_memory['ppp'][0] / (1024 * 1024)], color='black')
+    ax1.legend(fontsize=12, loc='lower center')
     ax1.set_ylabel('Mem Usage (GB)', size=12)
     ax1.set_xticks([])
     ax2.legend(fontsize=12, loc='lower center')
@@ -445,8 +429,8 @@ def system_overhead(directory):
     ax2.set_xticks([])
     fig1.tight_layout()
     fig2.tight_layout()
-    fig1.savefig('server-memory.svg')
-    fig2.savefig('edge-memory.svg')
+    fig1.savefig('server-memory.pdf')
+    fig2.savefig('edge-memory.pdf')
     fig1.show()
     fig2.show()
 
@@ -468,15 +452,18 @@ def system_overhead(directory):
             j += 1
         i += 1
 
+    handles, labels = ax1.get_legend_handles_labels()
+    ax1.legend([handles[0], handles[5]], [labels[0], labels[5]], fontsize=12, loc='upper right')
     ax1.set_xticks(x + 0.2)
     ax1.set_xticklabels(x_labels, size=12)
     ax1.set_ylabel('Decision Latency (ms)  _', size=12)
+    ax2.legend([handles[0], handles[5]], [labels[0], labels[5]], fontsize=12, loc='upper left')
     ax2.set_xticks(x + 0.2)
     ax2.set_xticklabels(x_labels, size=12)
     ax2.set_ylabel('Update Latency (ms)  ', size=12)
     fig1.tight_layout()
     fig2.tight_layout()
-    fig1.savefig('inference-latency.svg')
-    fig2.savefig('update-latency.svg')
+    fig1.savefig('inference-latency.pdf')
+    fig2.savefig('update-latency.pdf')
     fig1.show()
     fig2.show()

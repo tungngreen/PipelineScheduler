@@ -21,67 +21,17 @@ colors = ['#0072B2', '#E69F00', '#009E73', '#CC79A7', '#56B4E9', '#F0E442', '#D5
 markers = ['', 'x', 'o', '*', '//', '\\\\']  # plain, triangle, circle, star, stripes left and right
 label_map = {'ppp': 'OctopInf', 'OURS': 'OctopInf', 'dis': 'Distream', 'jlf': 'Jellyfish', 'rim': 'Rim'}
 
-def plot_over_time(directory, include_people = True, schema = '', missed = True, memory = True, stepless = True):
-    fig, axs = plt.subplots(1, 1, figsize=(8, 3), gridspec_kw={'height_ratios': [1], 'width_ratios': [1]})
-    ax1 = axs
-    if memory: ax2 = ax1.twinx()
-    cars = []
-    if include_people: people = []
-    # if the csvs do not exist, create them
-    if not os.path.exists(os.path.join(directory, 'df_cars.csv')) or not os.path.exists(
-            os.path.join(directory, 'df_people.csv')):
-        for f in natsorted(os.listdir(os.path.join(directory, 'OURS'))):
-            c, p, _, _ = read_file(os.path.join(directory, 'OURS', f))
-            if include_people: people.extend(p)
-            cars.extend(c)
-        df_cars = pd.DataFrame(cars, columns=['path', 'latency', 'timestamps'])
-        df_cars.to_csv(os.path.join(directory, 'df_cars.csv'), index=False)
-        if include_people:
-            df_people = pd.DataFrame(people, columns=['path', 'latency', 'timestamps'])
-            df_people.to_csv(os.path.join(directory, 'df_people.csv'), index=False)
-    else:
-        df_cars = pd.read_csv(os.path.join(directory, 'df_cars.csv'))
-        if include_people: df_people = pd.read_csv(os.path.join(directory, 'df_people.csv'))
-    lables = ['Traffic Throughput', 'Surveillance Throughput']
-    for j, df in enumerate([df_cars, df_people] if include_people else [df_cars]):
-        df['timestamps'] = df['timestamps'].apply(lambda x: int(x))
-        df['latency'] = df['latency'].apply(lambda x: int(x))
-        df['aligned_timestamp'] = (df['timestamps'] // 1e6).astype(int) * 1e6
-        df['throughput'] = df.groupby('aligned_timestamp')['latency'].transform('size')
-        df['aligned_timestamp'] = (df['aligned_timestamp'] - df['aligned_timestamp'].iloc[0]) / (60 * 1e6)
-        df = df.groupby('aligned_timestamp').agg({'throughput': 'mean'}).reset_index()
-        df = bucket_and_average(df, ['throughput'], num_buckets=780 if stepless else 80)
-        ax1.plot(df['aligned_timestamp'], df['throughput'], label=lables[j], color=colors[j], linewidth=3)
-    if missed:
-        if not os.path.exists(os.path.join(directory, 'missed.csv')):
-            missed = bucket_and_average(arrival_query(schema), ['queue_drops', 'late_requests'], num_buckets=780)
-            missed.to_csv(os.path.join(directory, 'missed.csv'), index=False)
-        else:
-            missed = pd.read_csv(os.path.join(directory, 'missed.csv'))
-        ax1.plot(missed['aligned_timestamp'], missed['queue_drops'], label='Dropped in Queues', color=colors[2],
-                 linewidth=2)
-        ax1.plot(missed['aligned_timestamp'], missed['late_requests'], label='Late Requests', color=colors[5], linewidth=2)
-        ax1.set_title('Throughput and Missed Requests over 13h', size=12)
-        ax1.set_ylabel('Throughput / Missed (objects / s)', size=12)
-    else:
-        ax1.set_title('Throughput over 13h', size=12)
-        ax1.set_ylabel('Throughput (objects / s)', size=12)
-    ax1.set_xlabel('Minutes Passed since Start (min)', size=12)
-    ax1.set_xlim([0, 780])
-    ax1.legend(loc='lower left', fontsize=12)
-    if memory:
-        ax1.plot(0, 0, label='Memory Usage', color='black', linestyle='--', linewidth=2)
-        if not os.path.exists(os.path.join(directory, 'memory.csv')):
-            memory = full_memory(schema, 780)
-            memory.to_csv(os.path.join(directory, 'memory.csv'), index=False)
-        else:
-            memory = pd.read_csv(os.path.join(directory, 'memory.csv'))
-        ax2.plot(memory['bucket'], memory['total_gpu_mem'] / 1024, label='Memory Usage', color='black', linestyle='--', linewidth=3)
-        ax2.set_ylabel('Memory Usage (GB)', size=12)
-    plt.tight_layout()
-    plt.show()
+def base_plot(data, ax, title, sum_throughput=False, labels=algorithm_names, use_label_map=True, xticks=None, y_label='Objects / s'):
+    # error handling for different data formats
+    if xticks is None:
+        xticks = ['OInf', 'Dis', 'Jlf', 'Rim']
+    for x in ['traffic_throughput', 'people_throughput', 'traffic_goodput', 'people_goodput']:
+        if x not in data:
+            data[x] = {'total': {a: 0 for a in labels}}
+    for x in ['max_traffic_throughput', 'max_people_throughput']:
+        if x not in data:
+            data[x] = 0
 
-def base_plot(data, ax, title, sum_throughput=False, labels=algorithm_names, use_label_map=True):
     for j, a in enumerate(labels):
         if sum_throughput:
             ax.bar(j * bar_width,
@@ -116,7 +66,7 @@ def base_plot(data, ax, title, sum_throughput=False, labels=algorithm_names, use
                 ax.text(x[0] + j * bar_width, traffic_intime, f'{traffic_intime:.0f}', ha='center', va='bottom', size=10)
                 ax.text(x[1] + j * bar_width, people_intime, f'{people_intime:.0f}', ha='center', va='bottom', size=10)
 
-        if a == 'OURS':
+        if a == 'OURS' or a == 'FCPO':
             striped_patch = mpatches.Patch(facecolor='grey', alpha=0.5, hatch='//', edgecolor='white', label='Thrpt')
             solid_patch = mpatches.Patch(facecolor='grey', label='Effect. Thrpt')
             line_patch = Line2D([0], [0], color='red', linestyle='--', linewidth=2, label='Workload')
@@ -132,10 +82,14 @@ def base_plot(data, ax, title, sum_throughput=False, labels=algorithm_names, use
     if sum_throughput:
         ax.axhline(y=data['max_traffic_throughput'] + data['max_people_throughput'], color='red', linestyle='--',
                    linewidth=2, xmin=0.05, xmax=0.95)
-        ax.set_xticks([0, 0.2, 0.4, 0.6])
-        ax.set_xticklabels(['OInf', 'Dis', 'Jlf', 'Rim'], size=10)
-        ax.set_yticks([0, 500, 1000, 1500])
-        ax.set_yticklabels([0, 5, 10, 15], size=10)
+        ax.set_xticks([i * 0.2 for i in range(len(xticks))])
+        ax.set_xticklabels(xticks, size=10)
+        yticks = np.arange(0, int(data['max_traffic_throughput'] + data['max_people_throughput']), 500).tolist()
+        ax.set_yticks(yticks)
+        if use_label_map:
+            ax.set_yticklabels([int(y / 100) for y in yticks], size=10)
+        else:
+            ax.set_yticklabels(yticks, size=10)
     else:
         ax.axhline(y=data['max_traffic_throughput'], color='red', linestyle='--', linewidth=2, xmin=0.05, xmax=0.45)
         ax.axhline(y=data['max_people_throughput'], color='red', linestyle='--', linewidth=2, xmin=0.55, xmax=0.95)
@@ -149,7 +103,7 @@ def base_plot(data, ax, title, sum_throughput=False, labels=algorithm_names, use
         ax.set_yticklabels(yticks, size=10)
 
     ax.set_title(title, size=12)
-    ax.set_ylabel('Objects / s', size=12)
+    ax.set_ylabel(y_label, size=12)
 
     if not sum_throughput:
         ax.legend(fontsize=12)

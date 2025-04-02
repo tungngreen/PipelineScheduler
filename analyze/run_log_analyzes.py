@@ -8,7 +8,7 @@ from natsort import natsorted
 
 def get_total_objects(dir, path='full_run_total.json'):
     traffic_people, traffic_cars, people_people, people_cars = 0, 0, 0, 0
-    with open(path, 'r') as file:
+    with open(os.path.join(dir, path), 'r') as file:
         meta = json.load(file)
     for key in meta:
         if "traffic" in key:
