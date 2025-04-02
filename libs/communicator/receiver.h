@@ -119,7 +119,7 @@ private:
          */
         inline bool validateReq(ClockType originalGenTime, const std::string &path) {
             auto now = std::chrono::high_resolution_clock::now();
-            auto diff = std::chrono::duration_cast<TimePrecisionType>(now - originalGenTime).count();
+            uint64_t diff = std::chrono::duration_cast<TimePrecisionType>(now - originalGenTime).count();
             if (receiverInstance->msvc_RUNMODE == RUNMODE::PROFILING) {
                 if (receiverInstance->checkProfileEnd(path)) {
                     receiverInstance->STOP_THREADS = true;
@@ -127,7 +127,7 @@ private:
                 };
                 return true;
             }
-            if (diff > receiverInstance->msvc_pipelineSLO - receiverInstance->msvc_timeBudgetLeft && 
+            if (diff > receiverInstance->msvc_pipelineSLO - receiverInstance->msvc_timeBudgetLeft &&
                 receiverInstance->msvc_DROP_MODE == DROP_MODE::LAZY) {
                 receiverInstance->msvc_droppedReqCount++;
                 spdlog::get("container_agent")->trace("{0:s} drops a request with time {1:d}", containerName, diff);

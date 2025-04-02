@@ -214,7 +214,7 @@ struct SinglePolicyNet: torch::nn::Module {
 
     T combine_actions(std::vector<int> resolution, std::vector<int> batching, std::vector<int> scaling, int action2_size, int action3_size) {
         T action = torch::zeros({static_cast<long>(resolution.size()), 1});
-        for (int i = 0; i < resolution.size(); i++) {
+        for (unsigned int i = 0; i < resolution.size(); i++) {
             action[i] = resolution[i] * action2_size * action3_size + batching[i] * action3_size + scaling[i];
         }
         return action;

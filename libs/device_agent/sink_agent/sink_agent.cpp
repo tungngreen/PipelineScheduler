@@ -1,6 +1,6 @@
 #include "sink_agent.h"
 
-SinkAgent::SinkAgent(const std::string &controller_url) {
+SinkAgent::SinkAgent(const std::string &controller_url) : DeviceAgent() {
     dev_logPath += "/sink_agent";
     std::filesystem::create_directories(
             std::filesystem::path(dev_logPath)

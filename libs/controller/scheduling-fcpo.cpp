@@ -238,7 +238,7 @@ void Controller::Scheduling() {
 }
 
 void Controller::ScaleUp(PipelineModel *model, uint8_t numIncReps) {
-    if (std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now() - 
+    if ((uint64_t) std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now() -
                                    model->lastScaleTime).count() < ctrl_controlTimings.scaleUpIntervalThresholdSec) {
         spdlog::get("container_agent")->info("The model {0:s} has been scaled up recently."
                                              "Skipping the scaling up process to avoid uncessary waste.", model->name);
@@ -282,7 +282,7 @@ void Controller::ScaleUp(PipelineModel *model, uint8_t numIncReps) {
 
 void Controller::ScaleDown(PipelineModel *model, uint8_t numDecReps) {
 
-    if (std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now() - 
+    if ((uint64_t) std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now() -
                                    model->lastScaleTime).count() < ctrl_controlTimings.scaleDownIntervalThresholdSec) {
         spdlog::get("container_agent")->info("The model {0:s} has been scaled up recently."
                                              "Skipping the scaling down process to avoid THRASHING.", model->name);
@@ -453,8 +453,6 @@ GPUPortion* Controller::findFreePortionForInsertion(GPUPortionList &portionList,
  */
 std::pair<GPUPortion *, GPUPortion *> Controller::insertUsedGPUPortion(GPUPortionList &portionList, ContainerHandle *container, GPUPortion *toBeDividedFreePortion) {
     auto gpuLane = toBeDividedFreePortion->lane;
-    auto gpu = gpuLane->gpuHandle;
-
     GPUPortion *usedPortion = new GPUPortion{gpuLane};
     usedPortion->assignContainer(container);
     gpuLane->portionList.list.push_back(usedPortion);
@@ -608,7 +606,7 @@ bool Controller::removeFreeGPUPortion(GPUPortionList &portionList, GPUPortion *t
         toBeRemovedPortion->next->prev = toBeRemovedPortion->prev;
     }
 
-    auto gpuHandle = toBeRemovedPortion->lane->gpuHandle;
+    // auto gpuHandle = toBeRemovedPortion->lane->gpuHandle;
     // it = std::find(gpuHandle->freeGPUPortions.begin(), gpuHandle->freeGPUPortions.end(), toBeRemovedPortion);
     // gpuHandle->freeGPUPortions.erase(it);
     spdlog::get("container_agent")->info("Portion from {0:d} to {1:d} removed from the list of free portions of lane {2:d}",
@@ -759,7 +757,7 @@ bool Controller::containerColocationTemporalScheduling(ContainerHandle *containe
     }
     container->executionPortion = portion;
     container->gpuHandle = portion->lane->gpuHandle;
-    auto newPortions = insertUsedGPUPortion(deviceList[deviceName]->freeGPUPortions, container, portion);
+    insertUsedGPUPortion(deviceList[deviceName]->freeGPUPortions, container, portion);
 
     return true;
 }
@@ -772,7 +770,7 @@ bool Controller::containerColocationTemporalScheduling(ContainerHandle *containe
  * @return true 
  * @return false 
  */
-bool Controller::modelColocationTemporalScheduling(PipelineModel *pipelineModel, unsigned int replica_id) {
+bool Controller::modelColocationTemporalScheduling(PipelineModel *pipelineModel, int replica_id) {
     if (pipelineModel->gpuScheduled) { return true; }
     if (pipelineModel->name.find("datasource") == std::string::npos &&
         (pipelineModel->name.find("dsrc") == std::string::npos ||
@@ -808,7 +806,7 @@ void Controller::colocationTemporalScheduling() {
         initiateGPULanes(*deviceHandle);
     }
     bool process_flag = true;
-    unsigned int replica_id = 0;
+    int replica_id = 0;
     while (process_flag) {
         process_flag = false;
         for (auto &[taskName, taskHandle]: ctrl_scheduledPipelines.getMap()) {
@@ -946,6 +944,7 @@ TaskHandle* Controller::mergePipelines(const std::string& taskName) {
         tk_type = task.second->tk_type;
         break;
     }
+    spdlog::trace("Merging pipelines of type {0:d}", tk_type);
 
 
     TaskHandle* mergedPipeline = new TaskHandle{};
@@ -996,7 +995,7 @@ TaskHandle* Controller::mergePipelines(const std::string& taskName) {
                 for (auto &candidate : mergedPipeline->tk_pipelineModels) {
                     if (candidate->device == task.second->tk_pipelineModels[i]->device) {
                         if (candidate->type == task.second->tk_pipelineModels[i]->type) {
-                            bool merged = mergeModels(candidate, task.second->tk_pipelineModels.at(i), task.second->tk_pipelineModels[i]->device);
+                            mergeModels(candidate, task.second->tk_pipelineModels.at(i), task.second->tk_pipelineModels[i]->device);
                             task.second->tk_pipelineModels.at(i)->merged = true;
                             task.second->tk_pipelineModels.at(i)->toBeRun = false;
                             candidate_found = true;
@@ -1013,7 +1012,7 @@ TaskHandle* Controller::mergePipelines(const std::string& taskName) {
                 continue;
             }
             // We attempt to merge to model i of this unscheduled task into the model i of the merged pipeline
-            bool merged = mergeModels(mergedPipeline->tk_pipelineModels[i], task.second->tk_pipelineModels.at(i), task.second->tk_pipelineModels[i]->device);
+            mergeModels(mergedPipeline->tk_pipelineModels[i], task.second->tk_pipelineModels.at(i), task.second->tk_pipelineModels[i]->device);
             task.second->tk_pipelineModels.at(i)->merged = true;
             task.second->tk_pipelineModels.at(i)->toBeRun = false;
         }
@@ -1404,7 +1403,7 @@ void Controller::estimateModelTiming(PipelineModel *currModel, const uint64_t st
         }
         return;
     } else {
-        auto batchSize = currModel->batchSize;
+        // auto batchSize = currModel->batchSize;
         auto profile = currModel->processProfiles.at(currModel->deviceTypeName);
 
         uint64_t maxStartTime = std::max(currModel->startTime, start2HereLatency);
@@ -1444,7 +1443,7 @@ void Controller::estimatePipelineTiming() {
             // TODO
             estimateModelTiming(model, 0);
         }
-        uint64_t localDutyCycle;
+        // uint64_t localDutyCycle;
         // for (auto &model: task->tk_pipelineModels) {
         //     if (model->name.find("sink") != std::string::npos) {
         //         localDutyCycle = model->localDutyCycle;
@@ -1537,7 +1536,7 @@ uint64_t Controller::calculateQueuingLatency(const float &arrival_rate, const fl
     if (rho > 1) {
         return 999999999;
     }
-    float numQueriesInSystem = rho / (1 - rho);
+    // float numQueriesInSystem = rho / (1 - rho);
     float averageQueueLength = rho * rho / (1 - rho);
     return (uint64_t) (averageQueueLength / arrival_rate * 1000000);
 }

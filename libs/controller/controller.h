@@ -194,7 +194,7 @@ struct NodeHandle {
 
 struct ContainerHandle {
     std::string name;
-    unsigned int replica_id;
+    int replica_id;
     int class_of_interest;
     ModelType model;
     bool mergable;
@@ -975,7 +975,7 @@ private:
     void mergePipelines();
 
     bool containerColocationTemporalScheduling(ContainerHandle *container);
-    bool modelColocationTemporalScheduling(PipelineModel *pipelineModel, unsigned int replica_id);
+    bool modelColocationTemporalScheduling(PipelineModel *pipelineModel, int replica_id);
     void colocationTemporalScheduling();
 
     void basicGPUScheduling(std::vector<ContainerHandle *> new_containers);

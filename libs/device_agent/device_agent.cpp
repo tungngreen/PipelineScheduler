@@ -89,7 +89,7 @@ DeviceAgent::DeviceAgent(const std::string &controller_url) : DeviceAgent() {
             grpc::CreateChannel(server_address, grpc::InsecureChannelCredentials()));
     controller_sending_cq = new CompletionQueue();
 
-    dev_profiler = new Profiler({getpid()}, "runtime");
+    dev_profiler = new Profiler({(unsigned int) getpid()}, "runtime");
     Ready(getHostIP(), dev_type);
 
     dev_logPath += "/" + dev_experiment_name;
@@ -905,7 +905,8 @@ void DeviceAgent::limitBandwidth(const std::string& scriptPath, const std::strin
             if (bwThresholdIndex == bandwidth_limits.size() - 1) {
                 break;
             }
-            auto distanceToNext = bandwidth_limits[++bwThresholdIndex]["time"].get<int>() - bandwidth_limits[bwThresholdIndex - 1]["time"].get<int>();
+            bwThresholdIndex++;
+            auto distanceToNext = bandwidth_limits[bwThresholdIndex]["time"].get<int>() - bandwidth_limits[bwThresholdIndex - 1]["time"].get<int>();
             nextThresholdSetTime += std::chrono::seconds(distanceToNext);
 
             auto sleepTime = nextThresholdSetTime - std::chrono::system_clock::now();

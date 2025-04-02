@@ -280,6 +280,7 @@ bool FCPOServer::addClient(FlData &request, std::shared_ptr<ControlCommands::Stu
         federated_clients.pop_back();
         return false;
     }
+    return true;
 }
 
 void FCPOServer::proceed() {
@@ -288,7 +289,7 @@ void FCPOServer::proceed() {
             std::this_thread::sleep_for(std::chrono::seconds(1));
             continue;
         }
-        for (int i = 0; i < client_counter; i++) {
+        for (unsigned int i = 0; i < client_counter; i++) {
             if (federated_clients.size() == client_counter) break;
             std::this_thread::sleep_for(std::chrono::seconds(1)); // add some wait to potentially receive more clients
         }
@@ -328,11 +329,11 @@ void FCPOServer::proceed() {
             param /= static_cast<int64_t>(participants.size() + 1);
         }
 
-        for (auto& action_head : action_heads_by_size) {
-            for (auto &[key, value]: action_head) {
-
-            }
-        }
+//        for (auto& action_head : action_heads_by_size) {
+//            for (auto &[key, value]: action_head) {
+//                aggregate parameters of the same size
+//            }
+//        }
 
         T states, resolution_actions, batching_actions, scaling_actions;
         for (auto client: participants) {
@@ -361,7 +362,7 @@ void FCPOServer::proceed() {
             returnFLModel(client);
         }
 
-        for (int i = 0; i < aggregated_shared_params.size(); i++) {
+        for (unsigned int i = 0; i < aggregated_shared_params.size(); i++) {
             model->parameters()[i] = aggregated_shared_params[i].clone();
         }
     }

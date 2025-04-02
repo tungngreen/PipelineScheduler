@@ -24,7 +24,7 @@ NetworkEntryType aggregateNetworkEntries(const NetworkEntryType &res) {
     std::map<uint32_t, std::vector<uint64_t>> groupedEntries;
 
     // Group entries by package size
-    for (const auto entry : res) {
+    for (const auto &entry : res) {
         if (entry.second > 10000000) {
             continue;
         }
@@ -1380,7 +1380,7 @@ ContainerLibType getContainerLib(const std::string& deviceType) {
     std::ifstream file("../jsons/container_lib.json");
     json j = json::parse(file);
     file.close();
-    for (const auto item : j.items()) {
+    for (const auto &item : j.items()) {
         std::string containerName = item.key();
         if (containerName.find(deviceType) == std::string::npos && deviceType != "all") {
             continue;

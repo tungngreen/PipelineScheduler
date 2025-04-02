@@ -8,7 +8,7 @@ ABSL_FLAG(std::string, ctrl_logPath, "../logs", "Path to the log dir for the con
 
 
 
-GPULane::GPULane(GPUHandle *gpu, NodeHandle *device, uint16_t laneNum) : laneNum(laneNum), gpuHandle(gpu), node(device) {
+GPULane::GPULane(GPUHandle *gpu, NodeHandle *device, uint16_t laneNum) : gpuHandle(gpu), node(device), laneNum(laneNum) {
     dutyCycle = 0;
     portionList.head = nullptr;
     portionList.list = {};
