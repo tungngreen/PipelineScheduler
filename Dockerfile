@@ -1,5 +1,5 @@
 # Builder Image
-FROM pipeplusplus:dev
+FROM pipeplusplus:torch
 
 ARG VERSION=Release
 
@@ -14,6 +14,6 @@ COPY ./src /app/src
 COPY ./libs /app/libs
 COPY ./CMakeLists.txt /app/CMakeLists.txt
 WORKDIR /app/build
-RUN cmake -DCMAKE_BUILD_TYPE=VERSION ..
+RUN cmake -DCMAKE_BUILD_TYPE=VERSION .. -DSYSTEM_NAME=FCPO
 RUN make -j 32
 COPY ./jsons /app/jsons

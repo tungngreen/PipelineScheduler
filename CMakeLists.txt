@@ -180,9 +180,6 @@ if (ON_HOST STREQUAL "ON")
     add_subdirectory(libs/device_agent)
     add_subdirectory(libs/device_agent/sink_agent)
 
-    add_executable(Communicator libs/communicator/main.cpp)
-    target_link_libraries(Communicator communicator)
-
     add_executable(DeviceAgent libs/device_agent/main.cpp)
     target_link_libraries(DeviceAgent device_agent)
 
@@ -235,11 +232,9 @@ else()
         trtengine
         baseprocessors
     )
+
     add_executable(runSink src/main.cpp)
     target_link_libraries(runSink PipePlusPlusSink)
-
-    add_executable(Communicator libs/communicator/main.cpp)
-    target_link_libraries(Communicator communicator)
 
     add_executable(DeviceAgent libs/device_agent/main.cpp)
     target_link_libraries(DeviceAgent device_agent)
