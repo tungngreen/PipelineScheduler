@@ -9,6 +9,7 @@ void msvcconfigs::from_json(const json &j, msvcconfigs::NeighborMicroserviceConf
     j.at("nb_maxQueueSize").get_to(val.maxQueueSize);
     j.at("nb_classOfInterest").get_to(val.classOfInterest);
     j.at("nb_expectedShape").get_to(val.expectedShape);
+    j.at("nb_portions").get_to(val.portions);
 }
 
 void msvcconfigs::from_json(const json &j, msvcconfigs::BaseMicroserviceConfigs &val) {
@@ -33,6 +34,7 @@ void msvcconfigs::to_json(json &j, const msvcconfigs::NeighborMicroserviceConfig
     j["nb_maxQueueSize"] = val.maxQueueSize;
     j["nb_classOfInterest"] = val.classOfInterest;
     j["nb_expectedShape"] = val.expectedShape;
+    j["nb_portions"] = val.portions;
 }
 
 void msvcconfigs::to_json(json &j, const msvcconfigs::BaseMicroserviceConfigs &val) {

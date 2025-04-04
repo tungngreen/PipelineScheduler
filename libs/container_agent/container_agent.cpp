@@ -1341,7 +1341,7 @@ void ContainerAgent::HandleRecvRpcs() {
     auto msvcsList = getAllMicroservices();
     new KeepAliveRequestHandler(&service, server_cq.get());
     new StopRequestHandler(&service, server_cq.get(), &run);
-    new UpdateSenderRequestHandler(&service, server_cq.get(), &msvcsList);
+    new UpdateSenderRequestHandler(&service, server_cq.get(), &cont_msvcsGroups);
     new UpdateBatchSizeRequestHandler(&service, server_cq.get(), &msvcsList);
     new UpdateResolutionRequestHandler(&service, server_cq.get(), this);
     new UpdateTimeKeepingRequestHandler(&service, server_cq.get(), this);
@@ -1393,38 +1393,96 @@ void ContainerAgent::UpdateSenderRequestHandler::Proceed() {
     } else if (status == PROCESS) {
         new UpdateSenderRequestHandler(service, cq, msvcs);
         // pause processing except senders to clear out the queues
-        for (auto msvc: *msvcs) {
-            if (msvc->dnstreamMicroserviceList[0].name == request.name()) {
-                continue;
+        for (auto group : *msvcs) {
+            for (auto msvc : group.second.msvcList) {
+                if (msvc->dnstreamMicroserviceList[0].name == request.name()) {
+                    continue;
+                }
+                msvc->pauseThread();
             }
-            msvc->pauseThread();
         }
         json config;
         std::vector<ThreadSafeFixSizedDoubleQueue *> inqueue;
         std::string link = absl::StrFormat("%s:%d", request.ip(), request.port());
-        for (auto msvc: *msvcs) {
-            if (msvc->dnstreamMicroserviceList[0].name == request.name()) {
-                config = msvc->msvc_configs;
-                auto nb_links = config["msvc_dnstreamMicroservices"][0]["nb_link"];
-                if (request.mode() == AdjustUpstreamMode::Overwrite) {
-                    config["msvc_dnstreamMicroservices"][0]["nb_link"][0] = link;
-                    spdlog::get("container_agent")->trace("Overwrote link {0:s} to {1:s}", link, msvc->msvc_name);
-                } else if (request.mode() == AdjustUpstreamMode::Add) {
-                    // ensure the link is not already in the list
-                    if (std::find(nb_links.begin(),nb_links.end(), link) == nb_links.end()) {
-                        config["msvc_dnstreamMicroservices"][0]["nb_link"].push_back(link);
-                        spdlog::get("container_agent")->trace("Added link {0:s} to {1:s}", link, msvc->msvc_name);
-                    }
-                } else if (request.mode() == AdjustUpstreamMode::Remove) {
-                    if (std::find(nb_links.begin(),nb_links.end(), link) != nb_links.end()) {
-                        nb_links.erase(std::remove(nb_links.begin(), nb_links.end(), link), nb_links.end());
-                        config["msvc_dnstreamMicroservices"][0]["nb_link"] = nb_links;
-                        spdlog::get("container_agent")->trace("Removed link {0:s} from {1:s}", link, msvc->msvc_name);
+        auto senders = &(*msvcs)["sender"].msvcList;
+        for (auto sender: *senders) {
+            if (sender->dnstreamMicroserviceList[0].name == request.name()) {
+                config = sender->msvc_configs;
+                std::vector<msvcconfigs::NeighborMicroservice *> postprocessor_dnstreams = {};
+                for (auto postprocessor : *&(*msvcs)["postprocessor"].msvcList) {
+                    for (auto dnstream : postprocessor->dnstreamMicroserviceList) {
+                        if (dnstream.name == sender->msvc_name) {
+                            postprocessor_dnstreams.push_back(&dnstream);
+                        }
                     }
                 }
-                inqueue = msvc->GetInQueue();
-                msvc->stopThread();
-                msvcs->erase(std::remove(msvcs->begin(), msvcs->end(), msvc), msvcs->end());
+                auto nb_links = config["msvc_dnstreamMicroservices"][0]["nb_link"];
+                if (request.mode() == AdjustUpstreamMode::Overwrite) {
+                    auto it = std::find(nb_links.begin(), nb_links.end(), request.old_link());
+                    if (it == nb_links.end()) {
+                        spdlog::get("container_agent")->error("Link {0:s} not found in {1:s}", link, sender->msvc_name);
+                        status = FINISH;
+                        responder.Finish(reply, Status::CANCELLED, this);
+                        return;
+                    }
+                    int index = std::distance(nb_links.begin(), it);
+                    config["msvc_dnstreamMicroservices"][0]["nb_link"][index] = link;
+                    if (index != 0) {
+                        config["msvc_dnstreamMicroservices"][0]["nb_portions"][index-1] = request.data_portion();
+                        for (auto postprocessor : postprocessor_dnstreams) {
+                            postprocessor->portions[index-1] = request.data_portion();
+                        }
+                    }
+                    spdlog::get("container_agent")->trace("Overwrote link {0:s} to {1:s}", link, sender->msvc_name);
+                } else if (request.mode() == AdjustUpstreamMode::Add) {
+                        if (std::find(nb_links.begin(),nb_links.end(), link) == nb_links.end()) {
+                            config["msvc_dnstreamMicroservices"][0]["nb_link"].push_back(link);
+                            config["msvc_dnstreamMicroservices"][0]["nb_portions"].push_back(request.data_portion());
+                            for (auto postprocessor : postprocessor_dnstreams) {
+                                postprocessor->portions.push_back(request.data_portion());
+                            }
+                            spdlog::get("container_agent")->trace("Added link {0:s} to {1:s}", link, sender->msvc_name);
+                        } else {
+                            spdlog::get("container_agent")->error("Link {0:s} already exists in {1:s}", link, sender->msvc_name);
+                            status = FINISH;
+                            responder.Finish(reply, Status::CANCELLED, this);
+                            return;
+                        }
+                } else {
+                    auto it = std::find(nb_links.begin(), nb_links.end(), link);
+                    if (it == nb_links.end()) {
+                        spdlog::get("container_agent")->error("Link {0:s} not found in {1:s}", link, sender->msvc_name);
+                        status = FINISH;
+                        responder.Finish(reply, Status::CANCELLED, this);
+                        return;
+                    }
+                    int index = std::distance(nb_links.begin(), it);
+                    if (request.mode() == AdjustUpstreamMode::Remove) {
+                        nb_links.erase(std::remove(nb_links.begin(), nb_links.end(), link), nb_links.end());
+                        config["msvc_dnstreamMicroservices"][0]["nb_link"] = nb_links;
+                        config["msvc_dnstreamMicroservices"][0]["nb_portions"].erase(std::remove(
+                                config["msvc_dnstreamMicroservices"][0]["nb_portions"].begin(),
+                                config["msvc_dnstreamMicroservices"][0]["nb_portions"].end(),
+                                request.data_portion()), config["msvc_dnstreamMicroservices"][0]["nb_portions"].end());
+                        for (auto postprocessor : postprocessor_dnstreams) {
+                            postprocessor->portions.erase(
+                                    std::remove(postprocessor->portions.begin(),postprocessor->portions.end(),
+                                                request.data_portion()), postprocessor->portions.end());
+                        }
+                        spdlog::get("container_agent")->trace("Removed link {0:s} from {1:s}", link, sender->msvc_name);
+                    } else if (request.mode() == AdjustUpstreamMode::Modify) {
+                        sender->dnstreamMicroserviceList[0].portions[index - 1] = request.data_portion();
+                        for (auto postprocessor : postprocessor_dnstreams) {
+                            postprocessor->portions[index-1] = request.data_portion();
+                        }
+                        status = FINISH;
+                        responder.Finish(reply, Status::OK, this);
+                        return;
+                    }
+                }
+                inqueue = sender->GetInQueue();
+                sender->stopThread();
+                senders->erase(std::remove(senders->begin(), senders->end(), sender), senders->end());
                 break;
             }
         }
@@ -1440,12 +1498,14 @@ void ContainerAgent::UpdateSenderRequestHandler::Proceed() {
         // change postprocessing to offload data from gpu
 
         // start new serialized sender
-        msvcs->push_back(new_sender);
+        senders->push_back(new_sender);
 //        }
         //start the new sender
-        msvcs->back()->dispatchThread();
-        for (auto msvc: *msvcs) {
-            msvc->unpauseThread();
+        senders->back()->dispatchThread();
+        for (auto group : *msvcs) {
+            for (auto msvc : group.second.msvcList) {
+                msvc->unpauseThread();
+            }
         }
 
         status = FINISH;

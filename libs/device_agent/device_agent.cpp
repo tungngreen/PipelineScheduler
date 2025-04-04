@@ -406,7 +406,8 @@ void DeviceAgent::StopContainer(const DevContainerHandle &container, ContainerSi
 }
 
 void DeviceAgent::UpdateContainerSender(int mode, const std::string &cont_name, const std::string &dwnstr,
-                                        const std::string &ip, const int &port) {
+                                        const std::string &ip, const int &port, const float &data_portion,
+                                        const std::string &old_link) {
     Connection request;
     EmptyMessage reply;
     ClientContext context;
@@ -415,6 +416,8 @@ void DeviceAgent::UpdateContainerSender(int mode, const std::string &cont_name, 
     request.set_name(dwnstr);
     request.set_ip(ip);
     request.set_port(port);
+    request.set_data_portion(data_portion);
+    request.set_old_link(old_link);
 
     //check if cont_name is in containers
     if (containers.find(cont_name) == containers.end()) {
@@ -690,7 +693,7 @@ void DeviceAgent::UpdateDownstreamRequestHandler::Proceed() {
         service->RequestUpdateDownstream(&ctx, &request, &responder, cq, cq, this);
     } else if (status == PROCESS) {
         new UpdateDownstreamRequestHandler(service, cq, device_agent);
-        device_agent->UpdateContainerSender(request.mode(), request.name(), request.downstream_name(), request.ip(), request.port());
+        device_agent->UpdateContainerSender(request.mode(), request.name(), request.downstream_name(), request.ip(), request.port(), request.data_portion(), request.old_link());
         status = FINISH;
         responder.Finish(reply, Status::OK, this);
     } else {

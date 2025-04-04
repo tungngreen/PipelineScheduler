@@ -28,6 +28,8 @@ message Connection {
   string name = 2;
   string ip = 3;
   int32 port = 4;
+  float data_portion = 5;
+  string old_link = 6;
 }
 
 message TimeKeeping {

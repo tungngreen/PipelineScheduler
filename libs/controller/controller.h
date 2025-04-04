@@ -1077,7 +1077,7 @@ private:
     void MoveContainer(ContainerHandle *container, NodeHandle *new_device);
 
     static void AdjustUpstream(int port, ContainerHandle *upstr, NodeHandle *new_device,
-                               const std::string &dwnstr, AdjustUpstreamMode mode = AdjustUpstreamMode::Overwrite);
+                               const std::string &dwnstr, AdjustUpstreamMode mode, const std::string &old_link = "");
 
     static void SyncDatasource(ContainerHandle *prev, ContainerHandle *curr);
 

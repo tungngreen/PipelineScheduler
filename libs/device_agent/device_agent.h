@@ -115,7 +115,9 @@ protected:
     std::string runDocker(const std::string &executable, const std::string &cont_name, const std::string &start_string,
                          const int &device, const int &port) {
         std::string command;
-        if (dev_type == SystemDeviceType::AGXXavier) {
+        if (dev_type == SystemDeviceType::Server) {
+            command = "amd64";
+        } else if (dev_type == SystemDeviceType::AGXXavier) {
             command = "agx";
         } else if (dev_type == SystemDeviceType::NXXavier) {
             command = "nx";
@@ -156,7 +158,7 @@ protected:
     static void StopContainer(const DevContainerHandle &container, ContainerSignal message);
 
     void UpdateContainerSender(int mode, const std::string &cont_name, const std::string &dwnstr, const std::string &ip,
-                               const int &port);
+                               const int &port, const float &data_portion, const std::string &old_link);
 
     void SyncDatasources(const std::string &cont_name, const std::string &dsrc);
 

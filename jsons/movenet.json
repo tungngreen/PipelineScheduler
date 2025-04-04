@@ -27,7 +27,8 @@
                                 -1,
                                 -1
                             ]
-                        ]
+                        ],
+                        "nb_portions": []
                     }
                 ],
                 "msvc_dataShape": [
@@ -54,7 +55,8 @@
                                 -1,
                                 -1
                             ]
-                        ]
+                        ],
+                        "nb_portions": []
                     }
                 ],
                 "msvc_maxQueueSize": 100,
@@ -80,7 +82,8 @@
                                 192,
                                 192
                             ]
-                        ]
+                        ],
+                        "nb_portions": []
                     }
                 ],
                 "msvc_dataShape": [
@@ -105,7 +108,8 @@
                                 -1,
                                 -1
                             ]
-                        ]
+                        ],
+                        "nb_portions": []
                     }
                 ],
                 "msvc_maxQueueSize": 10,
@@ -144,7 +148,8 @@
                                 -1,
                                 -1
                             ]
-                        ]
+                        ],
+                        "nb_portions": []
                     }
                 ],
                 "msvc_dataShape": [
@@ -170,7 +175,8 @@
                                 192,
                                 192
                             ]
-                        ]
+                        ],
+                        "nb_portions": []
                     }
                 ],
                 "msvc_maxQueueSize": 100,
@@ -195,7 +201,8 @@
                                 48,
                                 48
                             ]
-                        ]
+                        ],
+                        "nb_portions": []
                     }
                 ],
                 "msvc_dataShape": [
@@ -221,7 +228,8 @@
                                 192,
                                 192
                             ]
-                        ]
+                        ],
+                        "nb_portions": []
                     }
                 ],
                 "msvc_maxQueueSize": 10,
@@ -264,7 +272,8 @@
                                 -1,
                                 -1
                             ]
-                        ]
+                        ],
+                        "nb_portions": []
                     }
                 ],
                 "msvc_dataShape": [
@@ -290,7 +299,8 @@
                                 -1,
                                 -1
                             ]
-                        ]
+                        ],
+                        "nb_portions": []
                     }
                 ],
                 "msvc_maxQueueSize": 100
@@ -313,7 +323,8 @@
                                 -1,
                                 -1
                             ]
-                        ]
+                        ],
+                        "nb_portions": []
                     }
                 ],
                 "msvc_dataShape": [
@@ -338,7 +349,8 @@
                                 -1,
                                 -1
                             ]
-                        ]
+                        ],
+                        "nb_portions": []
                     }
                 ],
                 "msvc_maxQueueSize": 100,

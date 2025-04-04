@@ -36,6 +36,8 @@ message ContainerLink {
   string downstream_name = 3;
   string ip = 4;
   int32 port = 5;
+  float data_portion = 6;
+  string old_link = 7;
 }
 
 message ContainerInts {

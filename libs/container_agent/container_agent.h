@@ -274,7 +274,7 @@ protected:
     class UpdateSenderRequestHandler : public RequestHandler {
     public:
         UpdateSenderRequestHandler(InDeviceCommands::AsyncService *service, ServerCompletionQueue *cq,
-                                   std::vector<Microservice *> *msvcs)
+                                   std::map<std::string, MicroserviceGroup> *msvcs)
                 : RequestHandler(service, cq), msvcs(msvcs) {
             Proceed();
         }
@@ -283,7 +283,7 @@ protected:
 
     private:
         Connection request;
-        std::vector<Microservice *> *msvcs;
+        std::map<std::string, MicroserviceGroup> *msvcs;
     };
 
     class UpdateBatchSizeRequestHandler : public RequestHandler {

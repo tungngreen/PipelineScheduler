@@ -472,9 +472,10 @@ enum SystemDeviceType {
 };
 
 enum AdjustUpstreamMode {
-    Overwrite,
-    Add,
-    Remove
+    Overwrite = 0,
+    Add = 1,
+    Remove = 2,
+    Modify = 3
 };
 
 typedef std::map<SystemDeviceType, std::string> DeviceInfoType;

@@ -518,6 +518,8 @@ namespace msvcconfigs {
         int16_t classOfInterest;
         // The shape of data this neighbor microservice expects from the current microservice.
         std::vector<RequestDataShapeType> expectedShape;
+        // portion of the output being sent to the second specified link if available
+        std::vector<float> portions;
     };
 
     /**

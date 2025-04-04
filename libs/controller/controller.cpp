@@ -917,6 +917,7 @@ void Controller::MoveContainer(ContainerHandle *container, NodeHandle *device) {
             }
         }
     }
+    std::string old_link = absl::StrFormat("%s:%d", container->device_agent->ip, container->recv_port);
     container->device_agent = device;
     container->recv_port = device->next_free_port++;
     device->containers.insert({container->name, container});
@@ -930,7 +931,7 @@ void Controller::MoveContainer(ContainerHandle *container, NodeHandle *device) {
             SyncDatasource(upstr, container);
             StopContainer(upstr, old_device);
         } else {
-            AdjustUpstream(container->recv_port, upstr, device, container->pipelineModel->name);
+            AdjustUpstream(container->recv_port, upstr, device, container->pipelineModel->name, AdjustUpstreamMode::Overwrite, old_link);
         }
     }
     StopContainer(container, old_device);
@@ -939,7 +940,7 @@ void Controller::MoveContainer(ContainerHandle *container, NodeHandle *device) {
 }
 
 void Controller::AdjustUpstream(int port, ContainerHandle *upstr, NodeHandle *new_device,
-                                const std::string &dwnstr, AdjustUpstreamMode mode) {
+                                const std::string &dwnstr, AdjustUpstreamMode mode, const std::string &old_link) {
     ContainerLink request;
     ClientContext context;
     EmptyMessage reply;
@@ -949,6 +950,8 @@ void Controller::AdjustUpstream(int port, ContainerHandle *upstr, NodeHandle *ne
     request.set_downstream_name(dwnstr);
     request.set_ip(new_device->ip);
     request.set_port(port);
+    request.set_data_portion(1.0);
+    request.set_old_link(old_link);
 
     std::unique_ptr<ClientAsyncResponseReader<EmptyMessage>> rpc(
             upstr->device_agent->stub->AsyncUpdateDownstream(&context, request, upstr->device_agent->cq));
