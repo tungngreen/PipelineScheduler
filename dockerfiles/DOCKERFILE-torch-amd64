@@ -1,4 +1,4 @@
-FROM pipeplusplus:base
+FROM pipeplusplus:base-amd64
 
 USER root
 
@@ -9,6 +9,7 @@ RUN wget ${TORCH_LINK} && \
     unzip ${TORCH_FILE} && \
     rm ${TORCH_FILE} 
 
+RUN apt-get update && apt-get install -y libpqxx-dev
 ARG user=soulsaver
 ARG host_uid=1001
 ARG host_gid=1001
@@ -16,7 +17,5 @@ ARG host_gid=1001
 USER ${user}
     
 ENV HOME=/home/${user}
-# # RUN git clone https://github.com/cyrusbehr/YOLOv8-TensorRT-CPP.git
-
 
 CMD [ "/bin/bash" ]
