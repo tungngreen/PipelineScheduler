@@ -114,30 +114,36 @@ protected:
 
     std::string runDocker(const std::string &executable, const std::string &cont_name, const std::string &start_string,
                          const int &device, const int &port) {
-        std::string command;
+        std::string command = "docker run -d --rm --network=host --runtime nvidia --gpus all";
+        std::string device_type;
         if (dev_type == SystemDeviceType::Server) {
-            command = "amd64";
-        } else if (dev_type == SystemDeviceType::AGXXavier) {
-            command = "agx";
-        } else if (dev_type == SystemDeviceType::NXXavier) {
-            command = "nx";
-        } else if (dev_type == SystemDeviceType::OrinNano) {
-            command = "orin-nano";
+            command += "-v /ssd0/tung/PipePlusPlus/data/:/app/data/  -v /ssd0/tung/PipePlusPlus/logs/:/app/logs/ "
+                       "-v /ssd0/tung/PipePlusPlus/models/:/app/models/ "
+                       "-v /ssd0/tung/PipePlusPlus/model_profiles/:/app/model_profiles/ --name " +
+                       absl::StrFormat(
+                               R"(%s pipeline-scheduler-amd64:trt-libtorch %s --json '%s' --device %i --port %i --port_offset %i)",
+                               cont_name, executable, start_string, device, port, dev_port_offset);
         } else {
-            spdlog::get("container_agent")->error("Unknown edge device type while trying to start container!");
-            return "";
+            if (dev_type == SystemDeviceType::AGXXavier) {
+                device_type = "agx";
+            } else if (dev_type == SystemDeviceType::NXXavier) {
+                device_type = "nx";
+            } else if (dev_type == SystemDeviceType::OrinNano) {
+                device_type = "orin-nano";
+            } else {
+                spdlog::get("container_agent")->error("Unknown edge device type while trying to start container!");
+                return "";
+            }
+            command += " -u 0:0 --privileged -v /home/cdsn:/home/soulsaver "
+                       "-v /home/cdsn/pipe/data:/home/soulsaver/FCPO/data "
+                       "-v /home/cdsn/pipe/models:/home/soulsaver/FCPO/models "
+                        "-v /run/jtop.sock:/run/jtop.sock  -v /usr/bin/tegrastats:/usr/bin/tegrastats --name " +
+                        absl::StrFormat(
+                                R"(%s pipeline-scheduler-%s:trt-libtorch %s --json '%s' --device %i --port %i --port_offset %i)",
+                                cont_name, device_type, executable, start_string, device, port, dev_port_offset);
         }
-        command =
-                "docker run --network=host -u 0:0 --privileged -v /home/cdsn:/home/soulsaver "
-                "-v /home/cdsn/pipe/data:/home/soulsaver/FCPO/data "
-                "-v /home/cdsn/pipe/models:/home/soulsaver/FCPO/models "
-                "-v /run/jtop.sock:/run/jtop.sock  -v /usr/bin/tegrastats:/usr/bin/tegrastats "
-                "-d --rm --runtime nvidia --gpus all --name " +
-                absl::StrFormat(
-                        R"(%s pipeline-scheduler-%s:trt-libtorch %s --json '%s' --device %i --port %i --port_offset %i)",
-                        cont_name, command, executable, start_string, device, port, dev_port_offset) +
-                " --log_dir ../logs";
-        command += deploy_mode? " --logging_mode 1" : " --verbose 0 --logging_mode 2";
+        command += " --log_dir ../logs";
+        command += (deploy_mode? " --logging_mode 1" : " --verbose 0 --logging_mode 2");
 
         if (dev_type == SystemDeviceType::Server) { // since many models might start on the server we need to slow down creation to prevent errors
             std::this_thread::sleep_for(std::chrono::milliseconds(700));
