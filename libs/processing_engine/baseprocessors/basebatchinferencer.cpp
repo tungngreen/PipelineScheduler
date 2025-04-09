@@ -243,15 +243,15 @@ RequestShapeType BaseBatchInferencer::getInputShapeVector() {
     return shape;
 }
 
-RequestShapeType BaseBatchInferencer::getOutputShapeVector() {
-    RequestShapeType shape = {};
-    std::vector<nvinfer1::Dims32> engineOutDims = msvc_inferenceEngine->getOutputDims();
-    for (uint16_t i = 0; i < engineOutDims.size(); ++i) {
-        RequestDataShapeType insideShape;
-        for (int32_t j = 0; j < engineOutDims.at(i).nbDims; ++j) {
-            insideShape.emplace_back(engineOutDims.at(i).d[j]);
-        }
-        shape.emplace_back(insideShape);
-    }
-    return shape;
-}
+//RequestShapeType BaseBatchInferencer::getOutputShapeVector() {
+//    RequestShapeType shape = {};
+//    std::vector<nvinfer1::Dims32> engineOutDims = msvc_inferenceEngine->getOutputDims();
+//    for (uint16_t i = 0; i < engineOutDims.size(); ++i) {
+//        RequestDataShapeType insideShape;
+//        for (int32_t j = 0; j < engineOutDims.at(i).nbDims; ++j) {
+//            insideShape.emplace_back(engineOutDims.at(i).d[j]);
+//        }
+//        shape.emplace_back(insideShape);
+//    }
+//    return shape;
+//}

@@ -64,6 +64,8 @@ target_link_libraries(trtengine
         ${CUDA_LIBRARIES}
         ${TensorRT_LIBRARIES}
         ${CMAKE_THREAD_LIBS_INIT}
+        nvinfer
+        nvinfer_plugin
         misc
 )
 
