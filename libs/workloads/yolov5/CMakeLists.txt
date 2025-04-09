@@ -58,7 +58,7 @@ set(PROJECT_PREFIX yolov5)
 set(container_agent_DIR "${CMAKE_CURRENT_BINARY_DIR}/../../container_agent")
 find_package(container_agent CONFIG REQUIRED)
 
-set(baseprocessors_DIR "${CMAKE_CURRENT_BINARY_DIR}/../../baseprocessors")
+set(baseprocessors_DIR "${CMAKE_CURRENT_BINARY_DIR}/../../inference_engine/baseprocessors")
 find_package(baseprocessors CONFIG REQUIRED)
 
 set(data_source_DIR "${CMAKE_CURRENT_BINARY_DIR}/../data_source")

@@ -55,7 +55,11 @@ target_compile_features(onnx2trt
 # we can have multiple versions installed at the same time.
 set(PROJECT_PREFIX onnx2trt)
 
-set(trtengine_DIR "${CMAKE_CURRENT_BINARY_DIR}/../../trtengine")
+if (CUDA_VERSION VERSION_GREATER 12)
+    set(trtengine_DIR "${CMAKE_CURRENT_BINARY_DIR}/../../inference_engine/trtengine-10")
+else()
+    set(trtengine_DIR "${CMAKE_CURRENT_BINARY_DIR}/../../inference_engine/trtengine")
+endif()
 find_package(trtengine CONFIG REQUIRED)
 
 # Defines the headers for this library.

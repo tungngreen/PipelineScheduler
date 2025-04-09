@@ -41,7 +41,7 @@ target_compile_features(trtengine
 # we can have multiple versions installed at the same time.
 set(PROJECT_PREFIX trtengine)
 
-set(misc_DIR "${CMAKE_CURRENT_BINARY_DIR}/../misc")
+set(misc_DIR "${CMAKE_CURRENT_BINARY_DIR}/../../misc")
 find_package(misc CONFIG REQUIRED)
 
 # Defines the headers for this library.

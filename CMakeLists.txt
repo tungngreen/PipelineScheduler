@@ -192,9 +192,15 @@ else()
     endif ()
     find_package(TensorRT REQUIRED)
 
-    add_subdirectory(libs/trtengine)
+    if (CUDA_VERSION VERSION_GREATER 12)
+        message("Using TensorRT 10 for Cuda 12 Systems")
+        add_subdirectory(libs/inference_engine/trtengine-10)
+    else()
+        message("Using TensorRT 8 for Cuda 11 Systems")
+        add_subdirectory(libs/inference_engine/trtengine)
+    endif()
     add_subdirectory(libs/utils/onnx2trt)
-    add_subdirectory(libs/baseprocessors)
+    add_subdirectory(libs/inference_engine/baseprocessors)
     add_subdirectory(libs/container_agent)
     add_subdirectory(libs/workloads/data_source)
     add_subdirectory(libs/workloads/yolov5)
@@ -229,7 +235,6 @@ else()
         misc
         microservice
         communicator
-        trtengine
         baseprocessors
     )
 

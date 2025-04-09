@@ -67,10 +67,14 @@ target_compile_features(baseprocessors
 set(PROJECT_PREFIX baseprocessors)
 
 
-set(microservice_DIR "${CMAKE_CURRENT_BINARY_DIR}/../microservice")
+set(microservice_DIR "${CMAKE_CURRENT_BINARY_DIR}/../../microservice")
 find_package(microservice CONFIG REQUIRED)
 
-set(trtengine_DIR "${CMAKE_CURRENT_BINARY_DIR}/../trtengine")
+if (CUDA_VERSION VERSION_GREATER 12)
+    set(trtengine_DIR "${CMAKE_CURRENT_BINARY_DIR}/../trtengine-10")
+else()
+    set(trtengine_DIR "${CMAKE_CURRENT_BINARY_DIR}/../trtengine")
+endif()
 find_package(trtengine CONFIG REQUIRED)
 
 # Defines the headers for this library.

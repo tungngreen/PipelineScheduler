@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.18)
 
-project(movenet)
+project(trtengine)
 
 # This include defines standard install locations.
 # https://cmake.org/cmake/help/v3.11/module/GNUInstallDirs.html
@@ -10,78 +10,61 @@ include(GNUInstallDirs)
 # https://cmake.org/cmake/help/v3.11/module/CMakePackageConfigHelpers.html
 include(CMakePackageConfigHelpers)
 
-# If no build type was specified, set it to Release.
-if(NOT CMAKE_BUILD_TYPE)
-    set(CMAKE_BUILD_TYPE Release CACHE STRING
-            "Choose the type of build, options are: None Debug Release."
-            FORCE)
-endif(NOT CMAKE_BUILD_TYPE)
-
-# If no installation prefix is given manually, install locally.
-if(CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
-    set(CMAKE_INSTALL_PREFIX "${CMAKE_BINARY_DIR}/install" CACHE STRING
-            "The install location"
-            FORCE)
-endif(CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
-
 # Only public header files go here.
 set(
         HEADER_FILES 
-        movenet.h
+        ./trtengine.h
 )
 
 # All source files and private header files go here.
 set(
-        SOURCE_FILES
-        movenet.cpp
+        SOURCE_FILES 
+        ./trtengine.cpp
 )
 
 # Here we define the library.
-add_library(movenet
+add_library(trtengine SHARED
         ${HEADER_FILES}
         ${SOURCE_FILES})
 
 # We also add an alias definition so that we shadown
 # the export namespace when using add_subdirectory() instead.
-add_library(movenet::movenet ALIAS movenet)
+add_library(trtengine::trtengine ALIAS trtengine)
 
 
 # Required compiler features.
 # https://cmake.org/cmake/help/v3.1/manual/cmake-compile-features.7.html
-target_compile_features(movenet
+target_compile_features(trtengine
         # Features required to compile the library itself.
-        PRIVATE cxx_std_11)
+        PRIVATE cxx_std_14)
 # By prefixing the installation paths with our name and version
 # we can have multiple versions installed at the same time.
-set(PROJECT_PREFIX movenet)
+set(PROJECT_PREFIX trtengine)
 
-find_package(TensorRT REQUIRED)
-find_package(CUDA REQUIRED)
-find_package(OpenCV REQUIRED)
-find_package(Threads REQUIRED)
-
-set(container_agent_DIR "${CMAKE_CURRENT_BINARY_DIR}/../../container_agent")
-find_package(container_agent CONFIG REQUIRED)
-
-set(baseprocessors_DIR "${CMAKE_CURRENT_BINARY_DIR}/../../inference_engine/baseprocessors")
-find_package(baseprocessors CONFIG REQUIRED)
+set(misc_DIR "${CMAKE_CURRENT_BINARY_DIR}/../../misc")
+find_package(misc CONFIG REQUIRED)
 
 # Defines the headers for this library.
 # https://cmake.org/cmake/help/v3.11/command/target_include_directories.html
-target_include_directories(movenet
+target_include_directories(trtengine
         PUBLIC
             # Used when building the library:
-            $<BUILD_INTERFACE:${movenet_SOURCE_DIR}/>
+            $<BUILD_INTERFACE:${trtengine_SOURCE_DIR}/>
             # Used when installing the library:
             $<INSTALL_INTERFACE:${PROJECT_PREFIX}>
+            ${OpenCV_INCLUDE_DIRS}
+            ${CUDA_INCLUDE_DIRS}
+            ${TensorRT_INCLUDE_DIRS}
         PRIVATE
             # Used only when building the library:
             src)
-
-target_link_libraries(movenet
+target_link_libraries(trtengine
         PUBLIC
-        container_agent
-        baseprocessors
+        ${OpenCV_LIBS}
+        ${CUDA_LIBRARIES}
+        ${TensorRT_LIBRARIES}
+        ${CMAKE_THREAD_LIBS_INIT}
+        misc
 )
 
 # Here we configure variables specifying the target directories.
@@ -89,21 +72,21 @@ set(INSTALL_RUNTIME_DIR ${CMAKE_INSTALL_BINDIR})
 set(INSTALL_CONFIG_DIR  ${CMAKE_INSTALL_LIBDIR}/${PROJECT_PREFIX}/cmake)
 set(INSTALL_LIBRARY_DIR ${CMAKE_INSTALL_LIBDIR}/${PROJECT_PREFIX}/${CMAKE_BUILD_TYPE})
 set(INSTALL_ARCHIVE_DIR ${CMAKE_INSTALL_LIBDIR}/${PROJECT_PREFIX}/${CMAKE_BUILD_TYPE}/static)
-set(INSTALL_INCLUDE_DIR ${CMAKE_INSTALL_INCLUDEDIR}/${PROJECT_PREFIX}/movenet)
+set(INSTALL_INCLUDE_DIR ${CMAKE_INSTALL_INCLUDEDIR}/${PROJECT_PREFIX}/trtengine)
 
 # Define the configuration file locations.
-set(PROJECT_CONFIG_VERSION_FILE "${PROJECT_BINARY_DIR}/movenet-config-version.cmake")
-set(PROJECT_CONFIG_FILE         "${PROJECT_BINARY_DIR}/movenet-config.cmake")
+set(PROJECT_CONFIG_VERSION_FILE "${PROJECT_BINARY_DIR}/trtengine-config-version.cmake")
+set(PROJECT_CONFIG_FILE         "${PROJECT_BINARY_DIR}/trtengine-config.cmake")
 
-configure_package_config_file(cmake/movenet-config.cmake.in
+configure_package_config_file(cmake/trtengine-config.cmake.in
         ${PROJECT_CONFIG_FILE}
         INSTALL_DESTINATION ${INSTALL_CONFIG_DIR})
 
 
 # The INSTALL(TARGET) command specifies where to install specific targets.
 # By specifying EXPORT here, we add these targets to an export group.
-install(TARGETS movenet
-        EXPORT movenet-targets
+install(TARGETS trtengine
+        EXPORT trtengine-targets
         RUNTIME DESTINATION ${INSTALL_RUNTIME_DIR}
         LIBRARY DESTINATION ${INSTALL_LIBRARY_DIR}
         ARCHIVE DESTINATION ${INSTALL_ARCHIVE_DIR})
@@ -119,15 +102,15 @@ install(FILES
         DESTINATION ${INSTALL_CONFIG_DIR})
 
 # The INSTALL(EXPORT) command installs a previously defined export group to a script.
-install(EXPORT movenet-targets
-        FILE movenet-targets.cmake
-        NAMESPACE movenet::
+install(EXPORT trtengine-targets
+        FILE trtengine-targets.cmake
+        NAMESPACE trtengine::
         DESTINATION ${INSTALL_CONFIG_DIR})
 
-export(EXPORT movenet-targets
-       FILE ${CMAKE_CURRENT_BINARY_DIR}/movenet-targets.cmake
-       NAMESPACE movenet::)
+export(EXPORT trtengine-targets
+       FILE ${CMAKE_CURRENT_BINARY_DIR}/trtengine-targets.cmake
+       NAMESPACE trtengine::)
 
 # Register the package in the user's package registry.
 # https://cmake.org/cmake/help/v3.11/command/export.html
-export(PACKAGE movenet)
+export(PACKAGE trtengine)
