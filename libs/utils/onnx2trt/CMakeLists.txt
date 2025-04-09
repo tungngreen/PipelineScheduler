@@ -56,9 +56,9 @@ target_compile_features(onnx2trt
 set(PROJECT_PREFIX onnx2trt)
 
 if (CUDA_VERSION VERSION_GREATER 12)
-    set(trtengine_DIR "${CMAKE_CURRENT_BINARY_DIR}/../../inference_engine/trtengine-10")
+    set(trtengine_DIR "${CMAKE_CURRENT_BINARY_DIR}/../../processing_engine/trtengine-10")
 else()
-    set(trtengine_DIR "${CMAKE_CURRENT_BINARY_DIR}/../../inference_engine/trtengine")
+    set(trtengine_DIR "${CMAKE_CURRENT_BINARY_DIR}/../../processing_engine/trtengine")
 endif()
 find_package(trtengine CONFIG REQUIRED)
 

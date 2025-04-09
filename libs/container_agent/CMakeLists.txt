@@ -50,7 +50,7 @@ find_package(communicator CONFIG REQUIRED)
 set(controller_DIR "${CMAKE_CURRENT_BINARY_DIR}/../controller")
 find_package(controller CONFIG REQUIRED)
 
-set(baseprocessors_DIR "${CMAKE_CURRENT_BINARY_DIR}/../inference_engine/baseprocessors")
+set(baseprocessors_DIR "${CMAKE_CURRENT_BINARY_DIR}/../processing_engine/baseprocessors")
 find_package(baseprocessors CONFIG REQUIRED)
 
 set(fcpo_learning_DIR "${CMAKE_CURRENT_BINARY_DIR}/../fcpo_learning")

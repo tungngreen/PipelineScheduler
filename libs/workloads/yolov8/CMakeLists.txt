@@ -60,7 +60,7 @@ find_package(CUDA REQUIRED)
 find_package(OpenCV REQUIRED)
 find_package(Threads REQUIRED)
 
-set(baseprocessors_DIR "${CMAKE_CURRENT_BINARY_DIR}/../../inference_engine/baseprocessors")
+set(baseprocessors_DIR "${CMAKE_CURRENT_BINARY_DIR}/../../processing_engine/baseprocessors")
 find_package(baseprocessors CONFIG REQUIRED)
 
 set(container_agent_DIR "${CMAKE_CURRENT_BINARY_DIR}/../../container_agent")
