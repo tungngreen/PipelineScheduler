@@ -14,17 +14,20 @@ void Sender::loadConfigs(const json &jsonConfigs, bool isConstructing) {
 
     SenderConfigs configs = loadConfigsFromJson(jsonConfigs);
 
-    stubs = std::vector<std::unique_ptr<DataTransferService::Stub>>();
+    //stubs = std::vector<std::unique_ptr<DataTransferService::Stub>>();
+    stubs = StubVector();
     for (auto &link: dnstreamMicroserviceList.front().link) {
         stubs.push_back(
                 DataTransferService::NewStub(
                         grpc::CreateChannel(link, grpc::InsecureChannelCredentials())));
     }
+
     if (stubs.size() > 1) {
         multipleStubs = true;
     } else {
         multipleStubs = false;
     }
+
     READY = true;
 }
 
@@ -176,26 +179,15 @@ std::string GPUSender::SendData(std::vector<RequestData<LocalGPUReqDataType>> &e
     ClientContext context;
     Status status;
 
-
+    std::unique_ptr<ClientAsyncResponseReader<EmptyMessage>> rpc;
     if (!multipleStubs) {
-        std::unique_ptr<ClientAsyncResponseReader<EmptyMessage>> rpc(
-                stubs[0]->AsyncGpuPointerTransfer(&context, request, &cq));
-        rpc->Finish(&reply, &status, (void *) 1);
-        void *got_tag;
-        bool ok = false;
-        GPR_ASSERT(cq.Next(&got_tag, &ok));
-        GPR_ASSERT(ok);
-
-        if (status.ok()) {
-            return "Complete";
-        } else {
-            std::cout << status.error_code() << ": " << status.error_message() << std::endl;
-            return "RPC failed";
-        };
+        rpc = (stubs.first()->AsyncGpuPointerTransfer(&context, request, &cq));
+    } else if (dnstreamMicroserviceList.front().portions[0] == 1.0) {
+        rpc = (stubs.random()->AsyncGpuPointerTransfer(&context, request, &cq));
+    } else {
+        rpc = (stubs.next()->AsyncGpuPointerTransfer(&context, request, &cq));
     }
 
-    std::unique_ptr<ClientAsyncResponseReader<EmptyMessage>> rpc(
-            stubs[rand_int(0, stubs.size() - 1)]->AsyncGpuPointerTransfer(&context, request, &cq));
     rpc->Finish(&reply, &status, (void *) 1);
     void *got_tag;
     bool ok = false;
@@ -242,25 +234,15 @@ std::string LocalCPUSender::SendData(std::vector<RequestData<LocalCPUReqDataType
     ClientContext context;
     Status status;
 
+    std::unique_ptr<ClientAsyncResponseReader<EmptyMessage>> rpc;
     if (!multipleStubs) {
-        std::unique_ptr<ClientAsyncResponseReader<EmptyMessage>> rpc(
-                stubs[0]->AsyncSharedMemTransfer(&context, request, &cq));
-        rpc->Finish(&reply, &status, (void *) 1);
-        void *got_tag;
-        bool ok = false;
-        GPR_ASSERT(cq.Next(&got_tag, &ok));
-        GPR_ASSERT(ok);
-
-        if (status.ok()) {
-            return "Complete";
-        } else {
-            std::cout << status.error_code() << ": " << status.error_message() << std::endl;
-            return "RPC failed";
-        }
+        rpc = (stubs.first()->AsyncSharedMemTransfer(&context, request, &cq));
+    } else if (dnstreamMicroserviceList.front().portions[0] == 1.0) {
+        rpc = (stubs.random()->AsyncSharedMemTransfer(&context, request, &cq));
+    } else {
+        rpc = (stubs.next()->AsyncSharedMemTransfer(&context, request, &cq));
     }
 
-    std::unique_ptr<ClientAsyncResponseReader<EmptyMessage>> rpc(
-            stubs[rand_int(0, stubs.size() - 1)]->AsyncSharedMemTransfer(&context, request, &cq));
     rpc->Finish(&reply, &status, (void *) 1);
     void *got_tag;
     bool ok = false;
@@ -303,25 +285,15 @@ std::string RemoteCPUSender::SendData(std::vector<RequestData<LocalCPUReqDataTyp
     ClientContext context;
     Status status;
 
+    std::unique_ptr<ClientAsyncResponseReader<EmptyMessage>> rpc;
     if (!multipleStubs) {
-        std::unique_ptr<ClientAsyncResponseReader<EmptyMessage>> rpc(
-                stubs[0]->AsyncSerializedDataTransfer(&context, request, &cq));
-        rpc->Finish(&reply, &status, (void *) 1);
-        void *got_tag;
-        bool ok = false;
-        GPR_ASSERT(cq.Next(&got_tag, &ok));
-        GPR_ASSERT(ok);
-
-        if (status.ok()) {
-            return "Complete";
-        } else {
-            spdlog::get("container_agent")->error("{0:s} error {1:d}: {2:s}", msvc_name, status.error_code(), status.error_message());
-            return "RPC failed";
-        }
+        rpc = (stubs.first()->AsyncSerializedDataTransfer(&context, request, &cq));
+    } else if (dnstreamMicroserviceList.front().portions[0] == 1.0) {
+        rpc = (stubs.random()->AsyncSerializedDataTransfer(&context, request, &cq));
+    } else {
+        rpc = (stubs.next()->AsyncSerializedDataTransfer(&context, request, &cq));
     }
 
-    std::unique_ptr<ClientAsyncResponseReader<EmptyMessage>> rpc(
-            stubs[rand_int(0, stubs.size() - 1)]->AsyncSerializedDataTransfer(&context, request, &cq));
     rpc->Finish(&reply, &status, (void *) 1);
     void *got_tag;
     bool ok = false;
@@ -334,5 +306,4 @@ std::string RemoteCPUSender::SendData(std::vector<RequestData<LocalCPUReqDataTyp
         spdlog::get("container_agent")->error("{0:s} error {1:d}: {2:s}", msvc_name, status.error_code(), status.error_message());
         return "RPC failed";
     }
-    return "Complete";
 }

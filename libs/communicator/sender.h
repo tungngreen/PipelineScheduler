@@ -10,6 +10,55 @@ using boost::interprocess::read_write;
 using boost::interprocess::create_only;
 using json = nlohmann::ordered_json;
 
+class StubVector {
+public:
+    explicit StubVector()
+            : currentIndex_(0) {
+        stubs = std::vector<std::unique_ptr<DataTransferService::Stub>>();
+    }
+
+    // Overload the ++ operator to cycle through the stubs
+    DataTransferService::Stub *next() {
+        auto oldIndex = currentIndex_++;
+        currentIndex_ = currentIndex_ % stubs.size();
+        return stubs[oldIndex].get();
+    }
+
+    DataTransferService::Stub *random() const  {
+        return stubs[rand_int(0, stubs.size() - 1)].get();
+    }
+
+    DataTransferService::Stub *current() const {
+        return stubs[currentIndex_].get();
+    }
+
+    DataTransferService::Stub *first() const {
+        return stubs[0].get();
+    }
+
+    void push_back(std::unique_ptr<DataTransferService::Stub> stub) {
+        stubs.push_back(std::move(stub));
+    }
+
+    size_t size() const {
+        return stubs.size();
+    }
+
+private:
+    static inline std::mt19937 &generator() {
+        // the generator will only be seeded once (per thread) since it's static
+        static thread_local std::mt19937 gen(std::random_device{}());
+        return gen;
+    }
+
+    static int rand_int(int min, int max) {
+        std::uniform_int_distribution<int> dist(min, max);
+        return dist(generator());
+    }
+
+    std::vector<std::unique_ptr<DataTransferService::Stub>> stubs;
+    size_t currentIndex_;
+};
 
 struct SenderConfigs : BaseMicroserviceConfigs {
     // Empty for now
@@ -30,6 +79,11 @@ public:
                          std::vector<std::string> &path, RequestSLOType &slo) = 0;
 
 protected:
+    void addToName(const std::string substring, const std::string strToAdd) {
+        msvc_name.replace(msvc_name.find(substring), substring.length(), strToAdd + substring);
+        msvc_microserviceLogPath.replace(msvc_microserviceLogPath.find(substring), substring.length(), strToAdd + substring);
+    }
+
     static inline std::mt19937 &generator() {
         // the generator will only be seeded once (per thread) since it's static
         static thread_local std::mt19937 gen(std::random_device{}());
@@ -41,12 +95,7 @@ protected:
         return dist(generator());
     }
 
-    void addToName(const std::string substring, const std::string strToAdd) {
-        msvc_name.replace(msvc_name.find(substring), substring.length(), strToAdd + substring);
-        msvc_microserviceLogPath.replace(msvc_microserviceLogPath.find(substring), substring.length(), strToAdd + substring);
-    }
-
-    std::vector<std::unique_ptr<DataTransferService::Stub>> stubs;
+    StubVector stubs;
     bool multipleStubs;
     std::atomic<bool> run{};
 };
