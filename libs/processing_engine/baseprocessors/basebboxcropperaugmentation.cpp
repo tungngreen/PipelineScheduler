@@ -363,8 +363,10 @@ void BaseBBoxCropperAugmentation::cropping() {
             uint32_t totalInMem = imageList[i].data.channels() * imageList[i].data.rows * imageList[i].data.cols * CV_ELEM_SIZE1(imageList[i].data.type());
             uint32_t totalOutMem = 0, totalEncodedOutMem = 0;
 
-            std::vector<PerQueueOutRequest> outReqList(msvc_OutQueue.size());
+            std::vector<std::vector<PerQueueOutRequest>> outReqList(msvc_OutQueue.size(), std::vector<PerQueueOutRequest>());
+
             // After cropping, we need to find the right queues to put the bounding boxes in
+            float processedCounter = 0;
             for (int j = 0; j < numDetsInFrame; ++j) {
                 bboxClass = (int16_t)nmsed_classes[i * maxNumDets + j];
 
@@ -419,9 +421,14 @@ void BaseBBoxCropperAugmentation::cropping() {
                 bboxShape = {singleImageBBoxList[j].channels(), singleImageBBoxList[j].rows, singleImageBBoxList[j].cols};
 
                 for (auto qIndex : queueIndex) {
-                    outReqList.at(qIndex).used = true;
                     std::string path = currReq_path;
                     path += "|" + std::to_string(numDetsInFrame) + "|" + std::to_string(j);
+                    if (dnstreamMicroserviceList[bboxClass].portions.size() > 0 &&
+                        (processedCounter++ / numDetsInFrame)
+                            > dnstreamMicroserviceList[bboxClass].portions[outReqList.at(qIndex).size()-1]) {
+                        outReqList.at(qIndex).emplace_back();
+                        processedCounter = 0;
+                    }
                     // Put the correct type of outreq for the downstream, a sender, which expects either LocalGPU or localCPU
                     if (msvc_activeOutQueueIndex.at(qIndex) == 1) { //Local CPU
                         if (msvc_OutQueue.at(qIndex)->getEncoded()) {
@@ -436,11 +443,11 @@ void BaseBBoxCropperAugmentation::cropping() {
                             };
                         }
 
-                        outReqList.at(qIndex).cpuReq.req_origGenTime.emplace_back(RequestTimeType{currReq.req_origGenTime[i].front()});
-                        outReqList.at(qIndex).cpuReq.req_e2eSLOLatency.emplace_back(currReq.req_e2eSLOLatency[i]);
-                        outReqList.at(qIndex).cpuReq.req_travelPath.emplace_back(path);
-                        outReqList.at(qIndex).cpuReq.req_data.emplace_back(reqDataCPU);
-                        outReqList.at(qIndex).cpuReq.req_batchSize = 1;
+                        outReqList.at(qIndex).back().cpuReq.req_origGenTime.emplace_back(RequestTimeType{currReq.req_origGenTime[i].front()});
+                        outReqList.at(qIndex).back().cpuReq.req_e2eSLOLatency.emplace_back(currReq.req_e2eSLOLatency[i]);
+                        outReqList.at(qIndex).back().cpuReq.req_travelPath.emplace_back(path);
+                        outReqList.at(qIndex).back().cpuReq.req_data.emplace_back(reqDataCPU);
+                        outReqList.at(qIndex).back().cpuReq.req_batchSize = 1;
 
                         spdlog::get("container_agent")->trace("{0:s} emplaced a bbox of class {1:d} to CPU queue {2:d}.", msvc_name, bboxClass, qIndex);
 
@@ -458,17 +465,17 @@ void BaseBBoxCropperAugmentation::cropping() {
                             bboxShape,
                             out
                         };
-                        outReqList.at(qIndex).gpuReq.req_origGenTime.emplace_back(RequestTimeType{currReq.req_origGenTime[i].front()});
-                        outReqList.at(qIndex).gpuReq.req_e2eSLOLatency.emplace_back(currReq.req_e2eSLOLatency[i]);
-                        outReqList.at(qIndex).gpuReq.req_travelPath.emplace_back(path);
-                        outReqList.at(qIndex).gpuReq.req_data.emplace_back(reqData);
-                        outReqList.at(qIndex).cpuReq.req_batchSize = 1;
+                        outReqList.at(qIndex).back().gpuReq.req_origGenTime.emplace_back(RequestTimeType{currReq.req_origGenTime[i].front()});
+                        outReqList.at(qIndex).back().gpuReq.req_e2eSLOLatency.emplace_back(currReq.req_e2eSLOLatency[i]);
+                        outReqList.at(qIndex).back().gpuReq.req_travelPath.emplace_back(path);
+                        outReqList.at(qIndex).back().gpuReq.req_data.emplace_back(reqData);
+                        outReqList.at(qIndex).back().cpuReq.req_batchSize = 1;
 
                         spdlog::get("container_agent")->trace("{0:s} emplaced a bbox of class {1:d} to GPU queue {2:d}.", msvc_name, bboxClass, qIndex);
                     }
                     uint32_t imageMemSize = singleImageBBoxList[j].cols * singleImageBBoxList[j].rows * singleImageBBoxList[j].channels() * CV_ELEM_SIZE1(singleImageBBoxList[j].type());
-                    outReqList.at(qIndex).totalSize += imageMemSize;
-                    outReqList.at(qIndex).totalEncodedSize += boxEncodedMemSize;
+                    outReqList.at(qIndex).back().totalSize += imageMemSize;
+                    outReqList.at(qIndex).back().totalEncodedSize += boxEncodedMemSize;
                     totalOutMem += imageMemSize;
                     totalEncodedOutMem += boxEncodedMemSize;
                 }
@@ -476,28 +483,28 @@ void BaseBBoxCropperAugmentation::cropping() {
             }
 
             NumQueuesType qIndex = 0;
-            for (auto &outReq : outReqList) {
-                if (outReq.used) {
+            for (auto &outList : outReqList) {
+                for (auto &outReq : outList) {
                     if (msvc_activeOutQueueIndex.at(qIndex) == 1) { //Local CPU GPU
                         // Add the total size of bounding boxes heading to this queue
-                        auto completeTime = std::chrono::high_resolution_clock::now();
-                        for (auto &path : outReq.cpuReq.req_travelPath) {
-                            path += "|" + std::to_string(outReq.totalEncodedSize) + "|" + std::to_string(outReq.totalSize) + "]";
+                        for (auto &path: outReq.cpuReq.req_travelPath) {
+                            path += "|" + std::to_string(outReq.totalEncodedSize) + "|" +
+                                    std::to_string(outReq.totalSize) + "]";
                         }
                         // Make sure the time is uniform across all the bounding boxes
-                        for (auto &time : outReq.cpuReq.req_origGenTime) {
-                            time.emplace_back(completeTime);
+                        for (auto &time: outReq.cpuReq.req_origGenTime) {
+                            time.emplace_back(std::chrono::high_resolution_clock::now());
                         }
                         msvc_OutQueue.at(qIndex)->emplace(outReq.cpuReq);
                     } else { //Local GPU Queue
                         // Add the total size of bounding boxes heading to this queue
-                        for (auto &path : outReq.gpuReq.req_travelPath) {
-                            path += "|" + std::to_string(outReq.totalEncodedSize) + "|" + std::to_string(outReq.totalSize) + "]";
+                        for (auto &path: outReq.gpuReq.req_travelPath) {
+                            path += "|" + std::to_string(outReq.totalEncodedSize) + "|" +
+                                    std::to_string(outReq.totalSize) + "]";
                         }
                         // Make sure the time is uniform across all the bounding boxes
-                        auto completeTime = std::chrono::high_resolution_clock::now();
-                        for (auto &time : outReq.gpuReq.req_origGenTime) {
-                            time.emplace_back(completeTime);
+                        for (auto &time: outReq.gpuReq.req_origGenTime) {
+                            time.emplace_back(std::chrono::high_resolution_clock::now());
                         }
                         msvc_OutQueue.at(qIndex)->emplace(outReq.gpuReq);
                     }

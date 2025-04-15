@@ -378,7 +378,6 @@ protected:
     ArrivalReqRecords msvc_arrivalRecords;
 
     struct PerQueueOutRequest {
-        bool used = false;
         uint32_t totalSize = 0;
         uint32_t totalEncodedSize = 0;
         Request<LocalCPUReqDataType> cpuReq;
