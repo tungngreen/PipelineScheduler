@@ -114,7 +114,7 @@ protected:
 
     std::string runDocker(const std::string &executable, const std::string &cont_name, const std::string &start_string,
                          const int &device, const int &port) {
-        std::string command = "docker run -d --rm --network=host --runtime nvidia --gpus all";
+        std::string command = "docker run -d --rm --network=host --runtime nvidia --gpus all ";
         std::string device_type;
         if (dev_type == SystemDeviceType::Server) {
             command += "-v /ssd0/tung/PipePlusPlus/data/:/app/data/  -v /ssd0/tung/PipePlusPlus/logs/:/app/logs/ "
@@ -134,7 +134,7 @@ protected:
                 spdlog::get("container_agent")->error("Unknown edge device type while trying to start container!");
                 return "";
             }
-            command += " -u 0:0 --privileged -v /home/cdsn:/home/soulsaver "
+            command += "-u 0:0 --privileged -v /home/cdsn:/home/soulsaver "
                        "-v /home/cdsn/pipe/data:/home/soulsaver/FCPO/data "
                        "-v /home/cdsn/pipe/models:/home/soulsaver/FCPO/models "
                         "-v /run/jtop.sock:/run/jtop.sock  -v /usr/bin/tegrastats:/usr/bin/tegrastats --name " +
