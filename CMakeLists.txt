@@ -126,7 +126,7 @@ endif ()
 # Automatically detect the CUDA architecture using nvcc
 if (${DEVICE_ARCH} STREQUAL "amd64")
     list(APPEND CMAKE_PREFIX_PATH /libtorch)
-elif (${DEVICE_ARCH} STREQUAL "orin")
+elseif(${DEVICE_ARCH} STREQUAL "orin")
     if (${ON_HOST} STREQUAL "ON")
         set (Torch_DIR /home/cdsn/.local/lib/python3.10/site-packages/torch/share/cmake/Torch)
     else()
