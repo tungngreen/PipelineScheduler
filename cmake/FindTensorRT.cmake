@@ -46,7 +46,7 @@ endif()
 
 if(NOT TensorRT_PARSERS_LIBRARY)
     foreach(search ${_TensorRT_SEARCHES})
-        find_library(TensorRT_NVPARSERS_LIBRARY NAMES nvparsers ${${search}} PATH_SUFFIXES lib)
+        find_library(TensorRT_NVPARSERS_LIBRARY NAMES nvonnxparser ${${search}} PATH_SUFFIXES lib)
     endforeach()
 endif()
 
@@ -76,7 +76,11 @@ if(TensorRT_FOUND)
     set(TensorRT_INCLUDE_DIRS ${TensorRT_INCLUDE_DIR})
 
     if(NOT TensorRT_LIBRARIES)
-        set(TensorRT_LIBRARIES ${TensorRT_LIBRARY} ${TensorRT_NVONNXPARSER_LIBRARY} ${TensorRT_NVPARSERS_LIBRARY})
+        if (CUDA_VERSION VERSION_GREATER 12)
+            set(TensorRT_LIBRARIES ${TensorRT_LIBRARY} ${TensorRT_NVONNXPARSER_LIBRARY})
+        else()
+            set(TensorRT_LIBRARIES ${TensorRT_LIBRARY} ${TensorRT_NVONNXPARSER_LIBRARY} ${TensorRT_NVPARSERS_LIBRARY})
+        endif ()
     endif()
 
     if(NOT TARGET TensorRT::TensorRT)
