@@ -115,12 +115,6 @@ ENV LIBSPARSE_LT_LINK=https://developer.download.nvidia.com/compute/cusparselt/r
 RUN wget -O ${LIBSPARSE_LT}.tar.xz ${LIBSPARSE_LT_LINK}
 RUN mkdir ${LIBSPARSE_LT} && tar --strip-components=1 -xvf ${LIBSPARSE_LT}.tar.xz -C /${LIBSPARSE_LT} && rm libsparselt.tar.xz
 
-# More dependencies for Torch 2.5
-RUN wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/arm64/cuda-keyring_1.1-1_all.deb
-RUN sudo dpkg -i cuda-keyring_1.1-1_all.deb
-RUN sudo apt-get update
-RUN sudo apt-get -y install libcusparselt0 libcusparselt-dev
-
 ENV LD_LIBRARY_PATH="/${LIBSPARSE_LT}/lib:$LD_LIBRARY_PATH"
 RUN pip3 install numpy==1.26.1
 ENV TORCH_VERSION=torch-2.5.0a0+872d972e41.nv24.08.17622132-cp310-cp310-linux_aarch64.whl
@@ -128,6 +122,15 @@ ENV TORCH_LINK=https://developer.download.nvidia.com/compute/redist/jp/v61/pytor
 
 RUN wget -O ${TORCH_VERSION} ${TORCH_LINK} 
 RUN pip3 install ${TORCH_VERSION}
+
+# Install OpenCV built with GPU Support
+ENV OPENCV_VERSION=4.10.0
+RUN apt -y purge *libopencv*
+RUN apt-get install -y unzip libgtk2.0-dev pkg-config libavcodec-dev libavformat-dev libswscale-dev libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev libtbb2 libtbb-dev libjpeg-dev libpng-dev libtiff-dev libv4l-dev v4l-utils qv4l2
+RUN wget -O opencv.zip https://github.com/opencv/opencv/archive/refs/tags/${OPENCV_VERSION}.zip && unzip opencv.zip
+RUN wget -O opencv_contrib.zip https://github.com/opencv/opencv_contrib/archive/refs/tags/${OPENCV_VERSION}.zip && unzip opencv_contrib.zip
+RUN mkdir opencv-${OPENCV_VERSION}/release
+RUN cd opencv-${OPENCV_VERSION}/release && cmake -D WITH_CUDA=ON -D WITH_CUDNN=ON -D CUDA_ARCH_BIN="8.7" -D CUDA_ARCH_PTX="" -D OPENCV_GENERATE_PKGCONFIG=ON -D OPENCV_EXTRA_MODULES_PATH=../../opencv_contrib-${OPENCV_VERSION}/modules -D WITH_GSTREAMER=ON -D WITH_LIBV4L=ON -D BUILD_opencv_python3=ON -D BUILD_TESTS=OFF -D BUILD_PERF_TESTS=OFF -D BUILD_EXAMPLES=OFF -D CMAKE_BUILD_TYPE=RELEASE -D CMAKE_INSTALL_PREFIX=/usr/local .. && make -j$(nproc) install
 
 ARG user=soulsaver
 ARG host_uid=1000
@@ -143,6 +146,5 @@ RUN chown -R ${user}:${user} /home/${user}
 USER ${user}
 
 ENV HOME=/home/${user}
-
 
 CMD [ "/bin/bash" ]
