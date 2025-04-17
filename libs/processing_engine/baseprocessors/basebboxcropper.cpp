@@ -728,7 +728,7 @@ void BaseBBoxCropper::cropping() {
             for (auto &outList : outReqList) {
                 outList.clear();
             }
-
+            msvc_outputCount += numDetsInFrame;
             singleImageBBoxList.clear();
         }
 

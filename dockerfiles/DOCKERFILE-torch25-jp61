@@ -115,6 +115,12 @@ ENV LIBSPARSE_LT_LINK=https://developer.download.nvidia.com/compute/cusparselt/r
 RUN wget -O ${LIBSPARSE_LT}.tar.xz ${LIBSPARSE_LT_LINK}
 RUN mkdir ${LIBSPARSE_LT} && tar --strip-components=1 -xvf ${LIBSPARSE_LT}.tar.xz -C /${LIBSPARSE_LT} && rm libsparselt.tar.xz
 
+# More dependencies for Torch 2.5
+RUN wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/arm64/cuda-keyring_1.1-1_all.deb
+RUN sudo dpkg -i cuda-keyring_1.1-1_all.deb
+RUN sudo apt-get update
+RUN sudo apt-get -y install libcusparselt0 libcusparselt-dev
+
 ENV LD_LIBRARY_PATH="/${LIBSPARSE_LT}/lib:$LD_LIBRARY_PATH"
 RUN pip3 install numpy==1.26.1
 ENV TORCH_VERSION=torch-2.5.0a0+872d972e41.nv24.08.17622132-cp310-cp310-linux_aarch64.whl
