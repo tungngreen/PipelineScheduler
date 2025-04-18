@@ -173,23 +173,14 @@ RUN apt install postgresql-client libspdlog-dev -y
 # GDB for debugging
 RUN apt install gdb -y
 
-# # Store load time model
-# ARG upload_model="upload_model.txt"
-# ARG download_model="download_model.txt"
-# COPY ${upload_model} /ltmodel
-# COPY ${download_model} /ltmodel
+# Torch
+ARG TORCH_FILE=libtorch-cxx11-abi-shared-with-deps-1.11.0+cu115.zip
+ARG TORCH_LINK=https://download.pytorch.org/libtorch/cu115/libtorch-cxx11-abi-shared-with-deps-1.11.0%2Bcu115.zip
+RUN wget ${TORCH_LINK} && \
+    unzip ${TORCH_FILE} && \
+    rm ${TORCH_FILE}
 
-# # Install LightGBM
-# ARG LIGHTGBM_SRC_DIR=/lightgbm-src
-# RUN mkdir -p ${LIGHTGBM_SRC_DIR}
-# RUN cd lightgbm-src
-# RUN git clone --recursive https://github.com/microsoft/LightGBM && \
-#     cd LightGBM && \
-#     cmake -B build -S . -DCMAKE_INSTALL_PREFIX=/usr && \
-#     cmake --build build -j4 && \
-#     cmake --install build
-
-# Add more libraries here if needed
+RUN apt-get update && apt-get install -y libpqxx-dev
 
 ARG user=soulsaver
 ARG host_uid=1001

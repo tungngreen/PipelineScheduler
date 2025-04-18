@@ -1,7 +1,5 @@
 # Use the base image
 ARG JETPACK_VERSION="r35.4.1"
-# r36.4.0-py3 for the orins
-# r35.4.1-py3 for the xaviers
 
 FROM 143.248.55.42:5000/nvcr.io/nvidia/l4t-jetpack:${JETPACK_VERSION}
 
@@ -17,7 +15,6 @@ RUN chmod u+x /tmp/cmake-install.sh
 RUN mkdir /opt/cmake-3.25.1
 RUN /tmp/cmake-install.sh --skip-license --prefix=/opt/cmake-3.25.1
 RUN ln -s /opt/cmake-3.25.1/bin/* /usr/local/bin
-
 
 # Install gRPC 1.62.0
 ARG GRPC_INSTALL_DIR=/grpc
@@ -41,7 +38,7 @@ RUN cd /grpc-src && \
     mkdir -p "third_party/protobuf/cmake/build" && \
     cd "third_party/protobuf/cmake/build" && \
     cmake -Dprotobuf_BUILD_SHARED_LIBS=ON -Dprotobuf_BUILD_TESTS=OFF -DCMAKE_BUILD_TYPE=Release -Dprotobuf_ABSL_PROVIDER=package ../.. && \
-    make "-j4" install
+    make "-j${GRPC_CPP_DISTRIBTEST_BUILD_COMPILER_JOBS}" install
 
 
 RUN cd /grpc-src && \
@@ -73,13 +70,13 @@ RUN cd /grpc-src && \
               -DBUILD_DEPS=ON \
               -DCMAKE_INSTALL_PREFIX=$GRPC_INSTALL_DIR \
       ../.. && \
-    make -j 8 && \
+    make -j$(nproc) && \
     make install
 ENV PATH="${PATH}:${GRPC_INSTALL_DIR}/bin"
 
 # Install Boost
 RUN apt update
-RUN apt-get install build-essential g++ python3-dev python3-pip autotools-dev libicu-dev libbz2-dev libboost-all-dev -y
+RUN apt-get install build-essential g++ python3-dev autotools-dev libicu-dev libbz2-dev libboost-all-dev -y
 
 # Install spdlog
 RUN apt install libspdlog-dev libpqxx-dev -y
@@ -87,24 +84,8 @@ RUN apt install libspdlog-dev libpqxx-dev -y
 # Install posgresql-client
 RUN apt install postgresql-client -y
 
-# # Store load time model
-# ARG upload_model="upload_model_agx.txt"
-# ARG download_model="download_model_agx.txt"
-# COPY ${upload_model} /ltmodel
-# COPY ${download_model} /ltmodel
-
-# # Install LightGBM
-# ARG LIGHTGBM_SRC_DIR=/lightgbm-src
-# RUN mkdir -p ${LIGHTGBM_SRC_DIR}
-# RUN cd lightgbm-src
-# RUN git clone --recursive https://github.com/microsoft/LightGBM && \
-#     cd LightGBM && \
-#     cmake -B build -S . -DCMAKE_INSTALL_PREFIX=/usr && \
-#     cmake --build build -j4 && \
-#     cmake --install build
-
 RUN apt update
-RUN apt install gdb -y
+RUN apt install gdb python3-pip -y
 
 ARG TORCH_VERSION=torch-2.1.0a0+41361538.nv23.06-cp38-cp38-linux_aarch64.whl
 ARG TORCH_LINK=https://developer.download.nvidia.cn/compute/redist/jp/v512/pytorch/torch-2.1.0a0+41361538.nv23.06-cp38-cp38-linux_aarch64.whl
@@ -113,7 +94,7 @@ RUN wget -O ${TORCH_VERSION} ${TORCH_LINK}
 RUN pip3 install ${TORCH_VERSION}
 
 # Install OpenCV built with GPU Support
-ENV OPENCV_VERSION=4.8.1
+ENV OPENCV_VERSION=4.10.0
 RUN apt -y purge *libopencv*
 RUN apt-get install -y unzip libgtk2.0-dev pkg-config libavcodec-dev libavformat-dev libswscale-dev libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev libtbb2 libtbb-dev libjpeg-dev libpng-dev libtiff-dev libv4l-dev v4l-utils qv4l2
 RUN wget -O opencv.zip https://github.com/opencv/opencv/archive/refs/tags/${OPENCV_VERSION}.zip && unzip opencv.zip
@@ -121,20 +102,12 @@ RUN wget -O opencv_contrib.zip https://github.com/opencv/opencv_contrib/archive/
 RUN mkdir opencv-${OPENCV_VERSION}/release
 RUN cd opencv-${OPENCV_VERSION}/release && cmake -D WITH_CUDA=ON -D WITH_CUDNN=ON -D CUDA_ARCH_BIN="7.2" -D CUDA_ARCH_PTX="" -D OPENCV_GENERATE_PKGCONFIG=ON -D OPENCV_EXTRA_MODULES_PATH=../../opencv_contrib-${OPENCV_VERSION}/modules -D WITH_GSTREAMER=ON -D WITH_LIBV4L=ON -D BUILD_opencv_python3=ON -D BUILD_TESTS=OFF -D BUILD_PERF_TESTS=OFF -D BUILD_EXAMPLES=OFF -D CMAKE_BUILD_TYPE=RELEASE -D CMAKE_INSTALL_PREFIX=/usr/local .. && make -j$(nproc) install
 
-ARG user=soulsaver
-ARG host_uid=1000
-ARG host_gid=1000
+# Install Jtop
+RUN pip3 install -U jetson-stats --force
 
-RUN groupadd -g $host_gid ${user}
-RUN useradd -u $host_uid -g ${user} ${user}
-RUN usermod -aG video ${user}
-RUN echo '%sudo ALL(ALL:ALL) ALL' >> /etc/sudoers
-RUN mkdir /home/${user}
-RUN chown -R ${user}:${user} /home/${user}
+# Set Correct Timezone
+ENV TZ=Asia/Seoul
+RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 
-USER ${user}
-
-ENV HOME=/home/${user}
-
-
+WORKDIR /app/build
 CMD [ "/bin/bash" ]

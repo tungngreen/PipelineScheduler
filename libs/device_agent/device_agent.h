@@ -134,10 +134,9 @@ protected:
                 spdlog::get("container_agent")->error("Unknown edge device type while trying to start container!");
                 return "";
             }
-            command += "-u 0:0 --privileged -v /home/cdsn:/home/soulsaver "
-                       "-v /home/cdsn/pipe/data:/home/soulsaver/FCPO/data "
-                       "-v /home/cdsn/pipe/models:/home/soulsaver/FCPO/models "
-                        "-v /run/jtop.sock:/run/jtop.sock  -v /usr/bin/tegrastats:/usr/bin/tegrastats --name " +
+            command += "-u 0:0 --privileged -v /home/cdsn/FCPO:/app "
+                       "-v /home/cdsn/pipe/data:/app/data -v /home/cdsn/pipe/models:/app/models "
+                       "-v /run/jtop.sock:/run/jtop.sock  -v /usr/bin/tegrastats:/usr/bin/tegrastats --name " +
                         absl::StrFormat(
                                 R"(%s pipeline-scheduler-%s:trt-libtorch %s --json '%s' --device %i --port %i --port_offset %i)",
                                 cont_name, device_type, executable, start_string, device, port, dev_port_offset);
