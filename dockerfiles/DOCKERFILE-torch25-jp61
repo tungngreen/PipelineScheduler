@@ -93,7 +93,7 @@ ENV LIBSPARSE_LT_LINK=https://developer.download.nvidia.com/compute/cusparselt/r
 RUN wget -O ${LIBSPARSE_LT}.tar.xz ${LIBSPARSE_LT_LINK}
 RUN mkdir ${LIBSPARSE_LT} && tar --strip-components=1 -xvf ${LIBSPARSE_LT}.tar.xz -C /${LIBSPARSE_LT} && rm libsparselt.tar.xz
 
-ENV LD_LIBRARY_PATH="/${LIBSPARSELT}/lib:$LD_LIBRARY_PATH"
+ENV LD_LIBRARY_PATH="/${LIBSPARSE_LT}/lib:$LD_LIBRARY_PATH"
 RUN pip3 install numpy==1.26.1
 ENV TORCH_VERSION=torch-2.5.0a0+872d972e41.nv24.08.17622132-cp310-cp310-linux_aarch64.whl
 ENV TORCH_LINK=https://developer.download.nvidia.com/compute/redist/jp/v61/pytorch/torch-2.5.0a0+872d972e41.nv24.08.17622132-cp310-cp310-linux_aarch64.whl
@@ -112,6 +112,23 @@ RUN cd opencv-${OPENCV_VERSION}/release && cmake -D WITH_CUDA=ON -D WITH_CUDNN=O
 
 # Install Jtop
 RUN pip3 install -U jetson-stats --force
+
+# Install spdlog version 1.5.0
+# Remove the old version
+RUN apt remove -y libspdlog-dev
+
+# Install the new version
+RUN git clone --branch v1.5.0 https://github.com/gabime/spdlog.git
+RUN cd spdlog && \
+    mkdir build && \
+    cd build && \
+    cmake -DCMAKE_BUILD_TYPE=Release -DCMAKE_POSITION_INDEPENDENT_CODE=ON -DSPDLOG_BUILD_TESTS=OFF .. && \
+    make -j$(nproc) && \
+    make install && \
+    cd ../.. && \
+    rm -rf spdlog
+
+RUN apt install libopenblas-dev -y 
 
 # Set Correct Timezone
 ENV TZ=Asia/Seoul
