@@ -106,6 +106,8 @@ void Engine::serializeEngineOptions(const TRTConfigs &configs) {
  * @return false if shit goes south otherwise
  */
 bool Engine::build() {
+    initLibNvInferPlugins(nullptr, "");
+
     const std::string& onnxModelPath = m_configs.path;
     // Only regenerate the engine file if it has not already been generated for the specified options
     std::cout << "Searching for engine file with name: " << m_engineName << std::endl;
