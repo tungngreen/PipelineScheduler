@@ -239,7 +239,8 @@ public:
     FCPOAgent(std::string& cont_name, uint state_size, uint resolution_size, uint max_batch, uint scaling_size,
              CompletionQueue *cq, std::shared_ptr<InDeviceMessages::Stub> stub, torch::Dtype precision = torch::kF64,
              uint update_steps = 60, uint update_steps_inc = 5, uint federated_steps = 5, double lambda = 0.95,
-             double gamma = 0.99, double clip_epsilon = 0.2, double penalty_weight = 0.1, int seed = 42);
+             double gamma = 0.99, double clip_epsilon = 0.2, double penalty_weight = 0.1, double theta = 1.1,
+             double sigma = 10.0, double phi = 2.0, int seed = 42);
 
     ~FCPOAgent() {
         torch::save(model, path + "/latest_model.pt");
@@ -279,12 +280,19 @@ private:
     CompletionQueue *cq;
     std::shared_ptr<InDeviceMessages::Stub> stub;
 
+    // PPO Hyperparameters
     double lambda;
     double gamma;
     double clip_epsilon;
     double cumu_reward;
     double last_avg_reward = 0.0;
     double penalty_weight;
+
+    // weights for reward function
+    double theta;
+    double sigma;
+    double phi;
+
     uint state_size;
     uint resolution_size;
     uint max_batch;
@@ -299,7 +307,7 @@ private:
 
 class FCPOServer {
 public:
-    FCPOServer(std::string run_name, uint state_size, torch::Dtype precision);
+    FCPOServer(std::string run_name, uint state_size = 7, torch::Dtype precision = torch::kF32);
     ~FCPOServer() {
         torch::save(model, path + "/latest_model.pt");
         out.close();
@@ -325,11 +333,14 @@ public:
                 {"gamma", gamma},
                 {"clip_epsilon", clip_epsilon},
                 {"penalty_weight", penalty_weight},
+                {"theta", theta},
+                {"sigma", sigma},
+                {"phi", phi},
                 {"precision", boost::algorithm::to_lower_copy(p)},
-                {"update_steps", 100},
-                {"update_step_incs", 10},
-                {"federated_steps", 10},
-                {"seed", 42}
+                {"update_steps", update_steps},
+                {"update_step_incs", update_step_incs},
+                {"federated_steps", federated_steps},
+                {"seed", seed}
         };
     }
 
@@ -356,11 +367,24 @@ private:
     std::string path;
     std::atomic<bool> run;
 
+    // PPO Hyperparameters
     double lambda;
     double gamma;
     double clip_epsilon;
     double penalty_weight;
     uint state_size;
+
+    // weights for reward function
+    double theta;
+    double sigma;
+    double phi;
+
+
+    // Parameters for Learning Loop
+    int update_steps;
+    int update_step_incs;
+    int federated_steps;
+    int seed;
 };
 
 

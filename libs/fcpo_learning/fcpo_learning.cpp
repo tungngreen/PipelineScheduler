@@ -3,10 +3,10 @@
 FCPOAgent::FCPOAgent(std::string& cont_name, uint state_size, uint resolution_size, uint max_batch,  uint scaling_size,
                      CompletionQueue *cq, std::shared_ptr<InDeviceMessages::Stub> stub, torch::Dtype precision,
                      uint update_steps, uint update_steps_inc, uint federated_steps, double lambda, double gamma,
-                     double clip_epsilon, double penalty_weight, int seed)
+                     double clip_epsilon, double penalty_weight, double theta, double sigma, double phi, int seed)
         : precision(precision), cont_name(cont_name), cq(cq), stub(stub), lambda(lambda), gamma(gamma),
-          clip_epsilon(clip_epsilon), penalty_weight(penalty_weight), state_size(state_size),
-          resolution_size(resolution_size), max_batch(max_batch), scaling_size(scaling_size),
+          clip_epsilon(clip_epsilon), penalty_weight(penalty_weight), theta(theta), sigma(sigma), phi(phi),
+          state_size(state_size), resolution_size(resolution_size), max_batch(max_batch), scaling_size(scaling_size),
           update_steps(update_steps), update_steps_inc(update_steps_inc), federated_steps(federated_steps) {
     path = "../models/fcpo_learning/" + cont_name;
     std::filesystem::create_directories(std::filesystem::path(path));
@@ -167,7 +167,7 @@ void FCPOAgent::rewardCallback(double throughput, double drops, double latency_p
             first = false;
             return;
         }
-        double reward = (1.1 * throughput - 10 * latency_penalty - 2 * std::pow(oversize_penalty, 2)) / 2.0;
+        double reward = (theta * throughput - sigma * latency_penalty - phi * std::pow(oversize_penalty, 2)) / 2.0;
         reward = std::max(-1.0, std::min(1.0, reward)); // Clip reward to [-1, 1]
         experiences.add_reward(reward);
         cumu_reward += reward;
@@ -260,6 +260,16 @@ FCPOServer::FCPOServer(std::string run_name, uint state_size, torch::Dtype preci
     gamma = 0.1;
     clip_epsilon = 0.9;
     penalty_weight = 0.2;
+
+    theta = 1.1;
+    sigma = 10.0;
+    phi = 2.0;
+
+    update_steps = 100;
+    update_step_incs = 10;
+    federated_steps = 10;
+    seed = 42;
+
     federated_clients = {};
     run = true;
     std::thread t(&FCPOServer::proceed, this);

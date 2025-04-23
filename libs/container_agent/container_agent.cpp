@@ -570,7 +570,8 @@ ContainerAgent::ContainerAgent(const json& configs) {
                                         rl_conf["batch_size"], rl_conf["threads_size"], sender_cq, stub,
                                         getTorchDtype(rl_conf["precision"]), rl_conf["update_steps"],
                                         rl_conf["update_step_incs"], rl_conf["federated_steps"], rl_conf["lambda"],
-                                        rl_conf["gamma"], rl_conf["clip_epsilon"], rl_conf["penalty_weight"], rl_conf["seed"]);
+                                        rl_conf["gamma"], rl_conf["clip_epsilon"], rl_conf["penalty_weight"], rl_conf["theta"],
+                                        rl_conf["sigma"],rl_conf["phi"], rl_conf["seed"]);
     }
 
     std::thread receiver(&ContainerAgent::HandleRecvRpcs, this);
