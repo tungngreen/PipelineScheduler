@@ -127,7 +127,7 @@ std::vector<nvmlDevice_t> Profiler::getDevices() {
     return devices;
 }
 
-void Profiler::setPidOnDevices(unsigned int pid) {
+void Profiler::setPidOnDevices(unsigned int pid, bool first) {
     for (const auto &device: cuda_devices) {
         nvmlProcessInfo_t processes[64];
         unsigned int infoCount = 64;
@@ -144,8 +144,9 @@ void Profiler::setPidOnDevices(unsigned int pid) {
             }
         }
     }
-    if (pidOnDevices.find(pid) == pidOnDevices.end()) {
-        setPidOnDevices(pid);
+    if (first && pidOnDevices.find(pid) == pidOnDevices.end()) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        setPidOnDevices(pid, false);
     }
 }
 

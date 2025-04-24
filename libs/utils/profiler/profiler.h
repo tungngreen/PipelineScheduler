@@ -68,7 +68,7 @@ private:
 
     std::vector<nvmlDevice_t> getDevices();
 
-    void setPidOnDevices(unsigned int pid);
+    void setPidOnDevices(unsigned int pid, bool first = true);
 
     bool cleanupNVML();
 
