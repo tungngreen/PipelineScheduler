@@ -11,6 +11,12 @@
         "runCommand": "./runSink",
         "modelPath": ""
     },
+    "yolov5_server": {
+        "taskName": "yolov5",
+        "templateConfigPath": "../jsons/yolov5.json",
+        "runCommand": "./Container_Yolov5",
+        "modelPath": "../models/yolov5n_dynamic_nms_3090_fp32_16_1.engine"
+    },
     "yolov5n_server": {
         "taskName": "yolov5",
         "templateConfigPath": "../jsons/yolov5.json",
@@ -113,6 +119,12 @@
         "runCommand": "./Container_DataSource",
         "modelPath": ""
     },
+    "yolov5_nxavier": {
+        "taskName": "yolov5",
+        "templateConfigPath": "../jsons/yolov5.json",
+        "runCommand": "./Container_Yolov5",
+        "modelPath": "../models/yolov5n_dynamic_nms_nx_fp32_8_1.engine"
+    },
     "yolov5n_nxavier": {
         "taskName": "yolov5",
         "templateConfigPath": "../jsons/yolov5.json",
@@ -191,6 +203,12 @@
         "runCommand": "./Container_DataSource",
         "modelPath": ""
     },
+    "yolov5_agxavier": {
+        "taskName": "yolov5",
+        "templateConfigPath": "../jsons/yolov5.json",
+        "runCommand": "./Container_Yolov5",
+        "modelPath": "../models/yolov5n_dynamic_nms_agx_fp32_16_1.engine"
+    },
     "yolov5n_agxavier": {
         "taskName": "yolov5",
         "templateConfigPath": "../jsons/yolov5.json",
@@ -268,7 +286,13 @@
         "templateConfigPath": "../jsons/datasource.json",
         "runCommand": "./Container_DataSource",
         "modelPath": ""
-    },   
+    },
+    "yolov5_orinano": {
+        "taskName": "yolov5",
+        "templateConfigPath": "../jsons/yolov5.json",
+        "runCommand": "./Container_Yolov5",
+        "modelPath": "../models/yolov5n_dynamic_nms_orn_fp32_8_1.engine"
+    },
     "yolov5n_orinano": {
         "taskName": "yolov5",
         "templateConfigPath": "../jsons/yolov5.json",
@@ -406,6 +430,12 @@
         "templateConfigPath": "",
         "runCommand": "./runSink",
         "modelPath": ""
+    },
+    "yolov5_onprem": {
+        "taskName": "yolov5",
+        "templateConfigPath": "../jsons/yolov5.json",
+        "runCommand": "./Container_Yolov5",
+        "modelPath": "../models/yolov5n_dynamic_nms_1080_fp32_16_1.engine"
     },
     "yolov5n_onprem": {
         "taskName": "yolov5",

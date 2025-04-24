@@ -140,9 +140,12 @@ void Profiler::setPidOnDevices(unsigned int pid) {
         for (unsigned int j = 0; j < infoCount; j++) {
             if (processes[j].pid == pid) {
                 pidOnDevices[pid] = device;
-                break;
+                return;
             }
         }
+    }
+    if (pidOnDevices.find(pid) == pidOnDevices.end()) {
+        setPidOnDevices(pid);
     }
 }
 
@@ -273,6 +276,9 @@ int Profiler::getDeviceMemoryInfo() {
 }
 
 nvmlUtilization_t Profiler::getGPUInfo(unsigned int pid, nvmlDevice_t device) {
+    if (!device) {
+        return nvmlUtilization_t{0, 0};
+    }
     nvmlUtilization_t util;
     nvmlReturn_t result;
     if (pid != 0 && accountingEnabled[device]) {
