@@ -908,8 +908,8 @@ std::vector<float> getThrptsInPeriods(const std::vector<ClockType> &timestamps, 
 
 
 void ContainerAgent::collectRuntimeMetrics() {
-    unsigned int tmp_lateCount, lateCount = 0, queueDrops = 0, miniBatchCount, oldReqCount;
-    double avgRequestRate, aggExecutedBatchSize, latencyEWMA, avgLatency = 0;
+    unsigned int tmp_lateCount, lateCount = 0, queueDrops = 0, miniBatchCount;
+    double avgRequestRate, aggExecutedBatchSize, latencyEWMA;
     ArrivalRecordType arrivalRecords;
     ProcessRecordType processRecords;
     BatchInferRecordType batchInferRecords;

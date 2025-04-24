@@ -48,7 +48,7 @@ int main(int argc, char **argv) {
                                                  "\"msvc_svcLevelObjLatency\": 1, "
                                                  "\"msvc_idealBatchSize\": 1, \"msvc_dataShape\": [[0, 0]], "
                                                  "\"msvc_maxQueueSize\": 100, \"msvc_dnstreamMicroservices\": [{"
-                                                 "\"nb_name\": \"::data_sink\", \"nb_commMethod\": 4, \"nb_link\": [\"\"], "
+                                                 "\"nb_name\": \"data_sink\", \"nb_commMethod\": 4, \"nb_link\": [\"\"], "
                                                  "\"nb_classOfInterest\": -1, \"nb_maxQueueSize\": 10, \"nb_portions\": [], "
                                                  "\"nb_expectedShape\": [[-1, -1]]}], \"msvc_upstreamMicroservices\": [{"
                                                  "\"nb_name\": \"various\", \"nb_commMethod\": 2, "
@@ -70,7 +70,7 @@ int main(int argc, char **argv) {
                                              "\"msvc_maxQueueSize\": 100, \"msvc_dnstreamMicroservices\": [], "
                                              "\"msvc_upstreamMicroservices\": [{\"nb_name\": \"::receiver\", "
                                              "\"nb_commMethod\": 2, \"nb_link\": [\"\"], \"nb_classOfInterest\": -2, "
-                                             "\"nb_maxQueueSize\": 10, \"nb_expectedShape\": [[-1, -1]]}, \"nb_portions\": []],"
+                                             "\"nb_maxQueueSize\": 10, \"nb_expectedShape\": [[-1, -1]], \"nb_portions\": []}],"
                                              "\"msvc_containerLogPath\": \"") +
                                  logPath + common_end);
     sink_json["msvc_experimentName"] = j["experimentName"];
