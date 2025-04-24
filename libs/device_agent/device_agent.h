@@ -115,21 +115,21 @@ protected:
     std::string runDocker(const std::string &executable, const std::string &cont_name, const std::string &start_string,
                          const int &device, const int &port) {
         std::string command = "docker run -d --rm --network=host --runtime nvidia --gpus all ";
-        std::string device_type;
+        std::string docker_tag;
         if (dev_type == SystemDeviceType::Server) {
             command += "-v /ssd0/tung/PipePlusPlus/data/:/app/data/  -v /ssd0/tung/PipePlusPlus/logs/:/app/logs/ "
                        "-v /ssd0/tung/PipePlusPlus/models/:/app/models/ "
                        "-v /ssd0/tung/PipePlusPlus/model_profiles/:/app/model_profiles/ --name " +
                        absl::StrFormat(
-                               R"(%s pipeline-scheduler-amd64:trt-libtorch %s --json '%s' --device %i --port %i --port_offset %i)",
+                               R"(%s lucasliebe/pipeplusplus:amd64-torch %s --json '%s' --device %i --port %i --port_offset %i)",
                                cont_name, executable, start_string, device, port, dev_port_offset);
         } else {
-            if (dev_type == SystemDeviceType::AGXXavier) {
-                device_type = "agx";
-            } else if (dev_type == SystemDeviceType::NXXavier) {
-                device_type = "nx";
-            } else if (dev_type == SystemDeviceType::OrinNano) {
-                device_type = "orin-nano";
+            if (dev_type == SystemDeviceType::NanoXavier || dev_type == SystemDeviceType::NXXavier
+                || dev_type == SystemDeviceType::AGXXavier) {
+                docker_tag = "jp512-torch";
+            } else if (dev_type == SystemDeviceType::OrinNano || dev_type == SystemDeviceType::OrinNX
+                        || dev_type == SystemDeviceType::OrinAGX) {
+                docker_tag = "jp61-torch";
             } else {
                 spdlog::get("container_agent")->error("Unknown edge device type while trying to start container!");
                 return "";
@@ -138,8 +138,8 @@ protected:
                        "-v /home/cdsn/pipe/data:/app/data -v /home/cdsn/pipe/models:/app/models "
                        "-v /run/jtop.sock:/run/jtop.sock  -v /usr/bin/tegrastats:/usr/bin/tegrastats --name " +
                         absl::StrFormat(
-                                R"(%s pipeline-scheduler-%s:trt-libtorch %s --json '%s' --device %i --port %i --port_offset %i)",
-                                cont_name, device_type, executable, start_string, device, port, dev_port_offset);
+                                R"(%s lucasliebe/pipeplusplus:%s %s --json '%s' --device %i --port %i --port_offset %i)",
+                                cont_name, docker_tag, executable, start_string, device, port, dev_port_offset);
         }
         command += " --log_dir ../logs";
         command += (deploy_mode? " --logging_mode 1" : " --verbose 0 --logging_mode 2");
