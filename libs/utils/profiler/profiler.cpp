@@ -121,7 +121,7 @@ std::vector<nvmlDevice_t> Profiler::getDevices() {
             spdlog::get("container_agent")->error("Failed to get handle for device {}: {}", i, nvmlErrorString(result));
             return std::vector<nvmlDevice_t>();
         }
-        setAccounting(device);
+        accountingEnabled[device] = setAccounting(device);
         devices.push_back(device);
     }
     return devices;
@@ -275,7 +275,7 @@ int Profiler::getDeviceMemoryInfo() {
 nvmlUtilization_t Profiler::getGPUInfo(unsigned int pid, nvmlDevice_t device) {
     nvmlUtilization_t util;
     nvmlReturn_t result;
-    if (pid != 0) {
+    if (pid != 0 && accountingEnabled[device]) {
         nvmlAccountingStats_t stats;
         result = nvmlDeviceGetAccountingStats(device, pid, &stats);
         if (result == NVML_SUCCESS) {

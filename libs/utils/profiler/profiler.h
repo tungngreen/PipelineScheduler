@@ -66,7 +66,7 @@ private:
 
     static bool setAccounting(nvmlDevice_t device);
 
-    static std::vector<nvmlDevice_t> getDevices();
+    std::vector<nvmlDevice_t> getDevices();
 
     void setPidOnDevices(unsigned int pid);
 
@@ -85,6 +85,7 @@ private:
     unsigned int getPcieInfo(nvmlDevice_t device);
 
     bool nvmlInitialized;
+    std::map<nvmlDevice_t ,bool> accountingEnabled;
 
     std::map<unsigned int, LimitedPairQueue> prevCpuTimes;
     std::vector<nvmlDevice_t> cuda_devices;
