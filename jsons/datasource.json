@@ -27,7 +27,8 @@
                                 0,
                                 0
                             ]
-                        ]
+                        ],
+                        "nb_portions": []
                     }
                 ],
                 "msvc_dataShape": [
@@ -54,7 +55,8 @@
                                 0,
                                 0
                             ]
-                        ]
+                        ],
+                        "nb_portions": []
                     }
                 ],
                 "msvc_maxQueueSize": 100
@@ -78,7 +80,8 @@
                                 0,
                                 0
                             ]
-                        ]
+                        ],
+                        "nb_portions": []
                     }
                 ],
                 "msvc_dataShape": [
@@ -105,7 +108,8 @@
                                 0,
                                 0
                             ]
-                        ]
+                        ],
+                        "nb_portions": []
                     }
                 ],
                 "msvc_maxQueueSize": 100

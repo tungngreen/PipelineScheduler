@@ -325,6 +325,7 @@
             },
             {
                 "msvc_name": "sender",
+                "msvc_numInstances": 1,
                 "msvc_idealBatchSize": 1,
                 "msvc_dnstreamMicroservices": [
                     {

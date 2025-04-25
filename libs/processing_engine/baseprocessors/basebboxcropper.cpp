@@ -520,6 +520,7 @@ void BaseBBoxCropper::cropping() {
             std::vector<uint16_t> indexInImageDetList(numDetsInFrame);
             std::unordered_map<int16_t, int> classCount;
             std::unordered_map<int16_t, int> perClassProcessedCount;
+            spdlog::get("container_agent")->trace("{0:s} updating classes and scores", msvc_name);
             for (int j = 0; j < numDetsInFrame; ++j) {
                 indexInImageDetList[j] = numsDetsInImages[indexLists[j].first];
                 numsDetsInImages[indexLists[j].first]++;
@@ -530,11 +531,11 @@ void BaseBBoxCropper::cropping() {
                 if (classCount.find(singleImageBBoxList[j].classID) == classCount.end()) {
                     classCount[singleImageBBoxList[j].classID] = 0;
                     perClassProcessedCount[singleImageBBoxList[j].classID] = 0;
-                    outReqList.at(singleImageBBoxList[j].classID).emplace_back(PerQueueOutRequest());
                 }
                 classCount[singleImageBBoxList[j].classID]++;
             }
 
+            spdlog::get("container_agent")->trace("{0:s} ready to crop {1:d} detections", msvc_name, numDetsInFrame);
             // After cropping, we need to find the right queues to put the bounding boxes in
             for (int j = 0; j < numDetsInFrame; ++j) {
                 // cv::Mat test;
@@ -556,6 +557,10 @@ void BaseBBoxCropper::cropping() {
                     if ((classToDnstreamMap.at(k).first == bboxClass) || (classToDnstreamMap.at(k).first == -1)) {
                         qIndex = classToDnstreamMap.at(k).second;
                         queueIndex.emplace_back(qIndex);
+                        //if not outReqList at qIndex is empty then insert one
+                        if (outReqList.at(qIndex).empty()) {
+                            outReqList.at(qIndex).emplace_back(PerQueueOutRequest());
+                        }
                     }
                     if (qIndex == MAX_NUM_QUEUES) {
                         continue;
