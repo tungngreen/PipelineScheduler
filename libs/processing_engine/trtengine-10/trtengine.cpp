@@ -586,11 +586,11 @@ inline void Engine::normalize(
 
 /**
  * @brief Inference function capable of taking varying batch size
- * 
- * @param batch 
- * @param batchSize 
- * @return true 
- * @return false 
+ *
+ * @param batch
+ * @param batchSize
+ * @return true
+ * @return false
  */
 bool Engine::runInference(
     const std::vector<cv::cuda::GpuMat>& batch,
@@ -614,7 +614,7 @@ bool Engine::runInference(
         const auto& engineInputDims = m_inputDims[i];
         nvinfer1::Dims4 inputDims = {batchSize, engineInputDims.d[0], engineInputDims.d[1], engineInputDims.d[2]};
         spdlog::get("container_agent")->trace("{0:s} has inputDims of [{1:d}, {2:d}, {3:d}, {4:d}] ", __func__, batchSize, engineInputDims.d[0], engineInputDims.d[1], engineInputDims.d[2]);
-        m_context->setInputShape(std::to_string(i).c_str(), inputDims);
+        m_context->setInputShape(m_engine->getIOTensorName(i), inputDims);
         // const void *dataPointer = batch.ptr<void>();
         // const int32_t inputMemSize = batchSize * engineInputDims.d[0] * engineInputDims.d[1] * engineInputDims.d[2] * sizeof(float);
         // checkCudaErrorCode(
@@ -628,7 +628,7 @@ bool Engine::runInference(
         // );
     }
 
-    
+
     // There could be more than one inputs to the inference, and to do inference we need to make sure all the input data
     // is copied to the allocated buffers
 
@@ -652,14 +652,14 @@ bool Engine::runInference(
     for (int32_t i = 0, e = m_engine->getNbIOTensors(); i < e; i++)
     {
         auto const name = m_engine->getIOTensorName(i);
-        m_context->setTensorAddress(name, m_buffers.data());
+        m_context->setTensorAddress(name, m_buffers[i]);
     }
 
     bool inferenceStatus = m_context->enqueueV3(inferenceStream);
 
     // Copy inference results from `m_outputBuffers` to `outputs`
     copyFromBuffer(outputs, batchSize, inferenceStream);
-    
+
     // Synchronize the cuda stream
     checkCudaErrorCode(cudaStreamSynchronize(inferenceStream), __func__);
 
