@@ -30,6 +30,8 @@ message Connection {
   int32 port = 4;
   float data_portion = 5;
   string old_link = 6;
+  int64 timestamp = 7;
+  int32 offloading_duration = 8;
 }
 
 message TimeKeeping {

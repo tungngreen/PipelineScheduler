@@ -38,6 +38,8 @@ message ContainerLink {
   int32 port = 5;
   float data_portion = 6;
   string old_link = 7;
+  int64 timestamp = 8;
+  int32 offloading_duration = 9;
 }
 
 message ContainerInts {

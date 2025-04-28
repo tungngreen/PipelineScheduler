@@ -407,7 +407,8 @@ void DeviceAgent::StopContainer(const DevContainerHandle &container, ContainerSi
 
 void DeviceAgent::UpdateContainerSender(int mode, const std::string &cont_name, const std::string &dwnstr,
                                         const std::string &ip, const int &port, const float &data_portion,
-                                        const std::string &old_link) {
+                                        const std::string &old_link, const int64_t &timestamp,
+                                        const int &offloading_duration) {
     Connection request;
     EmptyMessage reply;
     ClientContext context;
@@ -418,6 +419,8 @@ void DeviceAgent::UpdateContainerSender(int mode, const std::string &cont_name, 
     request.set_port(port);
     request.set_data_portion(data_portion);
     request.set_old_link(old_link);
+    request.set_timestamp(timestamp);
+    request.set_offloading_duration(offloading_duration);
 
     //check if cont_name is in containers
     if (containers.find(cont_name) == containers.end()) {
@@ -693,7 +696,7 @@ void DeviceAgent::UpdateDownstreamRequestHandler::Proceed() {
         service->RequestUpdateDownstream(&ctx, &request, &responder, cq, cq, this);
     } else if (status == PROCESS) {
         new UpdateDownstreamRequestHandler(service, cq, device_agent);
-        device_agent->UpdateContainerSender(request.mode(), request.name(), request.downstream_name(), request.ip(), request.port(), request.data_portion(), request.old_link());
+        device_agent->UpdateContainerSender(request.mode(), request.name(), request.downstream_name(), request.ip(), request.port(), request.data_portion(), request.old_link(), request.timestamp(), request.offloading_duration());
         status = FINISH;
         responder.Finish(reply, Status::OK, this);
     } else {

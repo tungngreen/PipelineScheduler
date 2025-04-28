@@ -1393,6 +1393,19 @@ void ContainerAgent::UpdateSenderRequestHandler::Proceed() {
         service->RequestUpdateSender(&ctx, &request, &responder, cq, cq, this);
     } else if (status == PROCESS) {
         new UpdateSenderRequestHandler(service, cq, msvcs);
+        if (request.offloading_duration() != 0) {
+            //get current time
+            auto now = std::chrono::high_resolution_clock::now();
+            auto start = ClockType(TimePrecisionType(request.timestamp()));
+            if (now < start) {
+                std::this_thread::sleep_for(start - now);
+            } else if (now > start + std::chrono::seconds(request.offloading_duration())) {
+                spdlog::get("container_agent")->error("Received Offloading Request too late");
+                status = FINISH;
+                responder.Finish(reply, Status::CANCELLED, this);
+                return;
+            }
+        }
         // pause processing except senders to clear out the queues
         for (auto group : *msvcs) {
             for (auto msvc : group.second.msvcList) {

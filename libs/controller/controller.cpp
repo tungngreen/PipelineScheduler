@@ -956,6 +956,7 @@ void Controller::AdjustUpstream(int port, ContainerHandle *upstr, NodeHandle *ne
     request.set_port(port);
     request.set_data_portion(1.0);
     request.set_old_link(old_link);
+    request.set_offloading_duration(0);
 
     std::unique_ptr<ClientAsyncResponseReader<EmptyMessage>> rpc(
             upstr->device_agent->stub->AsyncUpdateDownstream(&context, request, upstr->device_agent->cq));
