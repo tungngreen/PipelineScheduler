@@ -164,7 +164,7 @@ protected:
 
     void UpdateContainerSender(int mode, const std::string &cont_name, const std::string &dwnstr, const std::string &ip,
                                const int &port, const float &data_portion, const std::string &old_link,
-                               const int64_t &timestamp, const int &offloading_duration);
+                               const uint64_t &timestamp, const int &offloading_duration);
 
     void SyncDatasources(const std::string &cont_name, const std::string &dsrc);
 
