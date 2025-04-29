@@ -618,7 +618,7 @@ void BaseBBoxCropper::cropping() {
                     std::string path = currReq_path;
                     // Add the number of bounding boxes in the image and the index of the bounding box in the image
                     path += "|" + std::to_string(numsDetsInImages[indexLists[j].first]) + "|" + std::to_string(indexInImageDetList[j]);
-                    if (dnstreamMicroserviceList[qIndex].portions.size() > 0 &&
+                    if (dnstreamMicroserviceList[qIndex].portions.size() > 1 &&
                         ( (float) perClassProcessedCount[bboxClass]++ / (float) classCount[bboxClass])
                             > dnstreamMicroserviceList[qIndex].portions[outReqList.at(qIndex).size()-1]) {
                         outReqList.at(qIndex).emplace_back();

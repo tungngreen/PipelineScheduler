@@ -1400,7 +1400,7 @@ void ContainerAgent::UpdateSenderRequestHandler::Proceed() {
             if (now < start) {
                 std::this_thread::sleep_for(start - now);
             } else if (now > start + std::chrono::seconds(request.offloading_duration())) {
-                spdlog::get("container_agent")->error("Received Offloading Request too late");
+                spdlog::get("container_agent")->error("Received Offloading Request for {0:s} too late", request.name());
                 status = FINISH;
                 responder.Finish(reply, Status::CANCELLED, this);
                 return;
@@ -1444,7 +1444,9 @@ void ContainerAgent::UpdateSenderRequestHandler::Proceed() {
                     if (index != 0) {
                         config["msvc_dnstreamMicroservices"][0]["nb_portions"][index-1] = request.data_portion();
                         for (auto postprocessor : postprocessor_dnstreams) {
-                            postprocessor->portions[index-1] = request.data_portion();
+                            float portion_diff = postprocessor->portions[index] - request.data_portion();
+                            postprocessor->portions[0] += portion_diff;
+                            postprocessor->portions[index] = request.data_portion();
                         }
                     }
                     spdlog::get("container_agent")->trace("Overwrote link {0:s} to {1:s}", link, sender->msvc_name);
@@ -1453,6 +1455,11 @@ void ContainerAgent::UpdateSenderRequestHandler::Proceed() {
                             config["msvc_dnstreamMicroservices"][0]["nb_link"].push_back(link);
                             config["msvc_dnstreamMicroservices"][0]["nb_portions"].push_back(request.data_portion());
                             for (auto postprocessor : postprocessor_dnstreams) {
+                                if (postprocessor->portions.empty()) {
+                                    postprocessor->portions.push_back(1.0f - request.data_portion());
+                                } else {
+                                    postprocessor->portions[0] -= request.data_portion();
+                                }
                                 postprocessor->portions.push_back(request.data_portion());
                             }
                             spdlog::get("container_agent")->trace("Added link {0:s} to {1:s}", link, sender->msvc_name);
@@ -1474,19 +1481,20 @@ void ContainerAgent::UpdateSenderRequestHandler::Proceed() {
                     if (request.mode() == AdjustUpstreamMode::Remove) {
                         nb_links.erase(std::remove(nb_links.begin(), nb_links.end(), link), nb_links.end());
                         config["msvc_dnstreamMicroservices"][0]["nb_link"] = nb_links;
-                        config["msvc_dnstreamMicroservices"][0]["nb_portions"].erase(std::remove(
-                                config["msvc_dnstreamMicroservices"][0]["nb_portions"].begin(),
-                                config["msvc_dnstreamMicroservices"][0]["nb_portions"].end(),
-                                request.data_portion()), config["msvc_dnstreamMicroservices"][0]["nb_portions"].end());
-                        for (auto postprocessor : postprocessor_dnstreams) {
-                            postprocessor->portions.erase(
-                                    std::remove(postprocessor->portions.begin(),postprocessor->portions.end(),
-                                                request.data_portion()), postprocessor->portions.end());
+                        if (index != 0) {
+                            config["msvc_dnstreamMicroservices"][0]["nb_portions"].erase(
+                                    config["msvc_dnstreamMicroservices"][0]["nb_portions"].begin() + index - 1);
+                            for (auto postprocessor: postprocessor_dnstreams) {
+                                postprocessor->portions[0] += postprocessor->portions[index];
+                                postprocessor->portions.erase(postprocessor->portions.begin() + index - 1);
+                            }
                         }
                         spdlog::get("container_agent")->trace("Removed link {0:s} from {1:s}", link, sender->msvc_name);
                     } else if (request.mode() == AdjustUpstreamMode::Modify) {
                         sender->dnstreamMicroserviceList[0].portions[index - 1] = request.data_portion();
                         for (auto postprocessor : postprocessor_dnstreams) {
+                            float portion_diff = postprocessor->portions[index] - request.data_portion();
+                            postprocessor->portions[0] += portion_diff;
                             postprocessor->portions[index-1] = request.data_portion();
                         }
                         status = FINISH;
@@ -1499,6 +1507,17 @@ void ContainerAgent::UpdateSenderRequestHandler::Proceed() {
                 senders->erase(std::remove(senders->begin(), senders->end(), sender), senders->end());
                 break;
             }
+        }
+        if (!config) {
+            spdlog::get("container_agent")->error("Could not find sender to {0:s} in current configuration.", request.name());
+            for (auto group : *msvcs) {
+                for (auto msvc : group.second.msvcList) {
+                    msvc->unpauseThread();
+                }
+            }
+            status = FINISH;
+            responder.Finish(reply, Status::CANCELLED, this);
+            return;
         }
 
         Microservice* new_sender = new RemoteCPUSender(config);
