@@ -1416,16 +1416,16 @@ void ContainerAgent::UpdateSenderRequestHandler::Proceed() {
             }
         }
         json config;
-        std::vector<ThreadSafeFixSizedDoubleQueue *> inqueue;
+        std::vector<ThreadSafeFixSizedDoubleQueue *> inqueue = {};
         std::string link = absl::StrFormat("%s:%d", request.ip(), request.port());
         auto senders = &(*msvcs)["sender"].msvcList;
         for (auto sender: *senders) {
             if (sender->dnstreamMicroserviceList[0].name == request.name()) {
                 config = sender->msvc_configs;
                 std::vector<msvcconfigs::NeighborMicroservice *> postprocessor_dnstreams = {};
-                for (auto postprocessor : *&(*msvcs)["postprocessor"].msvcList) {
-                    for (auto dnstream : postprocessor->dnstreamMicroserviceList) {
-                        if (dnstream.name == sender->msvc_name) {
+                for (auto *postprocessor : (*msvcs)["postprocessor"].msvcList) {
+                    for (auto &dnstream : postprocessor->dnstreamMicroserviceList) {
+                        if (sender->msvc_name.find(dnstream.name) != std::string::npos) {
                             postprocessor_dnstreams.push_back(&dnstream);
                         }
                     }
@@ -1495,7 +1495,7 @@ void ContainerAgent::UpdateSenderRequestHandler::Proceed() {
                         for (auto postprocessor : postprocessor_dnstreams) {
                             float portion_diff = postprocessor->portions[index] - request.data_portion();
                             postprocessor->portions[0] += portion_diff;
-                            postprocessor->portions[index-1] = request.data_portion();
+                            postprocessor->portions[index] = request.data_portion();
                         }
                         status = FINISH;
                         responder.Finish(reply, Status::OK, this);
@@ -1503,12 +1503,12 @@ void ContainerAgent::UpdateSenderRequestHandler::Proceed() {
                     }
                 }
                 inqueue = sender->GetInQueue();
-                sender->stopThread();
                 senders->erase(std::remove(senders->begin(), senders->end(), sender), senders->end());
+                sender->stopThread();
                 break;
             }
         }
-        if (!config) {
+        if (inqueue.empty()) {
             spdlog::get("container_agent")->error("Could not find sender to {0:s} in current configuration.", request.name());
             for (auto group : *msvcs) {
                 for (auto msvc : group.second.msvcList) {
