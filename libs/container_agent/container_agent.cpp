@@ -1401,6 +1401,11 @@ void ContainerAgent::UpdateSenderRequestHandler::Proceed() {
                 std::this_thread::sleep_for(start - now);
             } else if (now > start + std::chrono::seconds(request.offloading_duration())) {
                 spdlog::get("container_agent")->error("Received Offloading Request for {0:s} too late", request.name());
+                for (auto &group : *msvcs) {
+                    for (auto msvc : group.second.msvcList) {
+                        msvc->unpauseThread();
+                    }
+                }
                 status = FINISH;
                 responder.Finish(reply, Status::CANCELLED, this);
                 return;
@@ -1435,6 +1440,11 @@ void ContainerAgent::UpdateSenderRequestHandler::Proceed() {
                     auto it = std::find(nb_links.begin(), nb_links.end(), request.old_link());
                     if (it == nb_links.end()) {
                         spdlog::get("container_agent")->error("Link {0:s} not found in {1:s}", link, sender->msvc_name);
+                        for (auto &group : *msvcs) {
+                            for (auto msvc : group.second.msvcList) {
+                                msvc->unpauseThread();
+                            }
+                        }
                         status = FINISH;
                         responder.Finish(reply, Status::CANCELLED, this);
                         return;
@@ -1465,6 +1475,11 @@ void ContainerAgent::UpdateSenderRequestHandler::Proceed() {
                             spdlog::get("container_agent")->trace("Added link {0:s} to {1:s}", link, sender->msvc_name);
                         } else {
                             spdlog::get("container_agent")->error("Link {0:s} already exists in {1:s}", link, sender->msvc_name);
+                            for (auto &group : *msvcs) {
+                                for (auto msvc : group.second.msvcList) {
+                                    msvc->unpauseThread();
+                                }
+                            }
                             status = FINISH;
                             responder.Finish(reply, Status::CANCELLED, this);
                             return;
@@ -1473,6 +1488,11 @@ void ContainerAgent::UpdateSenderRequestHandler::Proceed() {
                     auto it = std::find(nb_links.begin(), nb_links.end(), link);
                     if (it == nb_links.end()) {
                         spdlog::get("container_agent")->error("Link {0:s} not found in {1:s}", link, sender->msvc_name);
+                        for (auto &group : *msvcs) {
+                            for (auto msvc : group.second.msvcList) {
+                                msvc->unpauseThread();
+                            }
+                        }
                         status = FINISH;
                         responder.Finish(reply, Status::CANCELLED, this);
                         return;
@@ -1498,7 +1518,7 @@ void ContainerAgent::UpdateSenderRequestHandler::Proceed() {
                             postprocessor->portions[index] = request.data_portion();
                         }
                         spdlog::get("container_agent")->trace("Modified link {0:s} for {1:s} to portion {2:.2f}", link, sender->msvc_name, request.data_portion());
-                        for (auto group : *msvcs) {
+                        for (auto &group : *msvcs) {
                             for (auto msvc : group.second.msvcList) {
                                 msvc->unpauseThread();
                             }
@@ -1516,7 +1536,7 @@ void ContainerAgent::UpdateSenderRequestHandler::Proceed() {
         }
         if (inqueue.empty()) {
             spdlog::get("container_agent")->error("Could not find sender to {0:s} in current configuration.", request.name());
-            for (auto group : *msvcs) {
+            for (auto &group : *msvcs) {
                 for (auto msvc : group.second.msvcList) {
                     msvc->unpauseThread();
                 }
@@ -1541,7 +1561,7 @@ void ContainerAgent::UpdateSenderRequestHandler::Proceed() {
 //        }
         //start the new sender
         senders->back()->dispatchThread();
-        for (auto group : *msvcs) {
+        for (auto &group : *msvcs) {
             for (auto msvc : group.second.msvcList) {
                 msvc->unpauseThread();
             }
