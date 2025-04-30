@@ -1537,8 +1537,9 @@ void ContainerAgent::UpdateSenderRequestHandler::Proceed() {
                     }
                 }
                 inqueue = sender->GetInQueue();
-                senders->erase(std::remove(senders->begin(), senders->end(), sender), senders->end());
-                sender->stopThread();
+                static_cast<Sender*>(sender)->reloadDnstreams();
+//                senders->erase(std::remove(senders->begin(), senders->end(), sender), senders->end());
+//                sender->stopThread();
                 break;
             }
         }
@@ -1554,8 +1555,9 @@ void ContainerAgent::UpdateSenderRequestHandler::Proceed() {
             return;
         }
 
-        Microservice* new_sender = new RemoteCPUSender(config);
-        new_sender->SetInQueue(inqueue);
+//        Microservice* new_sender = new RemoteCPUSender(config);
+//        new_sender->SetInQueue(inqueue);
+
 //        if (request.ip() == "localhost") {
 //            // change postprocessing to keep the data on gpu
 //
@@ -1565,10 +1567,10 @@ void ContainerAgent::UpdateSenderRequestHandler::Proceed() {
         // change postprocessing to offload data from gpu
 
         // start new serialized sender
-        senders->push_back(new_sender);
+//        senders->push_back(new_sender);
 //        }
         //start the new sender
-        senders->back()->dispatchThread();
+//        senders->back()->dispatchThread();
         for (auto &group : *msvcs) {
             for (auto msvc : group.second.msvcList) {
                 msvc->unpauseThread();

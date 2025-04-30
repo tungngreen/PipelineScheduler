@@ -1132,6 +1132,8 @@ public:
 
     virtual void loadConfigs(const json &jsonConfigs, bool isConstructing = false);
 
+    virtual void reloadDnstreams();
+
     virtual void updateCycleTiming() {};
 
     bool RELOADING = true;

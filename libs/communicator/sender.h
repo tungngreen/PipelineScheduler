@@ -78,6 +78,8 @@ public:
     virtual std::string SendData(std::vector<RequestData<LocalCPUReqDataType>> &elements, std::vector<RequestTimeType> &timestamp,
                          std::vector<std::string> &path, RequestSLOType &slo) = 0;
 
+    void reloadDnstreams() override;
+
 protected:
     void addToName(const std::string substring, const std::string strToAdd) {
         msvc_name.replace(msvc_name.find(substring), substring.length(), strToAdd + substring);

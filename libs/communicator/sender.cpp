@@ -31,6 +31,23 @@ void Sender::loadConfigs(const json &jsonConfigs, bool isConstructing) {
     READY = true;
 }
 
+void Sender::reloadDnstreams() {
+    pauseThread();
+    Microservice::reloadDnstreams();
+    stubs = StubVector();
+    for (auto &link: dnstreamMicroserviceList.front().link) {
+        stubs.push_back(
+                DataTransferService::NewStub(
+                        grpc::CreateChannel(link, grpc::InsecureChannelCredentials())));
+    }
+    if (stubs.size() > 1) {
+        multipleStubs = true;
+    } else {
+        multipleStubs = false;
+    }
+    unpauseThread();
+}
+
 Sender::Sender(const json &jsonConfigs) : Microservice(jsonConfigs) {
     loadConfigs(jsonConfigs, true);
     msvc_toReloadConfigs = false;
