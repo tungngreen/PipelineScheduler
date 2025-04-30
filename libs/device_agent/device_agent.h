@@ -7,6 +7,7 @@
 #include "profiler.h"
 #include "controller.h"
 #include "bcedge.h"
+#include "edgevision.h"
 #include <arpa/inet.h>
 #include <sys/socket.h>
 #include <netdb.h>
@@ -445,6 +446,7 @@ protected:
     uint16_t dev_numCudaDevices{};
 
     BCEdgeAgent *dev_bcedge_agent;
+    EdgeVisionAgent *dev_edgevision_agent;
 };
 
 #endif //DEVICE_AGENT_H

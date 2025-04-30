@@ -165,6 +165,8 @@ DeviceAgent::DeviceAgent(const std::string &controller_url) : DeviceAgent() {
         } else {
             dev_bcedge_agent = new BCEdgeAgent(dev_name, 3000000, torch::kF32, 0);
         }
+    } else if (dev_system_name == "edvi") {
+        dev_edgevision_agent = new EdgeVisionAgent(dev_name, 16, torch::kF32, 0);
     }
 
     running = true;
@@ -283,6 +285,8 @@ void DeviceAgent::collectRuntimeMetrics() {
                 t.detach();
             }
         }
+
+
 
         metricsStopwatch.stop();
         auto reportLatencyMillisec = (uint64_t) std::ceil(metricsStopwatch.elapsed_microseconds() / 1000.f);

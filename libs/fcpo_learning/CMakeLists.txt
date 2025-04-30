@@ -7,6 +7,7 @@ set(
         HEADER_FILES
         fcpo_learning.h
         bcedge.h
+        edgevision.h
 )
 
 # All source files and private header files go here.
@@ -14,6 +15,7 @@ set(
         SOURCE_FILES
         fcpo_learning.cpp
         bcedge.cpp
+        edgevision.cpp
 )
 
 # Here we define the library.
