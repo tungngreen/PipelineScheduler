@@ -1437,9 +1437,17 @@ void ContainerAgent::UpdateSenderRequestHandler::Proceed() {
                 }
                 auto nb_links = config["msvc_dnstreamMicroservices"][0]["nb_link"];
                 if (request.mode() == AdjustUpstreamMode::Overwrite) {
+                    if (request.old_link() == "") {
+                        config["msvc_dnstreamMicroservices"][0]["nb_link"] = {link};
+                        config["msvc_dnstreamMicroservices"][0]["nb_portions"] = {};
+                        for (auto postprocessor : postprocessor_dnstreams) {
+                            postprocessor->portions.clear();
+                        }
+                        spdlog::get("container_agent")->trace("Overwrote all links in {0:s} to {1:s}", sender->msvc_name, link);
+                    }
                     auto it = std::find(nb_links.begin(), nb_links.end(), request.old_link());
                     if (it == nb_links.end()) {
-                        spdlog::get("container_agent")->error("Link {0:s} not found in {1:s}", link, sender->msvc_name);
+                        spdlog::get("container_agent")->error("Link {0:s} not found in {1:s}", request.old_link(), sender->msvc_name);
                         for (auto &group : *msvcs) {
                             for (auto msvc : group.second.msvcList) {
                                 msvc->unpauseThread();
@@ -1459,7 +1467,7 @@ void ContainerAgent::UpdateSenderRequestHandler::Proceed() {
                             postprocessor->portions[index] = request.data_portion();
                         }
                     }
-                    spdlog::get("container_agent")->trace("Overwrote link {0:s} to {1:s}", link, sender->msvc_name);
+                    spdlog::get("container_agent")->trace("Overwrote link {0:s} over {1:s}", link, request.old_link());
                 } else if (request.mode() == AdjustUpstreamMode::Add) {
                         if (std::find(nb_links.begin(),nb_links.end(), link) == nb_links.end()) {
                             config["msvc_dnstreamMicroservices"][0]["nb_link"].push_back(link);
