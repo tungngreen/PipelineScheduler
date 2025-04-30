@@ -1497,6 +1497,12 @@ void ContainerAgent::UpdateSenderRequestHandler::Proceed() {
                             postprocessor->portions[0] += portion_diff;
                             postprocessor->portions[index] = request.data_portion();
                         }
+                        spdlog::get("container_agent")->trace("Modified link {0:s} for {1:s} to portion {2:.2f}", link, sender->msvc_name, request.data_portion());
+                        for (auto group : *msvcs) {
+                            for (auto msvc : group.second.msvcList) {
+                                msvc->unpauseThread();
+                            }
+                        }
                         status = FINISH;
                         responder.Finish(reply, Status::OK, this);
                         return;
