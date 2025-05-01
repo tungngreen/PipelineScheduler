@@ -1196,13 +1196,21 @@ std::map<std::string, std::string> keywordAbbrs = {
     {"onprem", "onp"},
     {"agxavier", "agx"},
     {"agxavier1", "agx1"},
+    {"agxavier2", "agx2"},
+    {"agxavier3", "agx3"},
+    {"agxavier4", "agx4"},
+    {"agxavier5", "agx5"},
+    {"orinnx", "ornx"},
+    {"orinnx1", "ornx1"},
+    {"orinnx2", "ornx2"},
+    {"orinnx3", "ornx3"},
     {"orinano", "orn"},
     {"orinano1", "orn1"},
     {"orinano2", "orn2"},
     {"orinano3", "orn3"},
     {"nxavier", "nx"},
     {"nxavier1", "nx1"},
-    {"nxxavier", "nx2"},
+    {"nxavier2", "nx2"},
     {"nxavier3", "nx3"},
     {"nxavier4", "nx4"},
     {"nxavier5", "nx5"},
@@ -1278,7 +1286,9 @@ std::map<std::string, SystemDeviceType> SystemDeviceTypeReverseList = {
     {"agxavier", AGXXavier},
     {"agx", AGXXavier},
     {"orinano", OrinNano},
-    {"orn", OrinNano}
+    {"orn", OrinNano},
+    {"orinnx", OrinNX},
+    {"ornx", OrinNX}
 };
 
 std::map<ModelType, std::string> ModelTypeList = {
