@@ -1019,6 +1019,14 @@ public:
 
     virtual QueueLengthType GetOutQueueSize(int i) { return msvc_OutQueue[i]->size(); };
 
+    virtual QueueLengthType GetOutQueueSize() {
+        unsigned int val = 0;
+        for (auto &queue : msvc_OutQueue) {
+            val += queue->size();
+        }
+        return val;
+    };
+
     unsigned int GetDroppedReqCount() {
         return msvc_droppedReqCount.exchange(0);
     };

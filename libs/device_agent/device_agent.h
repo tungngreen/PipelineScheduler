@@ -41,6 +41,7 @@ using indevicecommands::ContainerSignal;
 using indevicecommands::Connection;
 using indevicecommands::TimeKeeping;
 using indevicemessages::ProcessData;
+using indevicecommands::ContainerMetrics;
 using EmptyMessage = google::protobuf::Empty;
 
 typedef std::tuple<
@@ -447,8 +448,8 @@ protected:
 
     BCEdgeAgent *dev_bcedge_agent;
     EdgeVisionAgent *dev_edgevision_agent;
-    TimePrecisionType edgevisionDecisionInterval;
-    ClockType nextEdgevisionDecisionTime;
+    TimePrecisionType dev_rlDecisionInterval;
+    ClockType dev_nextRLDecisionTime = std::chrono::high_resolution_clock ::now();
 
 
 };

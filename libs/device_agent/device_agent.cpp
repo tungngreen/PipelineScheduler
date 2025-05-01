@@ -166,7 +166,7 @@ DeviceAgent::DeviceAgent(const std::string &controller_url) : DeviceAgent() {
             dev_bcedge_agent = new BCEdgeAgent(dev_name, 3000000, torch::kF32, 0);
         }
     } else if (dev_system_name == "edvi") {
-        edgevisionDecisionInterval = TimePrecisionType(200000);
+        dev_rlDecisionInterval = TimePrecisionType(200000);
         dev_edgevision_agent = new EdgeVisionAgent(dev_name, 16, torch::kF32, 0);
     }
 
@@ -273,6 +273,38 @@ void DeviceAgent::collectRuntimeMetrics() {
             }
         }
 
+        if (dev_system_name == "edvi" && timePointCastMillisecond(startTime) >= timePointCastMillisecond(dev_nextRLDecisionTime)) {
+            std::vector<DevContainerHandle*> local_downstreams = {};
+            for (auto &container: containers) {
+                if (container.first.find("dnstr") != std::string::npos) {
+                    local_downstreams.push_back(&container.second);
+                    break;
+                }
+            }
+            EmptyMessage request;
+            for (auto *dnstr: local_downstreams) {
+                ContainerMetrics reply;
+                ClientContext context;
+                Status status;
+                CompletionQueue* sending_cq = dnstr->cq;
+                std::unique_ptr<ClientAsyncResponseReader<ContainerMetrics>> rpc(
+                        dnstr->stub->AsyncRetrieveContainerMetrics(&context, request, sending_cq));
+                rpc->Finish(&reply, &status, (void *)1);
+                void *got_tag;
+                bool ok = false;
+                if (sending_cq != nullptr) {
+                    GPR_ASSERT(sending_cq->Next(&got_tag, &ok));
+                    if (status.ok()) {
+                        dev_edgevision_agent->rewardCallback(reply.throughput(), reply.drops(), reply.avg_latency());
+                        // dev_edgevision_agent->setState();
+                    } else {
+                        spdlog::get("container_agent")->error("{0:s} error {1:d}: {2:s}", dev_name, status.error_code(), status.error_message());
+                    }
+                }
+            }
+
+            dev_nextRLDecisionTime = std::chrono::high_resolution_clock::now() + dev_rlDecisionInterval;
+        }
 
 
         metricsStopwatch.stop();
@@ -280,6 +312,9 @@ void DeviceAgent::collectRuntimeMetrics() {
         ClockType nextTime;
         nextTime = std::min(dev_metricsServerConfigs.nextMetricsReportTime,
                             dev_metricsServerConfigs.nextHwMetricsScrapeTime);
+        if (dev_system_name == "edvi") {
+            nextTime = std::min(nextTime, dev_nextRLDecisionTime);
+        }
         timeDiff = std::chrono::duration_cast<std::chrono::milliseconds>(nextTime - std::chrono::high_resolution_clock::now()).count();
         std::chrono::milliseconds sleepPeriod(timeDiff - (reportLatencyMillisec) + 2);
         spdlog::get("container_agent")->trace("{0:s} Container Agent's Metric Reporter sleeps for {1:d} milliseconds.", dev_name, sleepPeriod.count());
