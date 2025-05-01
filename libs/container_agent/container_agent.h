@@ -196,6 +196,8 @@ public:
 
     virtual void runService(const json &pipeConfigs, const json &configs);
 
+    ContainerMetrics getContainerMetrics();
+
 protected:
     virtual void initiateMicroservices(const json &pipeConfigs);
 
@@ -421,6 +423,12 @@ protected:
     std::string cont_processTableName;
     std::string cont_networkTableName;
 
+    double cont_request_arrival_rate;
+    int cont_queue_size;
+    int64_t  cont_ewma_latency;
+    int cont_late_drops;
+    int cont_throughput;
+
     MetricsServerConfigs cont_metricsServerConfigs;
     std::unique_ptr<pqxx::connection> cont_metricsServerConn = nullptr;
 
@@ -431,8 +439,9 @@ protected:
 
     FCPOAgent *cont_fcpo_agent;
     threadingAction cont_threadingAction = NoMultiThreads;
-    uint64_t cont_rlIntervalMillisec = 1000;
-    ClockType cont_nextRLDecisionTime = std::chrono::system_clock::now();
+    uint64_t cont_localMetricsIntervalMillisec = 1000;
+    ClockType cont_nextLocalMetricsTime = std::chrono::high_resolution_clock ::now();
 };
 
 #endif //CONTAINER_AGENT_H
+

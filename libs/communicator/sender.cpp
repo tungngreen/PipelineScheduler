@@ -32,7 +32,7 @@ void Sender::loadConfigs(const json &jsonConfigs, bool isConstructing) {
 }
 
 void Sender::reloadDnstreams() {
-    pauseThread();
+    READY = false;
     Microservice::reloadDnstreams();
     stubs = StubVector();
     for (auto &link: dnstreamMicroserviceList.front().link) {
@@ -45,7 +45,7 @@ void Sender::reloadDnstreams() {
     } else {
         multipleStubs = false;
     }
-    unpauseThread();
+    READY = true;
 }
 
 Sender::Sender(const json &jsonConfigs) : Microservice(jsonConfigs) {

@@ -537,6 +537,14 @@ ContainerAgent::ContainerAgent(const json& configs) {
         spdlog::get("container_agent")->info("{0:s} created arrival table and process table.", cont_name);
     }
 
+    if (cont_systemName == "fcpo" || cont_systemName == "bce") {
+        cont_localMetricsIntervalMillisec = 1000;
+    } else if (cont_systemName == "edvi") {
+        cont_localMetricsIntervalMillisec = 200;
+    } else {
+        cont_localMetricsIntervalMillisec = cont_metricsServerConfigs.metricsReportIntervalMillisec;
+    }
+
     setenv("GRPC_DNS_RESOLVER", "native", 1);
 
     int own_port = containerConfigs.at("cont_port");
@@ -863,6 +871,16 @@ void ContainerAgent::runService(const json &pipeConfigs, const json &configs) {
     exit(0);
 }
 
+ContainerMetrics ContainerAgent::getContainerMetrics() {
+    ContainerMetrics metrics;
+    metrics.set_arrival_rate(cont_request_arrival_rate);
+    metrics.set_queue_size(cont_queue_size);
+    metrics.set_avg_latency(cont_ewma_latency);
+    metrics.set_drops(cont_late_drops);
+    metrics.set_throughput(cont_throughput);
+    return metrics;
+}
+
 /**
  * @brief Get the Rates (request rates, throughputs) in differnent periods
  * 
@@ -908,8 +926,8 @@ std::vector<float> getThrptsInPeriods(const std::vector<ClockType> &timestamps, 
 
 
 void ContainerAgent::collectRuntimeMetrics() {
-    unsigned int tmp_lateCount, lateCount = 0, queueDrops = 0, miniBatchCount;
-    double avgRequestRate, aggExecutedBatchSize, latencyEWMA;
+    unsigned int tmp_lateCount, queueDrops = 0, miniBatchCount, aggQueueSize;
+    double aggExecutedBatchSize, latencyEWMA;
     ArrivalRecordType arrivalRecords;
     ProcessRecordType processRecords;
     BatchInferRecordType batchInferRecords;
@@ -932,8 +950,8 @@ void ContainerAgent::collectRuntimeMetrics() {
                 cont_metricsServerConfigs.hwMetricsScrapeIntervalMillisec);
     }
 
-    if (timeNow > cont_nextRLDecisionTime) {
-        cont_nextRLDecisionTime = timeNow + std::chrono::milliseconds(cont_rlIntervalMillisec);
+    if (timeNow > cont_nextLocalMetricsTime) {
+        cont_nextLocalMetricsTime = timeNow + std::chrono::milliseconds(cont_localMetricsIntervalMillisec);
     }
 
     /**
@@ -960,6 +978,7 @@ void ContainerAgent::collectRuntimeMetrics() {
         auto startTime = metricsStopwatch.getStartTime();
         uint64_t scrapeLatencyMillisec = 0;
         uint64_t timeDiff;
+
         if (reportHwMetrics) {
             if (timePointCastMillisecond(startTime) >= timePointCastMillisecond(cont_metricsServerConfigs.nextHwMetricsScrapeTime) && pid > 0) {
                 Profiler::sysStats stats = profiler->reportAtRuntime(getpid(), pid);
@@ -992,74 +1011,110 @@ void ContainerAgent::collectRuntimeMetrics() {
             metricsStopwatch.start();
         }
 
-        if (cont_systemName == "fcpo" && timePointCastMillisecond(startTime) >= timePointCastMillisecond(cont_nextRLDecisionTime)) {
-            tmp_lateCount = 0;
-            for (auto &recv: cont_msvcsGroups["receiver"].msvcList) tmp_lateCount += recv->GetDroppedReqCount();
-            lateCount += tmp_lateCount;
-            avgRequestRate = perSecondArrivalRecords.getAvgArrivalRate() - tmp_lateCount;
+        if (timePointCastMillisecond(startTime) >= timePointCastMillisecond(cont_nextLocalMetricsTime)) {
+            if (cont_systemName == "fcpo") {
+                tmp_lateCount = 0;
+                for (auto &recv: cont_msvcsGroups["receiver"].msvcList) tmp_lateCount += recv->GetDroppedReqCount();
+                cont_late_drops += tmp_lateCount;
+                cont_request_arrival_rate = perSecondArrivalRecords.getAvgArrivalRate() - tmp_lateCount;
 
-            aggExecutedBatchSize = 0.1;
-            miniBatchCount = 0.1;
-            latencyEWMA = 0.0;
-            for (auto &bat: cont_msvcsGroups["batcher"].msvcList) aggExecutedBatchSize += bat->GetAggExecutedBatchSize();
-            for (auto &post: cont_msvcsGroups["postprocessor"].msvcList) {
-                miniBatchCount += post->GetMiniBatchCount();
-                latencyEWMA += post->getLatencyEWMA();
-            }
-            latencyEWMA /= cont_msvcsGroups["postprocessor"].msvcList.size();
+                aggExecutedBatchSize = 0.1;
+                for (auto &bat: cont_msvcsGroups["batcher"].msvcList) aggExecutedBatchSize += bat->GetAggExecutedBatchSize();
+                miniBatchCount = 0;
+                latencyEWMA = 0.0;
+                for (auto &post: cont_msvcsGroups["postprocessor"].msvcList) {
+                    miniBatchCount += post->GetMiniBatchCount();
+                    latencyEWMA += post->getLatencyEWMA();
+                }
+                cont_ewma_latency = latencyEWMA / cont_msvcsGroups["postprocessor"].msvcList.size();
 
-            if (avgRequestRate == 0 || std::isnan(avgRequestRate)) {
-                cont_fcpo_agent->rewardCallback(0.0, 0.0, 0.0, (double) cont_msvcsGroups["batcher"].msvcList[0]->msvc_idealBatchSize / 10.0);
-                avgRequestRate = 0;
+                if (cont_request_arrival_rate == 0 || std::isnan(cont_request_arrival_rate)) {
+                    cont_fcpo_agent->rewardCallback(0.0, 0.0, 0.0,
+                                                    (double) cont_msvcsGroups["batcher"].msvcList[0]->msvc_idealBatchSize / 10.0);
+                    cont_request_arrival_rate = 0;
+                } else {
+                    cont_request_arrival_rate = std::max(0.1, cont_request_arrival_rate); // prevent negative values in the case of many drops or no requests
+                    cont_fcpo_agent->rewardCallback((double) aggExecutedBatchSize / cont_request_arrival_rate,
+                                                    queueDrops / 100.0,
+                                                    cont_ewma_latency / TIME_PRECISION_TO_SEC,
+                                                    (double) cont_msvcsGroups["batcher"].msvcList[0]->msvc_idealBatchSize /
+                                                    cont_request_arrival_rate);
+                }
+                spdlog::get("container_agent")->info(
+                        "RL Decision Input: {0:d} miniBatches, {1:f} request rate, {2:f} latency, {3:f} aggExecutedBatchSize",
+                        miniBatchCount, cont_request_arrival_rate, cont_ewma_latency / TIME_PRECISION_TO_SEC, aggExecutedBatchSize);
+                cont_fcpo_agent->setState(cont_msvcsGroups["preprocessor"].msvcList[0]->msvc_concat.numImgs,
+                                          cont_msvcsGroups["batcher"].msvcList[0]->msvc_idealBatchSize,
+                                          cont_threadingAction,
+                                          cont_request_arrival_rate / 250.0,
+                                          cont_msvcsGroups["receiver"].msvcList[0]->msvc_OutQueue[0]->size(),
+                                          cont_msvcsGroups["preprocessor"].msvcList[0]->msvc_OutQueue[0]->size(),
+                                          cont_msvcsGroups["inference"].msvcList[0]->msvc_OutQueue[0]->size());
+                auto [targetRes, newBS, scaling] = cont_fcpo_agent->runStep();
+                spdlog::get("container_agent")->info(
+                        "RL Decision Output: Resolution: {0:d}, Batch Size: {1:d}, Scaling: {2:d}", targetRes, newBS, scaling);
+                applyResolution(targetRes);
+                applyBatchSize(newBS);
+                applyMultiThreading(scaling);
+
+                cont_nextLocalMetricsTime = std::chrono::high_resolution_clock::now() + std::chrono::milliseconds(cont_localMetricsIntervalMillisec);
+            } else if (cont_systemName == "bce") {
+                ClientContext context;
+                indevicemessages::BCEdgeData request;
+                indevicemessages::BCEdgeConfig reply;
+                request.set_msvc_name(cont_name);
+                request.set_slo(cont_msvcsGroups["inference"].msvcList[0]->msvc_contSLO);
+                aggExecutedBatchSize = 0.1;
+                for (auto &bat: cont_msvcsGroups["batcher"].msvcList) aggExecutedBatchSize += bat->GetAggExecutedBatchSize();
+                miniBatchCount = 0;
+                latencyEWMA = 0.0;
+                for (auto &post: cont_msvcsGroups["postprocessor"].msvcList) {
+                    miniBatchCount += post->GetMiniBatchCount();
+                    latencyEWMA += post->getLatencyEWMA();
+                }
+                request.set_throughput((double) aggExecutedBatchSize / perSecondArrivalRecords.getAvgArrivalRate());
+                cont_ewma_latency = latencyEWMA / cont_msvcsGroups["postprocessor"].msvcList.size();
+                request.set_latency(cont_ewma_latency / TIME_PRECISION_TO_SEC);
+                Status status = stub->BCEdgeConfigUpdate(&context, request, &reply);
+                if (status.ok()) {
+                    applyBatchSize(std::min((BatchSizeType) reply.batch_size(), cont_msvcsGroups["batcher"].msvcList[0]->msvc_maxBatchSize));
+                } else {
+                    spdlog::get("container_agent")->warn("{0:s} BCEdgeConfigUpdate failed: {1:d} - {2:s}", cont_name,
+                                                         status.error_code(), status.error_message());
+                }
+                cont_nextLocalMetricsTime = std::chrono::high_resolution_clock::now() + std::chrono::milliseconds(cont_localMetricsIntervalMillisec);
             } else {
-                avgRequestRate = std::max(0.1, avgRequestRate); // prevent negative values in the case of many drops or no requests
-                cont_fcpo_agent->rewardCallback((double) aggExecutedBatchSize / avgRequestRate,
-                                         queueDrops / 100.0,
-                                         latencyEWMA / TIME_PRECISION_TO_SEC,
-//                                         std::max( 1.0, (double) cont_msvcsGroups["batcher"].msvcList[0]->msvc_idealBatchSize
-//                                                            / (aggExecutedBatchSize / miniBatchCount)));
-                                         (double) cont_msvcsGroups["batcher"].msvcList[0]->msvc_idealBatchSize / avgRequestRate);
-            }
-            spdlog::get("container_agent")->info("RL Decision Input: {0:d} miniBatches, {1:f} request rate, {2:f} latency, {3:f} aggExecutedBatchSize",
-                                                 miniBatchCount, avgRequestRate, latencyEWMA / TIME_PRECISION_TO_SEC, aggExecutedBatchSize);
-            cont_fcpo_agent->setState(cont_msvcsGroups["preprocessor"].msvcList[0]->msvc_concat.numImgs,
-                                      cont_msvcsGroups["batcher"].msvcList[0]->msvc_idealBatchSize,cont_threadingAction,
-                                      avgRequestRate / 250.0,
-                                      cont_msvcsGroups["receiver"].msvcList[0]->msvc_OutQueue[0]->size(),
-                                      cont_msvcsGroups["preprocessor"].msvcList[0]->msvc_OutQueue[0]->size(),
-                                      cont_msvcsGroups["inference"].msvcList[0]->msvc_OutQueue[0]->size());
-            auto [targetRes, newBS, scaling] = cont_fcpo_agent->runStep();
-            spdlog::get("container_agent")->info("RL Decision Output: Resolution: {0:d}, Batch Size: {1:d}, Scaling: {2:d}",
-                                                 targetRes, newBS, scaling);
-            applyResolution(targetRes);
-            applyBatchSize(newBS);
-            applyMultiThreading(scaling);
+                cont_request_arrival_rate = perSecondArrivalRecords.getAvgArrivalRate() - tmp_lateCount;
+                if (std::isnan(cont_request_arrival_rate)) {
+                    cont_request_arrival_rate = 0;
+                }
 
-            cont_nextRLDecisionTime = std::chrono::high_resolution_clock::now() + std::chrono::milliseconds(cont_rlIntervalMillisec);
-        } else if (cont_systemName == "bce" && timePointCastMillisecond(startTime) >= timePointCastMillisecond(cont_nextRLDecisionTime)) {
-            ClientContext context;
-            indevicemessages::BCEdgeData request;
-            indevicemessages::BCEdgeConfig reply;
-            request.set_msvc_name(cont_name);
-            request.set_slo(cont_msvcsGroups["inference"].msvcList[0]->msvc_contSLO);
-            aggExecutedBatchSize = 0.1;
-            for (auto &bat: cont_msvcsGroups["batcher"].msvcList) aggExecutedBatchSize += bat->GetAggExecutedBatchSize();
-            miniBatchCount = 0;
-            latencyEWMA = 0.0;
-            for (auto &post: cont_msvcsGroups["postprocessor"].msvcList) {
-                miniBatchCount += post->GetMiniBatchCount();
-                latencyEWMA += post->getLatencyEWMA();
+                aggQueueSize = 0;
+                for (auto group: cont_msvcsGroups) {
+                    for (auto &msvc: group.second.msvcList) {
+                        aggQueueSize += msvc->GetOutQueueSize();
+                    }
+                }
+                cont_queue_size = aggQueueSize;
+
+                latencyEWMA = 0;
+                for (auto &post: cont_msvcsGroups["postprocessor"].msvcList) {
+                    miniBatchCount += post->GetMiniBatchCount();
+                    latencyEWMA += post->getLatencyEWMA();
+                }
+                cont_ewma_latency = latencyEWMA / cont_msvcsGroups["postprocessor"].msvcList.size();
+
+
+                tmp_lateCount = 0;
+                for (auto &recv: cont_msvcsGroups["receiver"].msvcList) tmp_lateCount += recv->GetDroppedReqCount();
+                cont_late_drops += tmp_lateCount;
+
+                aggExecutedBatchSize = 0.1;
+                for (auto &bat: cont_msvcsGroups["batcher"].msvcList) aggExecutedBatchSize += bat->GetAggExecutedBatchSize();
+                cont_throughput = aggExecutedBatchSize;
+
+                cont_nextLocalMetricsTime = std::chrono::high_resolution_clock::now() + std::chrono::milliseconds(cont_localMetricsIntervalMillisec);
             }
-            request.set_throughput((double) aggExecutedBatchSize / perSecondArrivalRecords.getAvgArrivalRate());
-            latencyEWMA /= cont_msvcsGroups["postprocessor"].msvcList.size();
-            request.set_latency(latencyEWMA / TIME_PRECISION_TO_SEC);
-            Status status = stub->BCEdgeConfigUpdate(&context, request, &reply);
-            if (status.ok()) {
-                applyBatchSize(std::min((BatchSizeType) reply.batch_size(), cont_msvcsGroups["batcher"].msvcList[0]->msvc_maxBatchSize));
-            } else {
-                spdlog::get("container_agent")->warn("{0:s} BCEdgeConfigUpdate failed: {1:d} - {2:s}", cont_name, status.error_code(), status.error_message());
-            }
-            cont_nextRLDecisionTime = std::chrono::high_resolution_clock::now() + std::chrono::milliseconds(cont_rlIntervalMillisec);
         }
 
         startTime = std::chrono::high_resolution_clock::now();
@@ -1072,7 +1127,7 @@ void ContainerAgent::collectRuntimeMetrics() {
             queueDrops += cont_msvcsGroups["inference"].msvcList[0]->GetQueueDrops();
             queueDrops += cont_msvcsGroups["postprocessor"].msvcList[0]->GetQueueDrops();
 
-            spdlog::get("container_agent")->info("{0:s} had {1:d} late requests of {2:f} total requests. ({3:d} queue drops)", cont_name, lateCount, perSecondArrivalRecords.getAvgArrivalRate(), queueDrops);
+            spdlog::get("container_agent")->info("{0:s} had {1:d} late requests of {2:f} total requests. ({3:d} queue drops)", cont_name, cont_late_drops, perSecondArrivalRecords.getAvgArrivalRate(), queueDrops);
 
             std::string modelName = cont_msvcsGroups["inference"].msvcList[0]->getModelName();
             if (cont_RUNMODE == RUNMODE::PROFILING) {
@@ -1114,7 +1169,7 @@ void ContainerAgent::collectRuntimeMetrics() {
                 postprocPointer->getBatchInferRecords(batchInferRecords);
             }
 
-            updateArrivalRecords(arrivalRecords, perSecondArrivalRecords, lateCount, queueDrops);
+            updateArrivalRecords(arrivalRecords, perSecondArrivalRecords, cont_late_drops, queueDrops);
             updateProcessRecords(processRecords, batchInferRecords);
             pushMetricsStopWatch.stop();
             auto pushMetricsLatencyMillisec = (uint64_t) std::ceil(pushMetricsStopWatch.elapsed_microseconds() / 1000.f);
@@ -1124,6 +1179,7 @@ void ContainerAgent::collectRuntimeMetrics() {
                                                  cont_metricsServerConfigs.metricsReportIntervalMillisec - pushMetricsLatencyMillisec);
 
             queueDrops = 0;
+            cont_late_drops = 0;
             cont_metricsServerConfigs.nextMetricsReportTime += std::chrono::milliseconds(
                     cont_metricsServerConfigs.metricsReportIntervalMillisec - pushMetricsLatencyMillisec);
         }
@@ -1135,6 +1191,7 @@ void ContainerAgent::collectRuntimeMetrics() {
         if (reportHwMetrics && hwMetricsScraped) {
             nextTime = std::min(nextTime, cont_metricsServerConfigs.nextHwMetricsScrapeTime);
         }
+        nextTime = std::min(nextTime, cont_nextLocalMetricsTime);
         if (hasDataReader && cont_msvcsGroups["receiver"].msvcList[0]->STOP_THREADS) {
             run = false;
         }
@@ -1421,12 +1478,12 @@ void ContainerAgent::UpdateSenderRequestHandler::Proceed() {
                 msvc->pauseThread();
             }
         }
-        json config;
+        json *config;
         std::string link = absl::StrFormat("%s:%d", request.ip(), request.port());
         auto senders = &(*msvcs)["sender"].msvcList;
         for (auto sender: *senders) {
             if (sender->dnstreamMicroserviceList[0].name == request.name()) {
-                config = sender->msvc_configs;
+                config = &sender->msvc_configs;
                 std::vector<msvcconfigs::NeighborMicroservice *> postprocessor_dnstreams = {};
                 for (auto *postprocessor : (*msvcs)["postprocessor"].msvcList) {
                     for (auto &dnstream : postprocessor->dnstreamMicroserviceList) {
@@ -1435,11 +1492,11 @@ void ContainerAgent::UpdateSenderRequestHandler::Proceed() {
                         }
                     }
                 }
-                auto nb_links = config["msvc_dnstreamMicroservices"][0]["nb_link"];
+                auto nb_links = config->at("msvc_dnstreamMicroservices")[0]["nb_link"];
                 if (request.mode() == AdjustUpstreamMode::Overwrite) {
                     if (request.old_link() == "") {
-                        config["msvc_dnstreamMicroservices"][0]["nb_link"] = {link};
-                        config["msvc_dnstreamMicroservices"][0]["nb_portions"] = {};
+                        config->at("msvc_dnstreamMicroservices")[0]["nb_link"] = {link};
+                        config->at("msvc_dnstreamMicroservices")[0]["nb_portions"] = {};
                         for (auto postprocessor : postprocessor_dnstreams) {
                             postprocessor->portions.clear();
                         }
@@ -1458,9 +1515,9 @@ void ContainerAgent::UpdateSenderRequestHandler::Proceed() {
                         return;
                     }
                     int index = std::distance(nb_links.begin(), it);
-                    config["msvc_dnstreamMicroservices"][0]["nb_link"][index] = link;
+                    config->at("msvc_dnstreamMicroservices")[0]["nb_link"][index] = link;
                     if (index != 0) {
-                        config["msvc_dnstreamMicroservices"][0]["nb_portions"][index-1] = request.data_portion();
+                        config->at("msvc_dnstreamMicroservices")[0]["nb_portions"][index-1] = request.data_portion();
                         for (auto postprocessor : postprocessor_dnstreams) {
                             float portion_diff = postprocessor->portions[index] - request.data_portion();
                             postprocessor->portions[0] += portion_diff;
@@ -1470,8 +1527,8 @@ void ContainerAgent::UpdateSenderRequestHandler::Proceed() {
                     spdlog::get("container_agent")->trace("Overwrote link {0:s} over {1:s}", link, request.old_link());
                 } else if (request.mode() == AdjustUpstreamMode::Add) {
                         if (std::find(nb_links.begin(),nb_links.end(), link) == nb_links.end()) {
-                            config["msvc_dnstreamMicroservices"][0]["nb_link"].push_back(link);
-                            config["msvc_dnstreamMicroservices"][0]["nb_portions"].push_back(request.data_portion());
+                            config->at("msvc_dnstreamMicroservices")[0]["nb_link"].push_back(link);
+                            config->at("msvc_dnstreamMicroservices")[0]["nb_portions"].push_back(request.data_portion());
                             for (auto postprocessor : postprocessor_dnstreams) {
                                 if (postprocessor->portions.empty()) {
                                     postprocessor->portions.push_back(1.0f - request.data_portion());
@@ -1508,10 +1565,10 @@ void ContainerAgent::UpdateSenderRequestHandler::Proceed() {
                     int index = std::distance(nb_links.begin(), it);
                     if (request.mode() == AdjustUpstreamMode::Remove) {
                         nb_links.erase(std::remove(nb_links.begin(), nb_links.end(), link), nb_links.end());
-                        config["msvc_dnstreamMicroservices"][0]["nb_link"] = nb_links;
+                        config->at("msvc_dnstreamMicroservices")[0]["nb_link"] = nb_links;
                         if (index != 0) {
-                            config["msvc_dnstreamMicroservices"][0]["nb_portions"].erase(
-                                    config["msvc_dnstreamMicroservices"][0]["nb_portions"].begin() + index - 1);
+                            config->at("msvc_dnstreamMicroservices")[0]["nb_portions"].erase(
+                                    config->at("msvc_dnstreamMicroservices")[0]["nb_portions"].begin() + index - 1);
                             for (auto postprocessor: postprocessor_dnstreams) {
                                 postprocessor->portions[0] += postprocessor->portions[index];
                                 postprocessor->portions.erase(postprocessor->portions.begin() + index - 1);
@@ -1537,6 +1594,7 @@ void ContainerAgent::UpdateSenderRequestHandler::Proceed() {
                     }
                 }
                 static_cast<Sender*>(sender)->reloadDnstreams();
+                static_cast<Sender*>(sender)->dispatchThread();
                 for (auto &group : *msvcs) {
                     for (auto msvc : group.second.msvcList) {
                         msvc->unpauseThread();
@@ -1628,7 +1686,7 @@ void ContainerAgent::RetrieveContainerMetricsRequestHandler::Proceed() {
         service->RequestRetrieveContainerMetrics(&ctx, &request, &responder, cq, cq, this);
     } else if (status == PROCESS) {
         new RetrieveContainerMetricsRequestHandler(service, cq, container_agent);
-
+        reply = container_agent->getContainerMetrics();
         status = FINISH;
         responder.Finish(reply, Status::OK, this);
     } else {
