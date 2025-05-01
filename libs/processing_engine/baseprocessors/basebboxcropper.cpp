@@ -618,6 +618,10 @@ void BaseBBoxCropper::cropping() {
                     std::string path = currReq_path;
                     // Add the number of bounding boxes in the image and the index of the bounding box in the image
                     path += "|" + std::to_string(numsDetsInImages[indexLists[j].first]) + "|" + std::to_string(indexInImageDetList[j]);
+                    // // Add latency durations to the path
+                    addTimestampsToPath(path, currReq.req_origGenTime[imageIndexInBatch]);
+                    
+
                     if (dnstreamMicroserviceList[qIndex].portions.size() > 1 &&
                         ( (float) perClassProcessedCount[bboxClass]++ / (float) classCount[bboxClass])
                             > dnstreamMicroserviceList[qIndex].portions[outReqList.at(qIndex).size()-1]) {
@@ -678,25 +682,35 @@ void BaseBBoxCropper::cropping() {
             for (auto &outList : outReqList) {
                 for (auto &outReq : outList) {
                     if (msvc_activeOutQueueIndex.at(qIndex) == 1) { //Local CPU GPU
+                        // Make sure the time is uniform across all the bounding boxes
+                        uint pathNum = 0;
+                        for (auto &time: outReq.cpuReq.req_origGenTime) {
+                            ClockType timeNow = std::chrono::high_resolution_clock::now();
+                            time.emplace_back(timeNow);
+                            outReq.cpuReq.req_travelPath[pathNum] += "|" + std::to_string(std::chrono::duration_cast<TimePrecisionType>(timeNow.time_since_epoch()).count());
+                            pathNum++;
+                        }
                         // Add the total size of bounding boxes heading to this queue
                         for (auto &path: outReq.cpuReq.req_travelPath) {
                             path += "|" + std::to_string(outReq.totalEncodedSize) + "|" +
                                     std::to_string(outReq.totalSize) + "]";
+                            std::cout << path << std::endl;
                         }
-                        // Make sure the time is uniform across all the bounding boxes
-                        for (auto &time: outReq.cpuReq.req_origGenTime) {
-                            time.emplace_back(std::chrono::high_resolution_clock::now());
-                        }
+
                         msvc_OutQueue.at(qIndex)->emplace(outReq.cpuReq);
                     } else { //Local GPU Queue
+                        // Make sure the time is uniform across all the bounding boxes
+                        uint pathNum = 0;
+                        for (auto &time: outReq.gpuReq.req_origGenTime) {
+                            ClockType timeNow = std::chrono::high_resolution_clock::now();
+                            time.emplace_back(timeNow);
+                            outReq.gpuReq.req_travelPath[pathNum] += "|" + std::to_string(std::chrono::duration_cast<TimePrecisionType>(timeNow.time_since_epoch()).count());
+                            pathNum++;
+                        }
                         // Add the total size of bounding boxes heading to this queue
                         for (auto &path: outReq.gpuReq.req_travelPath) {
                             path += "|" + std::to_string(outReq.totalEncodedSize) + "|" +
                                     std::to_string(outReq.totalSize) + "]";
-                        }
-                        // Make sure the time is uniform across all the bounding boxes
-                        for (auto &time: outReq.gpuReq.req_origGenTime) {
-                            time.emplace_back(std::chrono::high_resolution_clock::now());
                         }
                         msvc_OutQueue.at(qIndex)->emplace(outReq.gpuReq);
                     }
