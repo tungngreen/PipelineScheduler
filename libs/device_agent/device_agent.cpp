@@ -211,8 +211,8 @@ void DeviceAgent::collectRuntimeMetrics() {
                     metrics.gpuUsage.emplace_back(stats[i].gpuUtilization);
                     metrics.gpuMemUsage.emplace_back(stats[i].gpuMemoryUsage);
                 }
+                dev_runtimeMetrics.emplace_back(metrics);
             }
-            dev_runtimeMetrics.emplace_back(metrics);
             for (auto &container: containers) {
                 if (container.second.pid > 0) {
                     Profiler::sysStats stats = dev_profiler->reportAtRuntime(container.second.pid, container.second.pid);

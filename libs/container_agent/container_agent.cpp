@@ -1348,6 +1348,7 @@ void ContainerAgent::HandleRecvRpcs() {
     new UpdateTimeKeepingRequestHandler(&service, server_cq.get(), this);
     new SyncDatasourcesRequestHandler(&service, server_cq.get(), this);
     new FederatedLearningReturnRequestHandler(&service, server_cq.get(), cont_fcpo_agent);
+    new RetrieveContainerMetricsRequestHandler(&service, server_cq.get(), this);
     void *tag;
     bool ok;
     while (run) {
@@ -1621,6 +1622,21 @@ void ContainerAgent::UpdateResolutionRequestHandler::Proceed() {
     }
 }
 
+void ContainerAgent::RetrieveContainerMetricsRequestHandler::Proceed() {
+    if (status == CREATE) {
+        status = PROCESS;
+        service->RequestRetrieveContainerMetrics(&ctx, &request, &responder, cq, cq, this);
+    } else if (status == PROCESS) {
+        new RetrieveContainerMetricsRequestHandler(service, cq, container_agent);
+
+        status = FINISH;
+        responder.Finish(reply, Status::OK, this);
+    } else {
+        GPR_ASSERT(status == FINISH);
+        delete this;
+    }
+}
+
 void ContainerAgent::UpdateTimeKeepingRequestHandler::Proceed() {
     if (status == CREATE) {
         status = PROCESS;
@@ -1668,7 +1684,7 @@ void ContainerAgent::SyncDatasourcesRequestHandler::Proceed() {
         status = PROCESS;
         service->RequestSyncDatasources(&ctx, &request, &responder, cq, cq, this);
     } else if (status == PROCESS) {
-        containerAgent->transferFrameID(absl::StrFormat("localhost:%d/", request.value()));
+        container_agent->transferFrameID(absl::StrFormat("localhost:%d/", request.value()));
         status = FINISH;
         responder.Finish(reply, Status::OK, this);
     } else {

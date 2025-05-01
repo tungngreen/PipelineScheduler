@@ -45,6 +45,7 @@ using indevicecommands::ContainerSignal;
 using indevicecommands::Connection;
 using indevicecommands::TimeKeeping;
 using indevicemessages::ProcessData;
+using indevicecommands::ContainerMetrics;
 using EmptyMessage = google::protobuf::Empty;
 
 enum TransferMethod {
@@ -334,8 +335,8 @@ protected:
     class SyncDatasourcesRequestHandler : public RequestHandler {
     public:
         SyncDatasourcesRequestHandler(InDeviceCommands::AsyncService *service, ServerCompletionQueue *cq,
-                                      ContainerAgent *containerAgent)
-                : RequestHandler(service, cq), containerAgent(containerAgent) {
+                                      ContainerAgent *container_agent)
+                : RequestHandler(service, cq), container_agent(container_agent) {
             Proceed();
         }
 
@@ -343,7 +344,7 @@ protected:
 
     private:
         indevicecommands::Int32 request;
-        ContainerAgent *containerAgent;
+        ContainerAgent *container_agent;
     };
 
     class FederatedLearningReturnRequestHandler : public RequestHandler {
@@ -359,6 +360,23 @@ protected:
     private:
         FlData request;
         FCPOAgent *fcpoAgent;
+    };
+
+    class RetrieveContainerMetricsRequestHandler : public RequestHandler {
+    public:
+        RetrieveContainerMetricsRequestHandler(InDeviceCommands::AsyncService *service, ServerCompletionQueue *cq,
+                                               ContainerAgent *container_agent)
+                : RequestHandler(service, cq), responder(&ctx), container_agent(container_agent) {
+            Proceed();
+        }
+
+        void Proceed() final;
+
+    private:
+        EmptyMessage request;
+        ContainerMetrics reply;
+        grpc::ServerAsyncResponseWriter<ContainerMetrics> responder;
+        ContainerAgent *container_agent;
     };
 
     virtual void HandleRecvRpcs();

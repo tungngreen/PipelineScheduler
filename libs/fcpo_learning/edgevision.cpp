@@ -7,7 +7,7 @@ EdgeVisionAgent::EdgeVisionAgent(std::string& dev_name, int offloading_candidate
     path = "../../pipe/models/edgevision/" + dev_name;
     std::filesystem::create_directories(std::filesystem::path(path));
 
-    actor = std::make_shared<EdgeViActorNet>(5, offloading_candidates);
+    actor = std::make_shared<EdgeViActorNet>(offloading_candidates+3, offloading_candidates);
     critic = std::make_shared<EdgeViCriticNet>(5);
     std::string model_save = path + "/latest_actor.pt";
     if (std::filesystem::exists(model_save)) torch::load(actor, model_save);

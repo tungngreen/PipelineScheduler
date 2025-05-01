@@ -15,6 +15,7 @@ service InDeviceCommands {
   rpc SyncDatasources(Int32) returns (google.protobuf.Empty) {}
   rpc SetStartFrame(Int32) returns (google.protobuf.Empty) {}
   rpc FederatedLearningReturn(FlData) returns (google.protobuf.Empty) {}
+  rpc RetrieveContainerMetrics(google.protobuf.Empty) returns (ContainerMetrics) {}
   rpc StopExecution(ContainerSignal) returns (google.protobuf.Empty) {}
 }
 
@@ -52,6 +53,14 @@ message Dimensions {
 
 message Int32 {
   int32 value = 1;
+}
+
+message ContainerMetrics {
+  float arrival_rate = 1;
+  int32 queue_size = 2;
+  int64 avg_latency = 3;
+  int32 drops = 4;
+  int32 throughput = 5;
 }
 
 message FlData {
