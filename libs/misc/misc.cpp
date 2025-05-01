@@ -1419,3 +1419,28 @@ ContainerLibType getContainerLib(const std::string& deviceType) {
 std::string getDeviceTypeName(SystemDeviceType deviceType) {
     return SystemDeviceTypeList[deviceType];
 }
+
+void addTimestampsToPath(
+    std::string &path,
+    const RequestTimeType &timeRecords,
+    const std::string &delimiter
+) {
+    /**
+     * @brief There are total of 11 timestamps in total until the execution of this function
+     * 1. The very moment request is originally generated at the beggining of the pipeline. (FIRST_TIMESTAMP)
+     * 2. The moment request is put into outqueue of last immediate upstream processor. (SECOND_TIMESTAMP)
+     * 3. The moment request is sent by immediate upstream sender. (THIRD_TIMESTAMP)
+     * 4. The moment request is received by the receiver. (FOURTH_TIMESTAMP)
+     * 5. When the request was received by the preprocessor (FIFTH_TIMESTAMP)
+     * 6. When the request was done preprocessing by the preprocessor (SIXTH_TIMESTAMP)
+     * 7. When the request, along with all others in the batch, was batched together and sent to the inferencer (SEVENTH_TIMESTAMP)
+     * 8. When the batch was popped by the inferencer (EIGHTH_TIMESTAMP)
+     * 9. When the batch inference was completed by the inferencer (NINTH_TIMESTAMP)
+     * 10. When the batch was received by the postprocessor (TENTH_TIMESTAMP)
+     * 11. When each request starts to be processed by the postprocessor (ELEVENTH_TIMESTAMP)
+     */
+
+    for (uint8_t i = 1; i < timeRecords.size(); i++) {
+        path += delimiter + std::to_string(std::chrono::duration_cast<TimePrecisionType>(timeRecords[i].time_since_epoch()).count());
+    }
+}

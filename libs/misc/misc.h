@@ -796,4 +796,17 @@ std::string getContainerName(const SystemDeviceType& deviceType, const ModelType
 ContainerLibType getContainerLib(const std::string& deviceType);
 
 std::string getDeviceTypeName(SystemDeviceType deviceType);
+
+/**
+ * @brief Add processing and network latencies to the path
+ * 
+ * @param path 
+ * @param processRecord 
+ * @param delimiter 
+ */
+void addTimestampsToPath(
+    std::string &path,
+    const RequestTimeType &timeRecords,
+    const std::string &delimiter = "|"
+);
 #endif

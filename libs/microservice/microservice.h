@@ -750,7 +750,7 @@ public:
      * 2. When the request was done preprocessing by the preprocessor (SIXTH_TIMESTAMP)
      * 3. When the request, along with all others in the batch, was batched together and sent to the inferencer (SEVENTH_TIMESTAMP)
      * 4. When the batch was popped by the inferencer (EIGHTH_TIMESTAMP)
-     * 5. When the batch inferencer was completed by the inferencer (NINTH_TIMESTAMP)
+     * 5. When the batch inference was completed by the inferencer (NINTH_TIMESTAMP)
      * 6. When the batch was received by the postprocessor (TENTH_TIMESTAMP)
      * 7. When each request starts to be processed by the postprocessor (ELEVENTH_TIMESTAMP)
      * 8. When each request was completed by the postprocessor (TWELFTH_TIMESTAMP)
@@ -769,11 +769,11 @@ public:
         for (size_t i = 0; i < timestamps.size() - 1; ++i) {
             if (timestamps[i] >= timestamps[i + 1]) return;
         }
-        auto prepDuration = std::chrono::duration_cast<TimePrecisionType>(timestamps[6] - timestamps[5]).count();
-        auto batchDuration = std::chrono::duration_cast<TimePrecisionType>(timestamps[7] - timestamps[6]).count();
-        auto inferQueueingDuration = std::chrono::duration_cast<TimePrecisionType>(timestamps[8] - timestamps[7]).count();
-        auto inferDuration = std::chrono::duration_cast<TimePrecisionType>(timestamps[9] - timestamps[8]).count();
-        auto postDuration = std::chrono::duration_cast<TimePrecisionType>(timestamps[11] - timestamps[10]).count();
+        auto prepDuration = std::chrono::duration_cast<TimePrecisionType>(timestamps[5] - timestamps[4]).count();
+        auto batchDuration = std::chrono::duration_cast<TimePrecisionType>(timestamps[6] - timestamps[5]).count();
+        auto inferQueueingDuration = std::chrono::duration_cast<TimePrecisionType>(timestamps[7] - timestamps[6]).count();
+        auto inferDuration = std::chrono::duration_cast<TimePrecisionType>(timestamps[8] - timestamps[7]).count();
+        auto postDuration = std::chrono::duration_cast<TimePrecisionType>(timestamps[11] - timestamps[9]).count();
 
         std::unique_lock<std::mutex> lock(mutex);
         processRecords[{reqOrigin, inferBatchSize}].prepDuration.emplace_back(prepDuration);
