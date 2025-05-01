@@ -41,7 +41,6 @@ public:
     void run() {};
 
     struct sysStats {
-        uint64_t timestamp = 0;
         int cpuUsage = 0;
         int processMemoryUsage = 0;
         int rssMemory = 0;

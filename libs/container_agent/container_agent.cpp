@@ -1421,7 +1421,6 @@ void ContainerAgent::UpdateSenderRequestHandler::Proceed() {
             }
         }
         json config;
-        std::vector<ThreadSafeFixSizedDoubleQueue *> inqueue = {};
         std::string link = absl::StrFormat("%s:%d", request.ip(), request.port());
         auto senders = &(*msvcs)["sender"].msvcList;
         for (auto sender: *senders) {
@@ -1536,28 +1535,27 @@ void ContainerAgent::UpdateSenderRequestHandler::Proceed() {
                         return;
                     }
                 }
-                inqueue = sender->GetInQueue();
                 static_cast<Sender*>(sender)->reloadDnstreams();
-//                senders->erase(std::remove(senders->begin(), senders->end(), sender), senders->end());
-//                sender->stopThread();
-                break;
-            }
-        }
-        if (inqueue.empty()) {
-            spdlog::get("container_agent")->error("Could not find sender to {0:s} in current configuration.", request.name());
-            for (auto &group : *msvcs) {
-                for (auto msvc : group.second.msvcList) {
-                    msvc->unpauseThread();
+                for (auto &group : *msvcs) {
+                    for (auto msvc : group.second.msvcList) {
+                        msvc->unpauseThread();
+                    }
                 }
+                status = FINISH;
+                responder.Finish(reply, Status::OK, this);
+                return;
             }
-            status = FINISH;
-            responder.Finish(reply, Status::CANCELLED, this);
-            return;
         }
+        spdlog::get("container_agent")->error("Could not find sender to {0:s} in current configuration.", request.name());
+        for (auto &group : *msvcs) {
+            for (auto msvc : group.second.msvcList) {
+                msvc->unpauseThread();
+            }
+        }
+        status = FINISH;
+        responder.Finish(reply, Status::CANCELLED, this);
 
-//        Microservice* new_sender = new RemoteCPUSender(config);
-//        new_sender->SetInQueue(inqueue);
-
+        // TODO: Add the following again into the logic when enabling GPU Communication
 //        if (request.ip() == "localhost") {
 //            // change postprocessing to keep the data on gpu
 //
@@ -1565,20 +1563,11 @@ void ContainerAgent::UpdateSenderRequestHandler::Proceed() {
 //            msvcs->push_back(new GPUSender(config));
 //        } else {
         // change postprocessing to offload data from gpu
-
         // start new serialized sender
 //        senders->push_back(new_sender);
 //        }
         //start the new sender
 //        senders->back()->dispatchThread();
-        for (auto &group : *msvcs) {
-            for (auto msvc : group.second.msvcList) {
-                msvc->unpauseThread();
-            }
-        }
-
-        status = FINISH;
-        responder.Finish(reply, Status::OK, this);
     } else {
         GPR_ASSERT(status == FINISH);
         delete this;
@@ -1703,21 +1692,6 @@ void ContainerAgent::FederatedLearningReturnRequestHandler::Proceed() {
     }
 }
 
-// /**
-//  * @brief Check if all the microservices are paused
-//  *
-//  * @return true
-//  * @return false
-//  */
-// bool ContainerAgent::checkPause() {
-//     for (auto msvc: cont_msvcsList) {
-//         if (msvc->checkPause()) {
-//             return false;
-//         }
-//     }
-//     return true;
-// }
-
 bool ContainerAgent::checkPause(std::vector<Microservice *> msvcs) {
     for (auto msvc: msvcs) {
         if (!msvc->checkPause()) {
@@ -1746,20 +1720,6 @@ void ContainerAgent::waitPause() {
     }
 
 }
-
-// /**
-//  * @brief Check if all the microservices are ready
-//  *
-//  * @return true
-//  * @return false
-//  */
-// bool ContainerAgent::checkReady() {
-//     for (auto msvc: cont_msvcsList) {
-//         if (!msvc->checkReady()) {
-//             return true;
-//         }
-//     }
-//     return true;
 
 bool ContainerAgent::checkReady(std::vector<Microservice *> msvcs) {
     for (auto msvc: msvcs) {

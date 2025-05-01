@@ -166,6 +166,7 @@ DeviceAgent::DeviceAgent(const std::string &controller_url) : DeviceAgent() {
             dev_bcedge_agent = new BCEdgeAgent(dev_name, 3000000, torch::kF32, 0);
         }
     } else if (dev_system_name == "edvi") {
+        edgevisionDecisionInterval = TimePrecisionType(200000);
         dev_edgevision_agent = new EdgeVisionAgent(dev_name, 16, torch::kF32, 0);
     }
 
@@ -202,13 +203,14 @@ void DeviceAgent::collectRuntimeMetrics() {
             std::vector<Profiler::sysStats> stats = dev_profiler->reportDeviceStats();
 
             DeviceHardwareMetrics metrics;
-            metrics.timestamp = std::chrono::high_resolution_clock::now();
-            metrics.cpuUsage = stats[0].cpuUsage;
-            metrics.memUsage = stats[0].processMemoryUsage;
-            metrics.rssMemUsage = stats[0].rssMemory;
-            for (unsigned int i = 0; i < stats.size(); i++) {
-                metrics.gpuUsage.emplace_back(stats[i].gpuUtilization);
-                metrics.gpuMemUsage.emplace_back(stats[i].gpuMemoryUsage);
+            if (!containers.empty()) {
+                metrics.timestamp = std::chrono::high_resolution_clock::now();
+                metrics.cpuUsage = stats[0].cpuUsage;
+                metrics.memUsage = stats[0].deviceMemoryUsage;
+                for (unsigned int i = 0; i < stats.size(); i++) {
+                    metrics.gpuUsage.emplace_back(stats[i].gpuUtilization);
+                    metrics.gpuMemUsage.emplace_back(stats[i].gpuMemoryUsage);
+                }
             }
             dev_runtimeMetrics.emplace_back(metrics);
             for (auto &container: containers) {
@@ -219,23 +221,8 @@ void DeviceAgent::collectRuntimeMetrics() {
                     spdlog::get("container_agent")->trace("{0:s} SCRAPE hardware metrics. Latency {1:d}ms.",
                                                         dev_name,
                                                         scrapeLatencyMillisec);
-//                    metrics.timestamp = std::chrono::high_resolution_clock::now();
-//                    metrics.memUsage = stats.deviceMemoryUsage;
-//                    metrics.rssMemUsage = stats.deviceMemoryUsage;
-//                    metrics.gpuUsage.emplace_back(stats.gpuUtilization);
-//                    metrics.gpuMemUsage.emplace_back(stats.deviceMemoryUsage);
                 }
             }
-//            if (metrics.gpuUsage.empty()) {
-//                Profiler::sysStats stats = dev_profiler->reportAnyMetrics();
-//                metrics.timestamp = std::chrono::high_resolution_clock::now();
-//                metrics.memUsage = stats.deviceMemoryUsage;
-//                metrics.rssMemUsage = stats.deviceMemoryUsage;
-//                metrics.gpuUsage.emplace_back(stats.gpuUtilization);
-//                metrics.gpuMemUsage.emplace_back(stats.deviceMemoryUsage);
-//            }
-//            metrics.cpuUsage = dev_profiler->getDeviceCPUInfo();
-//            dev_runtimeMetrics.emplace_back(metrics);
             metricsStopwatch.stop();
             scrapeLatencyMillisec = (uint64_t) std::ceil(metricsStopwatch.elapsed_microseconds() / 1000.f);
             dev_metricsServerConfigs.nextHwMetricsScrapeTime = std::chrono::high_resolution_clock::now() +

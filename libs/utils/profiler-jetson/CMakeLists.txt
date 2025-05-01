@@ -48,6 +48,9 @@ add_library(profiler::profiler ALIAS profiler)
 
 find_package(Python COMPONENTS Development REQUIRED)
 
+set(misc_DIR "${CMAKE_CURRENT_BINARY_DIR}/../../misc")
+find_package(misc CONFIG REQUIRED)
+
 # Required compiler features.
 # https://cmake.org/cmake/help/v3.1/manual/cmake-compile-features.7.html
 target_compile_features(profiler
@@ -78,8 +81,7 @@ target_link_libraries(profiler
         ${CMAKE_THREAD_LIBS_INIT}
         ${Python_LIBRARIES}
         ${CUDA_LIBRARIES}
-        CUDA::nvml
-        cuda
+        misc
 )
 
 # Here we configure variables specifying the target directories.

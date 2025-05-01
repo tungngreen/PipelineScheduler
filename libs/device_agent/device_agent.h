@@ -447,6 +447,10 @@ protected:
 
     BCEdgeAgent *dev_bcedge_agent;
     EdgeVisionAgent *dev_edgevision_agent;
+    TimePrecisionType edgevisionDecisionInterval;
+    ClockType nextEdgevisionDecisionTime;
+
+
 };
 
 #endif //DEVICE_AGENT_H

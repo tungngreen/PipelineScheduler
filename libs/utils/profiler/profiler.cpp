@@ -68,10 +68,12 @@ Profiler::sysStats Profiler::reportAtRuntime(unsigned int cpu_pid, unsigned int 
 
 std::vector<Profiler::sysStats> Profiler::reportDeviceStats() {
     std::vector<Profiler::sysStats> deviceStats;
+    auto cpu = getDeviceCPUInfo();
+    auto mem = getDeviceMemoryInfo();
     for (unsigned int i = 0; i < cuda_devices.size(); i++) {
         sysStats value{};
-        value.cpuUsage = getDeviceCPUInfo();
-        value.processMemoryUsage = getDeviceMemoryInfo();
+        value.cpuUsage = cpu;
+        value.deviceMemoryUsage = mem;
         nvmlUtilization_t gpu = getGPUInfo(0, cuda_devices[i]);
         value.gpuUtilization = gpu.gpu;
         value.gpuMemoryUsage = gpu.memory;

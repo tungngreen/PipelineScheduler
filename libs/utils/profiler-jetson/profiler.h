@@ -3,6 +3,7 @@
 
 #include <vector>
 #include <map>
+#include "misc.h"
 #include <iostream>
 #include <fstream>
 #include <iomanip>
@@ -43,13 +44,12 @@ public:
     void run();
 
     struct sysStats {
-        uint64_t timestamp = 0;
         int cpuUsage = 0;
         int processMemoryUsage = 0;
         int rssMemory = 0;
         int deviceMemoryUsage = 0;
-        unsigned int gpuUtilization = 0;
-        unsigned int gpuMemoryUsage = 0;
+        int gpuUtilization = 0;
+        int gpuMemoryUsage = 0;
     };
 
 
@@ -64,7 +64,7 @@ public:
         std::lock_guard<std::mutex> lock(m); return stats.begin()->second; };
 
     int getDeviceCPUInfo();
-    std::vector<sysStats> reportDeviceStats() {return {reportAnyMetrics()};};
+    std::vector<sysStats> reportDeviceStats();
 
 private:
     void jtop(const std::string &cmd);

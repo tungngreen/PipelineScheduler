@@ -29,8 +29,9 @@ void Profiler::jtop(const std::string &cmd) {
             result.push_back(token);
         }
         std::lock_guard<std::mutex> lock(m);
-        stats[std::stoi(result[0])] = {std::stoi(result[1]), std::stoi(result[2]), std::stoi(result[5]), std::stoi(result[4]),
-                                       std::stoi(result[3])};
+        stats[std::stoi(result[0])] = {static_cast<int>(std::lround(std::stof(result[1]))), std::stoi(result[2]) / 1000,
+                                       std::stoi(result[2]) / 1000, std::stoi(result[5]) / 1000, std::stoi(result[4]),
+                                       std::stoi(result[3]) / 1000};
         m.unlock();
         result = {};
     }
@@ -60,4 +61,11 @@ int Profiler::getDeviceCPUInfo() {
         return (int) cpuUsage;
     }
     return 0;
+}
+
+std::vector<Profiler::sysStats> Profiler::reportDeviceStats(){
+    sysStats tmp = reportAnyMetrics();
+    tmp.cpuUsage = getDeviceCPUInfo();
+    tmp.gpuMemoryUsage = tmp.deviceMemoryUsage;
+    return {tmp};
 }
