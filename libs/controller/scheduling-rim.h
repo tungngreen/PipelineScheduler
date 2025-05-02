@@ -9,14 +9,20 @@ namespace Rim {
     std::string device_type_str(NodeHandle *device) {
         std::string device_type;
         switch (device->type) {
+            case OrinAGX:
+                device_type = "orinagx";
+                break;
+            case OrinNX:
+                device_type = "orinnx";
+                break;
+            case OrinNano:
+                device_type = "orinano";
+                break;
             case AGXXavier:
                 device_type = "agxavier";
                 break;
             case NXXavier:
                 device_type = "nxavier";
-                break;
-            case OrinNano:
-                device_type = "orinano";
                 break;
             default:
                 device_type = "server";

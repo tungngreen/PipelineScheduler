@@ -1112,9 +1112,11 @@ private:
     DeviceInfoType ctrl_sysDeviceInfo = {
         {Server, "server"},
         {OnPremise, "onprem"},
+        {OrinAGX, "orinagx"},
+        {OrinNX, "orinnx"},
+        {OrinNano, "orinano"},
         {AGXXavier, "agxavier"},
-        {NXXavier, "nxavier"},
-        {OrinNano, "orinano"}
+        {NXXavier, "nxavier"}
     };
     
     Devices devices;

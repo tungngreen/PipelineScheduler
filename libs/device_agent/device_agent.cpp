@@ -41,15 +41,18 @@ DeviceAgent::DeviceAgent() {
         dev_type = SystemDeviceType::Server;
     } else if (type == "onprem") {
         dev_type = SystemDeviceType::OnPremise;
-    } else if (type == "nxavier") {
-        dev_type = SystemDeviceType::NXXavier;
-    } else if (type == "agxavier") {
-        dev_type = SystemDeviceType::AGXXavier;
+    } else if (type == "orinagx") {
+        dev_type = SystemDeviceType::OrinAGX;
+    } else if (type == "orinnx") {
+        dev_type = SystemDeviceType::OrinNX;
     } else if (type == "orinano") {
         dev_type = SystemDeviceType::OrinNano;
-    }
-    else {
-        std::cerr << "Invalid device type, use [server, onprem, nxavier, agxavier, orinano]" << std::endl;
+    } else if (type == "agxavier") {
+        dev_type = SystemDeviceType::AGXXavier;
+    } else if (type == "nxavier") {
+        dev_type = SystemDeviceType::NXXavier;
+    } else {
+        std::cerr << "Invalid device type, use [server, onprem, orinagx, orinnx, orinano, agxavier, nxavier]" << std::endl;
         exit(1);
     }
     dev_port_offset = absl::GetFlag(FLAGS_dev_port_offset);
