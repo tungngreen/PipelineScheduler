@@ -119,7 +119,7 @@ protected:
                          const int &device, const int &port) {
         std::string command = "docker run -d --rm --network=host --runtime nvidia --gpus all ";
         std::string docker_tag;
-        if (dev_type == SystemDeviceType::Server) {
+        if (dev_type == SystemDeviceType::Server || dev_type == SystemDeviceType::OnPremise) {
             command += "-v /ssd0/tung/PipePlusPlus/data/:/app/data/  -v /ssd0/tung/PipePlusPlus/logs/:/app/logs/ "
                        "-v /ssd0/tung/PipePlusPlus/models/:/app/models/ "
                        "-v /ssd0/tung/PipePlusPlus/model_profiles/:/app/model_profiles/ --name " +
