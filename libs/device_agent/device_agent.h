@@ -32,6 +32,7 @@ ABSL_DECLARE_FLAG(uint16_t, dev_verbose);
 ABSL_DECLARE_FLAG(uint16_t, dev_loggingMode);
 ABSL_DECLARE_FLAG(std::string, dev_logPath);
 ABSL_DECLARE_FLAG(uint16_t, dev_port_offset);
+ABSL_DECLARE_FLAG(uint16_t, dev_bandwidthLimitID);
 
 using grpc::ServerBuilder;
 using grpc::ServerContext;
