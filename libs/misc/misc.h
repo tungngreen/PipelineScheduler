@@ -545,6 +545,40 @@ inline void checkCudaErrorCode(cudaError_t code, std::string func_name) {
     }
 }
 
+struct BandwidthLimit {
+    int time;
+    float mbps;
+};
+
+class BandwidthManager {
+public:
+    void addLimit(int time, float mbps) { limits.push_back({time, mbps}); }
+
+    void prepare() {
+        std::sort(limits.begin(), limits.end(), [](const BandwidthLimit &a, const BandwidthLimit &b) {
+            return a.time < b.time;
+        });
+    }
+
+    float getMbps(int currentTime) const {
+        auto it = std::lower_bound(limits.begin(), limits.end(), currentTime, [](const BandwidthLimit &limit, int time) {
+            return limit.time <= time;
+        });
+
+        if (it == limits.end() || it->time > currentTime) {
+            return (it == limits.begin()) ? 0.0f : std::prev(it)->mbps;
+        }
+        return it->mbps;
+    }
+
+    bool empty() { return limits.empty(); }
+    int size() { return limits.size(); }
+
+    const BandwidthLimit& operator[](size_t index) const { return limits.at(index); }
+private:
+    std::vector<BandwidthLimit> limits;
+};
+
 namespace trt {
     // TRTConfigs for the network
     struct TRTConfigs {

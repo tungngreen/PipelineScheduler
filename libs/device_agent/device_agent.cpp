@@ -8,6 +8,7 @@ ABSL_FLAG(uint16_t, dev_loggingMode, 0, "Logging mode of the Device Agent. 0:std
 ABSL_FLAG(std::string, dev_logPath, "../logs", "Path to the log dir for the Device Agent.");
 ABSL_FLAG(uint16_t, dev_port_offset, 0, "port offset for starting the control communication");
 ABSL_FLAG(uint16_t, dev_bandwidthLimitID, 0, "id at the end of bandwidth_limits{}.json file to indicate which should be used");
+ABSL_FLAG(std::string, dev_networkInterface, "eth0", "optionally specify the network interface to use for bandwidth limiting");
 
 std::string getHostIP() {
     struct ifaddrs *ifAddrStruct = nullptr;
@@ -78,6 +79,28 @@ DeviceAgent::DeviceAgent() {
     controller_builder.RegisterService(&controller_service);
     controller_cq = controller_builder.AddCompletionQueue();
     controller_server = controller_builder.BuildAndStart();
+
+    dev_bandwidthData = std::vector<BandwidthManager>();
+    for (int id = 0; id <= 20; ++id) {
+        BandwidthManager data;
+        std::string filename = "../jsons/bandwidths/bandwidth_limits" + std::to_string(id) + ".json";
+        if (!std::filesystem::exists(filename)) {
+            dev_bandwidthData.push_back(data);
+            continue;
+        }
+        std::ifstream json_file(filename);
+        if (!json_file.is_open()) {
+            dev_bandwidthData.push_back(data);
+            continue;
+        }
+        json config = json::parse(json_file);
+        for (auto &item : config["bandwidth_limits"]) {
+            data.addLimit(item["time"].get<int>(), item["mbps"]);
+        }
+        data.prepare();
+        dev_bandwidthData.push_back(data);
+    }
+    dev_startTime = std::chrono::high_resolution_clock::now();
 }
 
 DeviceAgent::DeviceAgent(const std::string &controller_url) : DeviceAgent() {
@@ -181,6 +204,7 @@ DeviceAgent::DeviceAgent(const std::string &controller_url) : DeviceAgent() {
     for (auto &thread: threads) {
         thread.detach();
     }
+    dev_startTime = std::chrono::high_resolution_clock::now(); // update start_time compared to previous timestamp
 }
 
 void DeviceAgent::collectRuntimeMetrics() {
@@ -898,56 +922,38 @@ void DeviceAgent::ShutdownRequestHandler::Proceed() {
 }
 
 // Function to run the bash script with parameters from a JSON file
-void DeviceAgent::limitBandwidth(const std::string& scriptPath, const std::string& jsonFilePath) {
-    std::ifstream json_file(jsonFilePath);
-    if (!json_file.is_open()) {
-        std::cerr << "Failed to open " << jsonFilePath << std::endl;
+void DeviceAgent::limitBandwidth(const std::string& scriptPath, const int jsonID, std::string interface) {
+    if (dev_bandwidthData.size() <= jsonID || dev_bandwidthData[jsonID].empty()) {
+        std::cerr << "No bandwidth limits found for jsonID" << std::endl;
         return;
     }
-
-    json config;
-    json_file >> config;
-
-    std::string interface = config["interface"];
-    auto bandwidth_limits = config["bandwidth_limits"];
-
-    if (bandwidth_limits.empty()) {
-        std::cerr << "No bandwidth limits found in the JSON file." << std::endl;
-        return;
-    }
-
-    auto start = std::chrono::system_clock::now();
-
+    BandwidthManager bw = dev_bandwidthData[jsonID];
     uint64_t bwThresholdIndex = 0;
 
-    ClockType nextThresholdSetTime = start + std::chrono::seconds(bandwidth_limits[bwThresholdIndex]["time"]);
+    ClockType nextThresholdSetTime = dev_startTime + std::chrono::seconds(bw[bwThresholdIndex].time);
     while (isRunning()) {
-        if (bwThresholdIndex >= bandwidth_limits.size()) {
+        if (bwThresholdIndex >= bw.size()) {
             break;
         }
         if (std::chrono::system_clock::now() >= nextThresholdSetTime) {
             Stopwatch stopwatch;
 
-            auto limit = bandwidth_limits[bwThresholdIndex];
-            float mbps = limit["mbps"];
-
             // Build and execute the command
             std::ostringstream command;
-            command << "sudo bash " << scriptPath << " " << interface << " " << std::fixed << std::setprecision(2) << mbps;
-            spdlog::get("container_agent")->info("{0:s} Setting BW limit to {1:f} Mbps", dev_name, mbps);
+            command << "sudo bash " << scriptPath << " " << interface << " " << std::fixed << std::setprecision(2) << bw[bwThresholdIndex].mbps;
+            spdlog::get("container_agent")->info("{0:s} Setting BW limit to {1:f} Mbps", dev_name, bw[bwThresholdIndex].mbps);
             int result = system(command.str().c_str());
             spdlog::get("container_agent")->info("Command executed with result: {0:d}", result);
 
-            if (bwThresholdIndex == bandwidth_limits.size() - 1) {
+            if (bwThresholdIndex == bw.size() - 1) {
                 break;
             }
             bwThresholdIndex++;
-            auto distanceToNext = bandwidth_limits[bwThresholdIndex]["time"].get<int>() - bandwidth_limits[bwThresholdIndex - 1]["time"].get<int>();
+            auto distanceToNext = bw[bwThresholdIndex].time - bw[bwThresholdIndex - 1].time;
             nextThresholdSetTime += std::chrono::seconds(distanceToNext);
 
             auto sleepTime = nextThresholdSetTime - std::chrono::system_clock::now();
             std::this_thread::sleep_for(sleepTime + std::chrono::nanoseconds(10000000));
-
         }
     }
     std::cout << "Finished bandwidth limiting." << std::endl;

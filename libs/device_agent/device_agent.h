@@ -33,6 +33,7 @@ ABSL_DECLARE_FLAG(uint16_t, dev_loggingMode);
 ABSL_DECLARE_FLAG(std::string, dev_logPath);
 ABSL_DECLARE_FLAG(uint16_t, dev_port_offset);
 ABSL_DECLARE_FLAG(uint16_t, dev_bandwidthLimitID);
+ABSL_DECLARE_FLAG(std::string, dev_networkInterface);
 
 using grpc::ServerBuilder;
 using grpc::ServerContext;
@@ -106,7 +107,7 @@ public:
 
     void collectRuntimeMetrics();
 
-    void limitBandwidth(const std::string& scriptPath, const std::string& jsonFilePath);
+    void limitBandwidth(const std::string& scriptPath, const int jsonID, std::string interface);
 
 protected:
     void testNetwork(float min_size, float max_size, int num_loops);
@@ -417,6 +418,7 @@ protected:
 
     // Runtime variables
     Profiler *dev_profiler;
+    std::chrono::high_resolution_clock::time_point dev_startTime;
     std::map<std::string, DevContainerHandle> containers;
     std::mutex containers_mutex;
     std::vector<std::thread> threads;
@@ -446,9 +448,11 @@ protected:
     std::string dev_networkTableName;
 
     uint16_t dev_numCudaDevices{};
+    std::vector<BandwidthManager> dev_bandwidthData;
 
     BCEdgeAgent *dev_bcedge_agent;
     EdgeVisionAgent *dev_edgevision_agent;
+    std::vector<std::pair<std::string, int>> edgevision_dwnstrList;
     TimePrecisionType dev_rlDecisionInterval;
     ClockType dev_nextRLDecisionTime = std::chrono::high_resolution_clock ::now();
 
