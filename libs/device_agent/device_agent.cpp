@@ -80,17 +80,17 @@ DeviceAgent::DeviceAgent() {
     controller_cq = controller_builder.AddCompletionQueue();
     controller_server = controller_builder.BuildAndStart();
 
-    dev_bandwidthData = std::vector<BandwidthManager>();
+    dev_totalBandwidthData = std::vector<BandwidthManager>();
     for (int id = 0; id <= 20; ++id) {
         BandwidthManager data;
         std::string filename = "../jsons/bandwidths/bandwidth_limits" + std::to_string(id) + ".json";
         if (!std::filesystem::exists(filename)) {
-            dev_bandwidthData.push_back(data);
+            dev_totalBandwidthData.push_back(data);
             continue;
         }
         std::ifstream json_file(filename);
         if (!json_file.is_open()) {
-            dev_bandwidthData.push_back(data);
+            dev_totalBandwidthData.push_back(data);
             continue;
         }
         json config = json::parse(json_file);
@@ -98,7 +98,7 @@ DeviceAgent::DeviceAgent() {
             data.addLimit(item["time"].get<int>(), item["mbps"]);
         }
         data.prepare();
-        dev_bandwidthData.push_back(data);
+        dev_totalBandwidthData.push_back(data);
     }
     dev_startTime = std::chrono::high_resolution_clock::now();
 }
@@ -117,7 +117,7 @@ DeviceAgent::DeviceAgent(const std::string &controller_url) : DeviceAgent() {
     controller_sending_cq = new CompletionQueue();
 
     dev_profiler = new Profiler({(unsigned int) getpid()}, "runtime");
-    Ready(getHostIP(), dev_type);
+    SystemInfo readyReply = Ready(getHostIP(), dev_type);
 
     dev_logPath += "/" + dev_experiment_name;
     std::filesystem::create_directories(
@@ -137,6 +137,12 @@ DeviceAgent::DeviceAgent(const std::string &controller_url) : DeviceAgent() {
             dev_loggerSinks,
             dev_logger
     );
+    if (dev_totalBandwidthData.size() <= absl::GetFlag(FLAGS_dev_bandwidthLimitID)) {
+        spdlog::get("container_agent")->error("Invalid bandwidth limit ID, use [0, 20]! Defaulting to 0.");
+        dev_bandwidthLimit = dev_totalBandwidthData[0];
+    } else {
+        dev_bandwidthLimit = dev_totalBandwidthData[absl::GetFlag(FLAGS_dev_bandwidthLimitID)];
+    }
 
     dev_metricsServerConfigs.schema = abbreviate(dev_experiment_name + "_" + dev_system_name);
     dev_hwMetricsTableName =  dev_metricsServerConfigs.schema + "." + abbreviate(dev_experiment_name + "_" + dev_name) + "_hw";
@@ -194,7 +200,10 @@ DeviceAgent::DeviceAgent(const std::string &controller_url) : DeviceAgent() {
         }
     } else if (dev_system_name == "edvi") {
         dev_rlDecisionInterval = TimePrecisionType(200000);
-        dev_edgevision_agent = new EdgeVisionAgent(dev_name, 16, torch::kF32, 0);
+        for (auto &el: readyReply.offloading_targets()) {
+            edgevision_dwnstrList.push_back({el.name(), el.offloading_ip(), el.bandwidth_id()});
+        }
+        dev_edgevision_agent = new EdgeVisionAgent(dev_name, (int) edgevision_dwnstrList.size() - 1, torch::kF32, 0);
     }
 
     running = true;
@@ -209,6 +218,7 @@ DeviceAgent::DeviceAgent(const std::string &controller_url) : DeviceAgent() {
 
 void DeviceAgent::collectRuntimeMetrics() {
     std::string sql;
+    std::vector<double> bw(edgevision_dwnstrList.size()-1);
     auto timeNow = std::chrono::high_resolution_clock::now();
     if (timeNow > dev_metricsServerConfigs.nextMetricsReportTime) {
         dev_metricsServerConfigs.nextMetricsReportTime = timeNow + std::chrono::milliseconds(
@@ -303,34 +313,59 @@ void DeviceAgent::collectRuntimeMetrics() {
 
         if (dev_system_name == "edvi" && timePointCastMillisecond(startTime) >= timePointCastMillisecond(dev_nextRLDecisionTime)) {
             std::vector<DevContainerHandle*> local_downstreams = {};
+            std::string roi_extractor = nullptr;
             for (auto &container: containers) {
                 if (container.first.find("dnstr") != std::string::npos) {
                     local_downstreams.push_back(&container.second);
-                    break;
                 }
             }
             EmptyMessage request;
+            int i = 0, target = 0;
             for (auto *dnstr: local_downstreams) {
-                ContainerMetrics reply;
-                ClientContext context;
-                Status status;
-                CompletionQueue* sending_cq = dnstr->cq;
-                std::unique_ptr<ClientAsyncResponseReader<ContainerMetrics>> rpc(
-                        dnstr->stub->AsyncRetrieveContainerMetrics(&context, request, sending_cq));
-                rpc->Finish(&reply, &status, (void *)1);
-                void *got_tag;
-                bool ok = false;
-                if (sending_cq != nullptr) {
-                    GPR_ASSERT(sending_cq->Next(&got_tag, &ok));
-                    if (status.ok()) {
-                        dev_edgevision_agent->rewardCallback(reply.throughput(), reply.drops(), reply.avg_latency());
-                        // dev_edgevision_agent->setState();
-                    } else {
-                        spdlog::get("container_agent")->error("{0:s} error {1:d}: {2:s}", dev_name, status.error_code(), status.error_message());
+                if (i == 0) {
+                    ContainerMetrics reply;
+                    ClientContext context;
+                    Status status;
+                    CompletionQueue *sending_cq = dnstr->cq;
+                    std::unique_ptr<ClientAsyncResponseReader<ContainerMetrics>> rpc(
+                            dnstr->stub->AsyncRetrieveContainerMetrics(&context, request, sending_cq));
+                    rpc->Finish(&reply, &status, (void *) 1);
+                    void *got_tag;
+                    bool ok = false;
+                    if (sending_cq != nullptr) {
+                        GPR_ASSERT(sending_cq->Next(&got_tag, &ok));
+                        if (status.ok()) {
+                            dev_edgevision_agent->rewardCallback(reply.throughput(), reply.drops(),
+                                                                 reply.avg_latency());
+                            int runtime = std::ceil(std::chrono::duration_cast<std::chrono::seconds>(
+                                    std::chrono::high_resolution_clock::now() - dev_startTime).count());
+
+                            for (auto &el: edgevision_dwnstrList) {
+                                bw[i++] = dev_totalBandwidthData[el.bandwidth_id].getMbps(runtime);
+                            }
+                            dev_edgevision_agent->setState(reply.arrival_rate(), reply.queue_size(), 0, bw);
+                            target = dev_edgevision_agent->runStep();
+                            if (target == 0) {
+                                spdlog::get("container_agent")->trace("EdgeVision decision: 0@localhost");
+                            } else {
+                                spdlog::get("container_agent")->trace("EdgeVision  decision: {1:d}@{2:s}", target,
+                                                                      edgevision_dwnstrList[target - 1].offloading_ip);
+                            }
+                        } else {
+                            spdlog::get("container_agent")->error("{0:s} error {1:d}: {2:s}", dev_name,
+                                                                  status.error_code(), status.error_message());
+                        }
                     }
                 }
+                if (target == 0) {
+                    UpdateContainerSender(AdjustUpstreamMode::Overwrite, "cont_people", dnstr->name, "localhost",
+                                          dnstr->port + 5000, 1.0, "", std::chrono::duration_cast<TimePrecisionType>(std::chrono::high_resolution_clock::now().time_since_epoch()).count(), 10);
+                } else {
+                    UpdateContainerSender(AdjustUpstreamMode::Overwrite, "cont_people", dnstr->name,
+                          edgevision_dwnstrList[target - 1].offloading_ip, edgevision_dwnstrList[target - 1].offloading_port,
+                          1.0, "", std::chrono::duration_cast<TimePrecisionType>(std::chrono::high_resolution_clock::now().time_since_epoch()).count(), 10);
+                }
             }
-
             dev_nextRLDecisionTime = std::chrono::high_resolution_clock::now() + dev_rlDecisionInterval;
         }
 
@@ -403,7 +438,7 @@ bool DeviceAgent::CreateContainer(ContainerConfig &c) {
             dims.push_back(dim);
         }
         std::lock_guard<std::mutex> lock(containers_mutex);
-        containers[c.name()] = {InDeviceCommands::NewStub(
+        containers[c.name()] = {c.name(), InDeviceCommands::NewStub(
                 grpc::CreateChannel(target, grpc::InsecureChannelCredentials())),
                                 new CompletionQueue(), static_cast<unsigned int>(c.control_port()), 0, command,
                                 static_cast<ModelType>(c.model_type()), dims, 1, {}};
@@ -510,7 +545,7 @@ void DeviceAgent::SyncDatasources(const std::string &cont_name, const std::strin
     if (containers[cont_name].cq != nullptr) GPR_ASSERT(containers[cont_name].cq->Next(&got_tag, &ok));
 }
 
-void DeviceAgent::Ready(const std::string &ip, SystemDeviceType type) {
+SystemInfo DeviceAgent::Ready(const std::string &ip, SystemDeviceType type) {
     ConnectionConfigs request;
     SystemInfo reply;
     ClientContext context;
@@ -550,6 +585,7 @@ void DeviceAgent::Ready(const std::string &ip, SystemDeviceType type) {
     }
     dev_system_name = reply.name();
     dev_experiment_name = reply.experiment();
+    return reply;
 }
 
 void DeviceAgent::HandleDeviceRecvRpcs() {
@@ -922,17 +958,15 @@ void DeviceAgent::ShutdownRequestHandler::Proceed() {
 }
 
 // Function to run the bash script with parameters from a JSON file
-void DeviceAgent::limitBandwidth(const std::string& scriptPath, const int jsonID, std::string interface) {
-    if (dev_bandwidthData.size() <= jsonID || dev_bandwidthData[jsonID].empty()) {
-        std::cerr << "No bandwidth limits found for jsonID" << std::endl;
+void DeviceAgent::limitBandwidth(const std::string& scriptPath, std::string interface) {
+    if (dev_bandwidthLimit.empty()) {
         return;
     }
-    BandwidthManager bw = dev_bandwidthData[jsonID];
-    uint64_t bwThresholdIndex = 0;
 
-    ClockType nextThresholdSetTime = dev_startTime + std::chrono::seconds(bw[bwThresholdIndex].time);
+    uint64_t bwThresholdIndex = 0;
+    ClockType nextThresholdSetTime = dev_startTime + std::chrono::seconds(dev_bandwidthLimit[bwThresholdIndex].time);
     while (isRunning()) {
-        if (bwThresholdIndex >= bw.size()) {
+        if (bwThresholdIndex >= dev_bandwidthLimit.size()) {
             break;
         }
         if (std::chrono::system_clock::now() >= nextThresholdSetTime) {
@@ -940,16 +974,16 @@ void DeviceAgent::limitBandwidth(const std::string& scriptPath, const int jsonID
 
             // Build and execute the command
             std::ostringstream command;
-            command << "sudo bash " << scriptPath << " " << interface << " " << std::fixed << std::setprecision(2) << bw[bwThresholdIndex].mbps;
-            spdlog::get("container_agent")->info("{0:s} Setting BW limit to {1:f} Mbps", dev_name, bw[bwThresholdIndex].mbps);
+            command << "sudo bash " << scriptPath << " " << interface << " " << std::fixed << std::setprecision(2) << dev_bandwidthLimit[bwThresholdIndex].mbps;
+            spdlog::get("container_agent")->info("{0:s} Setting BW limit to {1:f} Mbps", dev_name, dev_bandwidthLimit[bwThresholdIndex].mbps);
             int result = system(command.str().c_str());
             spdlog::get("container_agent")->info("Command executed with result: {0:d}", result);
 
-            if (bwThresholdIndex == bw.size() - 1) {
+            if (bwThresholdIndex == dev_bandwidthLimit.size() - 1) {
                 break;
             }
             bwThresholdIndex++;
-            auto distanceToNext = bw[bwThresholdIndex].time - bw[bwThresholdIndex - 1].time;
+            auto distanceToNext = dev_bandwidthLimit[bwThresholdIndex].time - dev_bandwidthLimit[bwThresholdIndex - 1].time;
             nextThresholdSetTime += std::chrono::seconds(distanceToNext);
 
             auto sleepTime = nextThresholdSetTime - std::chrono::system_clock::now();

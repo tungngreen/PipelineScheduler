@@ -4,7 +4,7 @@ EdgeVisionAgent::EdgeVisionAgent(std::string& dev_name, int offloading_candidate
                          uint update_steps, double lambda, double gamma, double clip, double omega, double sigma, int F)
         : precision(precision), dev_name(dev_name), lambda(lambda), gamma(gamma), clip(clip),
           omega(omega), sigma(sigma), F(F), update_steps(update_steps) {
-    path = "../../pipe/models/edgevision/" + dev_name;
+    path = "../../pipe/models/edgevision" ;
     std::filesystem::create_directories(std::filesystem::path(path));
 
     actor = std::make_shared<EdgeViActorNet>(offloading_candidates+3, offloading_candidates);

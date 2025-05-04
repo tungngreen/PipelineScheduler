@@ -24,6 +24,14 @@ message ConnectionConfigs {
 message SystemInfo {
   string name = 1;
   string experiment = 2;
+  repeated DownStreamElement offloading_targets = 3;
+}
+
+message DownStreamElement {
+  string name = 1;
+  string offloading_ip = 2;
+  int32 offloading_port = 3;
+  int32 bandwidth_id = 4;
 }
 
 message DummyMessage {

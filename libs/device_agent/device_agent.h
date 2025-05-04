@@ -57,6 +57,7 @@ typedef std::tuple<
 > MsvcConfigTupleType;
 
 struct DevContainerHandle {
+    std::string name;
     std::unique_ptr<InDeviceCommands::Stub> stub;
     CompletionQueue *cq;
     unsigned int port;
@@ -82,32 +83,22 @@ public:
             StopContainer(c.second, message);
         }
 
-        if (controller_server) {
-            controller_server->Shutdown();
-        }
-        if (device_server) {
-            device_server->Shutdown();
-        }
+        if (controller_server) controller_server->Shutdown();
+        if (device_server) device_server->Shutdown();
 
         for (std::thread &t: threads) {
             t.join();
         }
 
-        if (controller_cq) {
-            controller_cq->Shutdown();
-        }
-        if (device_cq) {
-            device_cq->Shutdown();
-        }
+        if (controller_cq) controller_cq->Shutdown();
+        if (device_cq) device_cq->Shutdown();
     };
 
-    bool isRunning() const {
-        return running;
-    }
+    [[nodiscard]] bool isRunning() const { return running; }
 
     void collectRuntimeMetrics();
 
-    void limitBandwidth(const std::string& scriptPath, const int jsonID, std::string interface);
+    void limitBandwidth(const std::string& scriptPath, std::string interface);
 
 protected:
     void testNetwork(float min_size, float max_size, int num_loops);
@@ -172,7 +163,7 @@ protected:
 
     void SyncDatasources(const std::string &cont_name, const std::string &dsrc);
 
-    void Ready(const std::string &ip, SystemDeviceType type);
+    SystemInfo Ready(const std::string &ip, SystemDeviceType type);
 
     void HandleDeviceRecvRpcs();
 
@@ -448,15 +439,14 @@ protected:
     std::string dev_networkTableName;
 
     uint16_t dev_numCudaDevices{};
-    std::vector<BandwidthManager> dev_bandwidthData;
+    std::vector<BandwidthManager> dev_totalBandwidthData;
+    BandwidthManager dev_bandwidthLimit;
 
     BCEdgeAgent *dev_bcedge_agent;
     EdgeVisionAgent *dev_edgevision_agent;
-    std::vector<std::pair<std::string, int>> edgevision_dwnstrList;
+    std::vector<EdgeVisionDwnstrmInfo> edgevision_dwnstrList;
     TimePrecisionType dev_rlDecisionInterval;
     ClockType dev_nextRLDecisionTime = std::chrono::high_resolution_clock ::now();
-
-
 };
 
 #endif //DEVICE_AGENT_H

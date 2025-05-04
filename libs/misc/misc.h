@@ -560,15 +560,15 @@ public:
         });
     }
 
-    float getMbps(int currentTime) const {
-        auto it = std::lower_bound(limits.begin(), limits.end(), currentTime, [](const BandwidthLimit &limit, int time) {
-            return limit.time <= time;
+    [[nodiscard]] float getMbps(int currentTime) const {
+        auto it = std::upper_bound(limits.begin(), limits.end(), currentTime, [](int time, const BandwidthLimit &limit) {
+            return time < limit.time;
         });
 
-        if (it == limits.end() || it->time > currentTime) {
-            return (it == limits.begin()) ? 0.0f : std::prev(it)->mbps;
+        if (it == limits.begin()) {
+            return limits.begin()->mbps;
         }
-        return it->mbps;
+        return std::prev(it)->mbps;
     }
 
     bool empty() { return limits.empty(); }

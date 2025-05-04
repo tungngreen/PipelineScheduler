@@ -6,7 +6,6 @@
 // * Please note that this code is a simplified version of the original EdgeVision only focused on offloading.
 // * The original code contains many other functionalities that are not included here.
 // * For instance choosing Resolution and Model Type are not included as not all low-end edge devices support loading multiple models.
-
 struct EdgeViActorNet: torch::nn::Module {
     EdgeViActorNet(int state_size, int action_size) {
         mlp_layer1 = register_module("mlp_layer1", torch::nn::Linear(state_size, 128));
@@ -124,6 +123,13 @@ private:
 
     uint steps_counter = 0;
     uint update_steps;
+};
+
+struct EdgeVisionDwnstrmInfo {
+    std::string name;
+    std::string offloading_ip;
+    int offloading_port;
+    int bandwidth_id;
 };
 
 #endif //PIPEPLUSPLUS_EDGEVISION_H
