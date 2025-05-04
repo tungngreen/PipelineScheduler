@@ -218,7 +218,7 @@ DeviceAgent::DeviceAgent(const std::string &controller_url) : DeviceAgent() {
 
 void DeviceAgent::collectRuntimeMetrics() {
     std::string sql;
-    std::vector<double> bw(edgevision_dwnstrList.size()-1);
+    std::vector<double> edgevisionBWs(std::max(1, (int) edgevision_dwnstrList.size() - 1));
     auto timeNow = std::chrono::high_resolution_clock::now();
     if (timeNow > dev_metricsServerConfigs.nextMetricsReportTime) {
         dev_metricsServerConfigs.nextMetricsReportTime = timeNow + std::chrono::milliseconds(
@@ -257,12 +257,11 @@ void DeviceAgent::collectRuntimeMetrics() {
                     container.second.hwMetrics = {stats.cpuUsage, stats.processMemoryUsage, stats.rssMemory, stats.gpuUtilization,
                                                   stats.gpuMemoryUsage};
                     spdlog::get("container_agent")->trace("{0:s} SCRAPE hardware metrics. Latency {1:d}ms.",
-                                                        dev_name,
-                                                        scrapeLatencyMillisec);
+                                                        dev_name, scrapeLatencyMillisec);
                 }
             }
             metricsStopwatch.stop();
-            scrapeLatencyMillisec = (uint64_t) std::ceil(metricsStopwatch.elapsed_microseconds() / 1000.f);
+            scrapeLatencyMillisec = (uint64_t) std::ceil((float) metricsStopwatch.elapsed_microseconds() / 1000.f);
             dev_metricsServerConfigs.nextHwMetricsScrapeTime = std::chrono::high_resolution_clock::now() +
                                                                         std::chrono::milliseconds(
                                                                                 dev_metricsServerConfigs.hwMetricsScrapeIntervalMillisec -
@@ -278,8 +277,7 @@ void DeviceAgent::collectRuntimeMetrics() {
             if (dev_runtimeMetrics.empty()) {
                 spdlog::get("container_agent")->trace("{0:s} No runtime metrics to push to the database.", dev_name);
                 dev_metricsServerConfigs.nextMetricsReportTime = std::chrono::high_resolution_clock::now() +
-                                                                 std::chrono::milliseconds(
-                                                                         dev_metricsServerConfigs.metricsReportIntervalMillisec);
+                                                                 std::chrono::milliseconds(dev_metricsServerConfigs.metricsReportIntervalMillisec);
                 continue;
             }
             sql = "INSERT INTO " + dev_hwMetricsTableName +
@@ -303,8 +301,7 @@ void DeviceAgent::collectRuntimeMetrics() {
             spdlog::get("container_agent")->trace("{0:s} pushed device hardware metrics to the database.", dev_name);
 
             dev_metricsServerConfigs.nextMetricsReportTime = std::chrono::high_resolution_clock::now() +
-                                                             std::chrono::milliseconds(
-                                                                     dev_metricsServerConfigs.metricsReportIntervalMillisec);
+                                                             std::chrono::milliseconds(dev_metricsServerConfigs.metricsReportIntervalMillisec);
             if (dev_type == SystemDeviceType::Server) {
                 std::thread t(&DeviceAgent::ContainersLifeCheck, this);
                 t.detach();
@@ -341,9 +338,9 @@ void DeviceAgent::collectRuntimeMetrics() {
                                     std::chrono::high_resolution_clock::now() - dev_startTime).count());
 
                             for (auto &el: edgevision_dwnstrList) {
-                                bw[i++] = dev_totalBandwidthData[el.bandwidth_id].getMbps(runtime);
+                                edgevisionBWs[i++] = dev_totalBandwidthData[el.bandwidth_id].getMbps(runtime);
                             }
-                            dev_edgevision_agent->setState(reply.arrival_rate(), reply.queue_size(), 0, bw);
+                            dev_edgevision_agent->setState(reply.arrival_rate(), reply.queue_size(), 0, edgevisionBWs);
                             target = dev_edgevision_agent->runStep();
                             if (target == 0) {
                                 spdlog::get("container_agent")->trace("EdgeVision decision: 0@localhost");
@@ -373,8 +370,7 @@ void DeviceAgent::collectRuntimeMetrics() {
         metricsStopwatch.stop();
         auto reportLatencyMillisec = (uint64_t) std::ceil(metricsStopwatch.elapsed_microseconds() / 1000.f);
         ClockType nextTime;
-        nextTime = std::min(dev_metricsServerConfigs.nextMetricsReportTime,
-                            dev_metricsServerConfigs.nextHwMetricsScrapeTime);
+        nextTime = std::min(dev_metricsServerConfigs.nextMetricsReportTime, dev_metricsServerConfigs.nextHwMetricsScrapeTime);
         if (dev_system_name == "edvi") {
             nextTime = std::min(nextTime, dev_nextRLDecisionTime);
         }
