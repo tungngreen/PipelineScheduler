@@ -176,6 +176,7 @@ add_subdirectory(libs/microservice)
 add_subdirectory(libs/utils/protobufprotocols)
 
 add_subdirectory(libs/fcpo_learning)
+add_subdirectory(libs/controller/apis_rl)
 add_subdirectory(libs/controller)
 add_subdirectory(libs/communicator)
 

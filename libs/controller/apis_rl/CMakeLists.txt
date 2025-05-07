@@ -25,166 +25,83 @@ if (CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
 endif (CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
 
 message ("Building controller for system: ${SYSTEM_NAME}")
-if(SYSTEM_NAME STREQUAL "PPP")
-        set(
-                HEADER_FILES
-                controller.h
-                systems/scheduling_ppp.h
-        )
+# Only public header files go here.
+set(
+        HEADER_FILES
+        meta_bandit.h
+)
 
-        set(
-                SOURCE_FILES
-                controller.cpp
-                systems/scheduling_ppp.cpp
-        )
-elseif (SYSTEM_NAME STREQUAL "FCPO")
-        set(
-                HEADER_FILES
-                controller.h
-                systems/scheduling_fcpo.h
-        )
-
-        set(
-                SOURCE_FILES
-                controller.cpp
-                systems/scheduling_fcpo.cpp
-        )
-elseif (SYSTEM_NAME STREQUAL "JLF")
-        set(
-                HEADER_FILES
-                controller.h
-                systems/scheduling_jlf.h
-        )
-
-        set(
-                SOURCE_FILES
-                controller.cpp
-                systems/scheduling_jlf.cpp
-        )
-elseif (SYSTEM_NAME STREQUAL "DIS")
-        set(
-                HEADER_FILES
-                controller.h
-                systems/scheduling_dis.h
-        )
-
-        set(
-                SOURCE_FILES
-                controller.cpp
-                systems/scheduling_dis.cpp
-        )
-elseif (SYSTEM_NAME STREQUAL "RIM")
-        set(
-                HEADER_FILES
-                controller.h
-                systems/scheduling_rim.h
-        )
-
-        set(
-                SOURCE_FILES
-                controller.cpp
-                systems/scheduling_rim.cpp
-        )
-elseif (SYSTEM_NAME STREQUAL "APIS")
-        set(
-                HEADER_FILES
-                controller.h
-                systems/scheduling_apis.h
-        )
-
-        set(
-                SOURCE_FILES
-                controller.cpp
-                systems/scheduling_apis.cpp
-        )
-
-        set(apis_rl_DIR "${CMAKE_CURRENT_BINARY_DIR}/apis_rl")
-        find_package(apis_rl CONFIG REQUIRED)
-endif()
+# All source files and private header files go here.
+set(
+        SOURCE_FILES
+        meta_bandit.cpp
+)
 
 # Here we define the library.
-add_library(controller
+add_library(apis_rl
         ${HEADER_FILES}
         ${SOURCE_FILES})
 
 # We also add an alias definition so that we shadown
 # the export namespace when using add_subdirectory() instead.
-add_library(controller::controller ALIAS controller)
-
+add_library(apis_rl::apis_rl ALIAS apis_rl)
 
 # Required compiler features.
 # https://cmake.org/cmake/help/v3.1/manual/cmake-compile-features.7.html
-target_compile_features(controller
+target_compile_features(apis_rl
         # Features required to compile the library itself.
         PRIVATE cxx_std_11)
 # By prefixing the installation paths with our name and version
 # we can have multiple versions installed at the same time.
-set(PROJECT_PREFIX controller)
+set(PROJECT_PREFIX apis_rl)
 
-set(fcpo_learning_DIR "${CMAKE_CURRENT_BINARY_DIR}/../fcpo_learning")
-find_package(fcpo_learning CONFIG REQUIRED)
-
-set(microservice_DIR "${CMAKE_CURRENT_BINARY_DIR}/../microservice")
-find_package(microservice CONFIG REQUIRED)
+set(misc_DIR "${CMAKE_CURRENT_BINARY_DIR}/../../misc")
+find_package(misc CONFIG REQUIRED)
 
 # Defines the headers for this library.
 # https://cmake.org/cmake/help/v3.11/command/target_include_directories.html
-target_include_directories(controller
+target_include_directories(apis_rl
         PUBLIC
         # Used when building the library:
         $<BUILD_INTERFACE:${controller_SOURCE_DIR}/>
         # Used when installing the library:
         $<INSTALL_INTERFACE:${PROJECT_PREFIX}>
         ${OpenCV_INCLUDE_DIRS}
-        # ${LIGHTGBM_INCLUDE_DIR}
-        $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/../utils/protobufprotocols>
         PRIVATE
         # Used only when building the library:
         src)
 
-target_link_libraries(controller
+target_link_libraries(apis_rl
         PUBLIC
-        device_comm_grpc_proto
-        control_comm_grpc_proto
-        control_mess_grpc_proto
         absl::flags
         absl::flags_parse
         ${_GRPC_GRPCPP}
         ${_REFLECTION}
         ${_PROTOBUF_LIBPROTOBUF}
         ${CMAKE_THREAD_LIBS_INIT}
-        fcpo_learning
-        microservice
-        # ${LIGHTGBM_LIBRARY}
+        misc
 )
-
-if (SYSTEM_NAME STREQUAL "APIS")
-    target_link_libraries(controller
-            PUBLIC
-            apis_rl
-    )
-endif()
 
 # Here we configure variables specifying the target directories.
 set(INSTALL_RUNTIME_DIR ${CMAKE_INSTALL_BINDIR})
 set(INSTALL_CONFIG_DIR ${CMAKE_INSTALL_LIBDIR}/${PROJECT_PREFIX}/cmake)
 set(INSTALL_LIBRARY_DIR ${CMAKE_INSTALL_LIBDIR}/${PROJECT_PREFIX}/${CMAKE_BUILD_TYPE})
 set(INSTALL_ARCHIVE_DIR ${CMAKE_INSTALL_LIBDIR}/${PROJECT_PREFIX}/${CMAKE_BUILD_TYPE}/static)
-set(INSTALL_INCLUDE_DIR ${CMAKE_INSTALL_INCLUDEDIR}/${PROJECT_PREFIX}/controller)
+set(INSTALL_INCLUDE_DIR ${CMAKE_INSTALL_INCLUDEDIR}/${PROJECT_PREFIX}/apis_rl)
 
 # Define the configuration file locations.
-set(PROJECT_CONFIG_VERSION_FILE "${PROJECT_BINARY_DIR}/controller-config-version.cmake")
-set(PROJECT_CONFIG_FILE "${PROJECT_BINARY_DIR}/controller-config.cmake")
+set(PROJECT_CONFIG_VERSION_FILE "${PROJECT_BINARY_DIR}/apis_rl-config-version.cmake")
+set(PROJECT_CONFIG_FILE "${PROJECT_BINARY_DIR}/apis_rl-config.cmake")
 
-configure_package_config_file(cmake/controller-config.cmake.in
+configure_package_config_file(cmake/apis_rl-config.cmake.in
         ${PROJECT_CONFIG_FILE}
         INSTALL_DESTINATION ${INSTALL_CONFIG_DIR})
 
 
 # The INSTALL(TARGET) command specifies where to install specific targets.
 # By specifying EXPORT here, we add these targets to an export group.
-install(TARGETS controller
-        EXPORT controller-targets
+install(TARGETS apis_rl
+        EXPORT apis_rl-targets
         RUNTIME DESTINATION ${INSTALL_RUNTIME_DIR}
         LIBRARY DESTINATION ${INSTALL_LIBRARY_DIR}
         ARCHIVE DESTINATION ${INSTALL_ARCHIVE_DIR})
@@ -200,15 +117,15 @@ install(FILES
         DESTINATION ${INSTALL_CONFIG_DIR})
 
 # The INSTALL(EXPORT) command installs a previously defined export group to a script.
-install(EXPORT controller-targets
-        FILE controller-targets.cmake
-        NAMESPACE controller::
+install(EXPORT apis_rl-targets
+        FILE apis_rl-targets.cmake
+        NAMESPACE apis_rl::
         DESTINATION ${INSTALL_CONFIG_DIR})
 
-export(EXPORT controller-targets
-        FILE ${CMAKE_CURRENT_BINARY_DIR}/controller-targets.cmake
-        NAMESPACE controller::)
+export(EXPORT apis_rl-targets
+        FILE ${CMAKE_CURRENT_BINARY_DIR}/apis_rl-targets.cmake
+        NAMESPACE apis_rl::)
 
 # Register the package in the user's package registry.
 # https://cmake.org/cmake/help/v3.11/command/export.html
-export(PACKAGE controller)
+export(PACKAGE apis_rl)

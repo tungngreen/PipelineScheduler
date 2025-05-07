@@ -1,0 +1,10 @@
+#ifndef PIPEPLUSPLUS_META_BANDIT_H
+#define PIPEPLUSPLUS_META_BANDIT_H
+
+
+class meta_bandit {
+
+};
+
+
+#endif //PIPEPLUSPLUS_META_BANDIT_H

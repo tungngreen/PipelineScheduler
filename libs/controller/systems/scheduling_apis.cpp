@@ -1,4 +1,4 @@
-#include "scheduling-fcpo.h"
+#include "scheduling_fcpo.h"
 
 // =========================================================GPU Lanes/Portions Control===========================================================
 // ==============================================================================================================================================
@@ -163,19 +163,6 @@ void Controller::queryingProfiles(TaskHandle *task) {
                 }
             )->first;
         }
-
-        // ModelArrivalProfile profile = queryModelArrivalProfile(
-        //     *ctrl_metricsServerConn,
-        //     ctrl_experimentName,
-        //     ctrl_systemName,
-        //     t.name,
-        //     t.source,
-        //     ctrl_containerLib[containerName].taskName,
-        //     ctrl_containerLib[containerName].modelName,
-        //     possibleDeviceList,
-        //     possibleNetworkEntryPairs
-        // );
-        // std::cout << "sdfsdfasdf" << std::endl;
     }
 }
 
@@ -237,142 +224,11 @@ void Controller::Scheduling() {
     delete this;
 }
 
-void Controller::ScaleUp(PipelineModel *model, uint8_t numIncReps) {
-    if ((uint64_t) std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now() -
-                                   model->lastScaleTime).count() < ctrl_controlTimings.scaleUpIntervalThresholdSec) {
-        spdlog::get("container_agent")->info("The model {0:s} has been scaled up recently."
-                                             "Skipping the scaling up process to avoid uncessary waste.", model->name);
-        return;
-    }
-    model->numReplicas += numIncReps;
-    std::vector<ContainerHandle*> currContainers = model->task->tk_subTasks[model->name];
-    uint16_t numCurrContainers = currContainers.size();
-    model->lastScaleTime = std::chrono::system_clock::now();
-    for (uint16_t i = numCurrContainers; i < model->numReplicas; i++) {
-        ContainerHandle *newContainer = TranslateToContainer(model, devices.getDevice(model->device), i);
-        if (newContainer == nullptr) {
-            spdlog::get("container_agent")->error("Failed to create container for model {0:s} of pipeline {1:s}", model->name, model->task->tk_name);
-            continue;
-        }
-        newContainer->pipelineModel = model;
-        for (auto &downstream : model->downstreams) {
-            for (auto &downstreamContainer : downstream.first->task->tk_subTasks[downstream.first->name]) {
-                downstreamContainer->upstreams.push_back(newContainer);
-                newContainer->downstreams.push_back(downstreamContainer);
-            }
-        }
-        for (auto &upstream : model->upstreams) {
-            for (auto &upstreamContainer : upstream.first->task->tk_subTasks[upstream.first->name]) {
-                upstreamContainer->downstreams.push_back(newContainer);
-                newContainer->upstreams.push_back(upstreamContainer);
-            }
-        }
-        containerColocationTemporalScheduling(newContainer);
-        containers.addContainer(newContainer->name, newContainer);
-        StartContainer(newContainer);
-        for (auto &upstream : model->upstreams) {
-            for (auto &upstreamContainer : upstream.first->task->tk_subTasks[upstream.first->name]) {
-                AdjustUpstream(newContainer->recv_port, upstreamContainer, newContainer->device_agent,
-                               model->name, AdjustUpstreamMode::Add);
-            }
-        }
-    }
-    model->lastScaleTime = std::chrono::system_clock::now();
-}
+void Controller::ScaleUp(PipelineModel *model, uint8_t numIncReps) {}
 
-void Controller::ScaleDown(PipelineModel *model, uint8_t numDecReps) {
+void Controller::ScaleDown(PipelineModel *model, uint8_t numDecReps) {}
 
-    if ((uint64_t) std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now() -
-                                   model->lastScaleTime).count() < ctrl_controlTimings.scaleDownIntervalThresholdSec) {
-        spdlog::get("container_agent")->info("The model {0:s} has been scaled up recently."
-                                             "Skipping the scaling down process to avoid THRASHING.", model->name);
-        return;
-    }
-    model->numReplicas -= numDecReps;
-    std::vector<ContainerHandle*> currContainers = model->task->tk_subTasks[model->name];
-    uint16_t numCurrContainers = currContainers.size();
-    for (uint16_t i = model->numReplicas; i < numCurrContainers; i++) {
-        for (auto &upstream : model->upstreams) {
-            for (auto &upstreamContainer : upstream.first->task->tk_subTasks[upstream.first->name]) {
-                AdjustUpstream(currContainers[i]->recv_port, upstreamContainer, currContainers[i]->device_agent,
-                               model->name, AdjustUpstreamMode::Remove);
-            }
-        }
-        StopContainer(currContainers[i], currContainers[i]->device_agent);
-        auto reclaimed = reclaimGPUPortion(currContainers[i]->executionPortion);
-        if (!reclaimed) {
-            spdlog::get("container_agent")->error("Failed to reclaim portion for container {0:s}", currContainers[i]->name);
-            return;
-        }
-        containers.removeContainer(currContainers[i]->name);
-    }
-    model->lastScaleTime = std::chrono::system_clock::now();
-}
-
-void Controller::Rescaling() {
-    auto taskList = ctrl_scheduledPipelines.getMap();
-    // std::mt19937 gen(100);
-    // std::uniform_int_distribution<int> dist(0, 2);
-
-
-    for (auto &[taskName, taskHandle]: taskList) {
-        std::string source = taskHandle->tk_source.substr(taskHandle->tk_source.find_last_of('/') + 1);
-        for (auto &model: taskHandle->tk_pipelineModels) {
-            if (model->name.find("datasource") != std::string::npos || model->name.find("dsrc") != std::string::npos
-                || model->name.find("sink") != std::string::npos) {
-                continue;
-            }
-            std::string taskName = splitString(model->name, "_").back();
-            auto ratesAndCoeffVars = queryArrivalRateAndCoeffVar(
-                *ctrl_metricsServerConn,
-                ctrl_experimentName,
-                ctrl_systemName,
-                taskHandle->tk_name,
-                source,
-                taskName,
-                ctrl_containerLib[taskName + "_" + model->deviceTypeName].modelName,
-                // TODO: Change back once we have profilings in every fps
-                //ctrl_systemFPS
-                15,
-                {15, 30, 60}
-            );
-            model->arrivalProfiles.arrivalRates = ratesAndCoeffVars.first;
-            model->arrivalProfiles.coeffVar = ratesAndCoeffVars.second;
-
-            auto candidates = model->task->tk_subTasks[model->name];
-
-            auto numIncReps = incNumReplicas(model);
-
-            // // testing scaling up
-            // if (model->device != "server") {
-            //     continue;
-            // }
-            // auto numIncReps = dist(gen);
-            // // testing done
-
-            if (numIncReps > 0) {
-                ScaleUp(model, numIncReps);
-                spdlog::get("container_agent")->info("Rescaling tried increasing number of replicas of model {0:s} of pipeline {1:s} by {2:d}", model->name, taskHandle->tk_name, numIncReps);
-                continue;
-            }
-
-            // //testing
-            // if (numIncReps) {
-            //     model->numReplicas -= numIncReps;
-            //     ScaleDown(model);
-            // }
-            // //testing done
-
-            auto numDecReps = decNumReplicas(model);
-            if (numDecReps > 0) {
-                ScaleDown(model, numDecReps);
-                spdlog::get("container_agent")->info("Rescaling tried decreasing number of replicas of model {0:s} of pipeline {1:s} by {2:d}", model->name, taskHandle->tk_name, numDecReps);
-            }
-
-        }
-    }
-    ctrl_pastScheduledPipelines = ctrl_scheduledPipelines;
-}
+void Controller::Rescaling() {}
 
 /**
  * @brief insert the newly created free portion into the sorted list of free portions
@@ -606,9 +462,6 @@ bool Controller::removeFreeGPUPortion(GPUPortionList &portionList, GPUPortion *t
         toBeRemovedPortion->next->prev = toBeRemovedPortion->prev;
     }
 
-    // auto gpuHandle = toBeRemovedPortion->lane->gpuHandle;
-    // it = std::find(gpuHandle->freeGPUPortions.begin(), gpuHandle->freeGPUPortions.end(), toBeRemovedPortion);
-    // gpuHandle->freeGPUPortions.erase(it);
     spdlog::get("container_agent")->info("Portion from {0:d} to {1:d} removed from the list of free portions of lane {2:d}",
                                          toBeRemovedPortion->start,
                                          toBeRemovedPortion->end,
@@ -979,15 +832,6 @@ TaskHandle* Controller::mergePipelines(const std::string& taskName) {
             if (task.first.find(taskName) == std::string::npos) {
                 continue;
             }
-            // If model is not scheduled to be run on the server, we should not merge it.
-            // However, the model is still
-            /*if (task.second->tk_pipelineModels[i]->device != "server") {
-                mergedPipeline->tk_pipelineModels.emplace_back(new PipelineModel(*task.second->tk_pipelineModels[i]));
-                task.second->tk_pipelineModels[i]->merged = true;
-                task.second->tk_pipelineModels[i]->toBeRun = false;
-                mergedPipeline->tk_pipelineModels.back()->toBeRun = false;
-                continue;
-            }*/
             // If the model devices are different from another we should not merge it.
             if (mergedPipeline->tk_pipelineModels[i]->device != task.second->tk_pipelineModels[i]->device) {
                 // search the vector of models in the merged pipeline to find another merge candidate
@@ -1016,14 +860,6 @@ TaskHandle* Controller::mergePipelines(const std::string& taskName) {
             task.second->tk_pipelineModels.at(i)->merged = true;
             task.second->tk_pipelineModels.at(i)->toBeRun = false;
         }
-        // auto numIncReps = incNumReplicas(mergedPipeline.tk_pipelineModels[i]);
-        // mergedPipeline.tk_pipelineModels[i]->numReplicas += numIncReps;
-        // auto deviceList = devices.getMap();
-        // for (auto j = 0; j < mergedPipeline.tk_pipelineModels[i]->numReplicas; j++) {
-        //     mergedPipeline.tk_pipelineModels[i]->manifestations.emplace_back(new ContainerHandle{});
-        //     mergedPipeline.tk_pipelineModels[i]->manifestations.back()->task = &mergedPipeline;
-        //     mergedPipeline.tk_pipelineModels[i]->manifestations.back()->device_agent = deviceList.at(mergedPipeline.tk_pipelineModels[i]->device);
-        // }
     }
     for (auto &model : mergedPipeline->tk_pipelineModels) {
         // If toBeRun is true means the model is not a newly added one, there's no need to modify its up and downstreams
@@ -1440,18 +1276,8 @@ void Controller::estimatePipelineTiming() {
             if (model->endTime != 0 && model->startTime != 0) {
                 continue;
             }
-            // TODO
             estimateModelTiming(model, 0);
         }
-        // uint64_t localDutyCycle;
-        // for (auto &model: task->tk_pipelineModels) {
-        //     if (model->name.find("sink") != std::string::npos) {
-        //         localDutyCycle = model->localDutyCycle;
-        //     }
-        // }
-        // for (auto &model: task->tk_pipelineModels) {
-        //     model->localDutyCycle = localDutyCycle;
-        // }
         for (auto &model: task->tk_pipelineModels) {
             if (model->name.find("datasource") == std::string::npos &&
                 model->name.find("dsrc") == std::string::npos) {
