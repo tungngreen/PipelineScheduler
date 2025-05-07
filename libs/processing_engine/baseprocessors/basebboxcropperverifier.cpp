@@ -56,7 +56,7 @@ void BaseBBoxCropperVerifier::cropping() {
     cv::cuda::Stream *postProcCVStream;
 
     // Height and width of the image used for inference
-    int orig_h, orig_w, infer_h, infer_w;
+    // int orig_h, orig_w, infer_h, infer_w;
 
     /**
      * @brief Each request to the cropping microservice of YOLOv5 contains the buffers which are results of TRT inference 
@@ -118,8 +118,8 @@ void BaseBBoxCropperVerifier::cropping() {
 
                 concatConfigsGenerator(msvc_inferenceShape, msvc_concat, 2);
 
-                infer_h = msvc_inferenceShape[0][1];
-                infer_w = msvc_inferenceShape[0][2];
+                // infer_h = msvc_inferenceShape[0][1];
+                // infer_w = msvc_inferenceShape[0][2];
 
                 maxNumDets = msvc_dataShape[2][0];
 
@@ -227,8 +227,8 @@ void BaseBBoxCropperVerifier::cropping() {
             }
 
             // Otherwise, we need to do some cropping.
-            orig_h = imageList[i].shape[1];
-            orig_w = imageList[i].shape[2];
+            //orig_h = imageList[i].shape[1];
+            //orig_w = imageList[i].shape[2];
 
             // crop(imageList[i].data, orig_h, orig_w, infer_h, infer_w, numDetsInFrame, nmsed_boxes[i][0], singleImageBBoxList);
             // spdlog::get("container_agent")->trace("{0:s} cropped {1:d} bboxes in image {2:d}", msvc_name, numDetsInFrame, i);

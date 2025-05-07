@@ -460,7 +460,8 @@ void BasePreprocessor::preprocess() {
             timeNow = std::chrono::high_resolution_clock::now();
             outReq.req_origGenTime.back().emplace_back(timeNow);
             outReq.req_concatInfo[0].numImagesAdded++;
-            msvc_concat.currIndex = (++msvc_concat.currIndex % msvc_concat.numImgs);
+            msvc_concat.currIndex++;
+            msvc_concat.currIndex %= msvc_concat.numImgs;
 
             // If the buffer frame is full, then send the frame to the batcher
             // TODO: Set daedline

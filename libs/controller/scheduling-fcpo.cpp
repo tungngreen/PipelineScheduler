@@ -828,7 +828,7 @@ bool Controller::mergeArrivalProfiles(ModelArrivalProfile &mergedProfile, const 
 
     // There should be only 1 pair in the d2dNetworkProfile with key {"merged-...", device}
     D2DNetworkProfile newProfile = {};
-    auto mergedPair = mergedProfile.d2dNetworkProfile.key_comp();
+    mergedProfile.d2dNetworkProfile.key_comp();
     for (const auto &[pair1, profile2] : mergedProfile.d2dNetworkProfile) {
         for (const auto &[pair2, profile1] : toBeMergedProfile.d2dNetworkProfile) {
             if (pair2.first != upstreamDevice || pair2.second != device || pair2.second != pair1.second) {

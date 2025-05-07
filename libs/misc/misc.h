@@ -572,7 +572,7 @@ public:
     }
 
     bool empty() { return limits.empty(); }
-    int size() { return limits.size(); }
+    unsigned int size() { return limits.size(); }
 
     const BandwidthLimit& operator[](size_t index) const { return limits.at(index); }
 private:

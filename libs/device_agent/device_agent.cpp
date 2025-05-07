@@ -959,7 +959,7 @@ void DeviceAgent::limitBandwidth(const std::string& scriptPath, std::string inte
         return;
     }
 
-    uint64_t bwThresholdIndex = 0;
+    unsigned int bwThresholdIndex = 0;
     ClockType nextThresholdSetTime = dev_startTime + std::chrono::seconds(dev_bandwidthLimit[bwThresholdIndex].time);
     while (isRunning()) {
         if (bwThresholdIndex >= dev_bandwidthLimit.size()) {

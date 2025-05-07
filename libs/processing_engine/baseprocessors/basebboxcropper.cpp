@@ -440,7 +440,7 @@ void BaseBBoxCropper::cropping() {
                     }
 
                     for (uint8_t j = 0; j < numImagesInFrame; j++) {
-                        uint16_t imageIndexInBatch = currReq.req_concatInfo[i].firstImageIndex + j;
+                        // uint16_t imageIndexInBatch = currReq.req_concatInfo[i].firstImageIndex + j;
                         singleImageBBoxList.emplace_back(
                             BoundingBox<cv::cuda::GpuMat>{
                                 cv::cuda::GpuMat(64, 64, CV_8UC3),
