@@ -1166,6 +1166,7 @@ private:
     Tasks ctrl_mergedPipelines;
 
     FCPOServer *ctrl_fcpo_server;
+    json ctrl_fcpo_config;
 };
 
 

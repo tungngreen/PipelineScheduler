@@ -307,7 +307,7 @@ private:
 
 class FCPOServer {
 public:
-    FCPOServer(std::string run_name, uint state_size = 7, torch::Dtype precision = torch::kF32);
+    FCPOServer(std::string run_name, nlohmann::json parameters, uint state_size = 7, torch::Dtype precision = torch::kF32);
     ~FCPOServer() {
         torch::save(model, path + "/latest_model.pt");
         out.close();

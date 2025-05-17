@@ -242,7 +242,7 @@ std::tuple<int, int, int> FCPOAgent::runStep() {
 }
 
 
-FCPOServer::FCPOServer(std::string run_name, uint state_size, torch::Dtype precision)
+FCPOServer::FCPOServer(std::string run_name, nlohmann::json parameters, uint state_size, torch::Dtype precision)
         : precision(precision), state_size(state_size) {
     path = "../models/fcpo_learning/" + run_name;
     std::filesystem::create_directories(std::filesystem::path(path));
@@ -256,19 +256,19 @@ FCPOServer::FCPOServer(std::string run_name, uint state_size, torch::Dtype preci
     model->to(precision);
     optimizer = std::make_unique<torch::optim::AdamW>(model->parameters(), torch::optim::AdamWOptions(1e-3));
 
-    lambda = 0.1;
-    gamma = 0.1;
-    clip_epsilon = 0.9;
-    penalty_weight = 0.2;
+    lambda = parameters["lambda"];
+    gamma = parameters["gamma"];
+    clip_epsilon = parameters["clip_epsilon"];
+    penalty_weight = parameters["penalty_weight"];
 
-    theta = 1.1;
-    sigma = 10.0;
-    phi = 2.0;
+    theta = parameters["theta"];
+    sigma = parameters["sigma"];
+    phi = parameters["phi"];
 
-    update_steps = 100;
-    update_step_incs = 10;
-    federated_steps = 10;
-    seed = 42;
+    update_steps = parameters["update_steps"];
+    update_step_incs = parameters["update_step_incs"];
+    federated_steps = parameters["federated_steps"];
+    seed = parameters["seed"];
 
     federated_clients = {};
     run = true;

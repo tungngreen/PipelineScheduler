@@ -132,6 +132,7 @@ void Controller::readConfigFile(const std::string &path) {
     ctrl_controlTimings.scaleUpIntervalThresholdSec = j["scale_up_interval_threshold_sec"];
     ctrl_controlTimings.scaleDownIntervalThresholdSec = j["scale_down_interval_threshold_sec"];
     initialTasks = j["initial_pipelines"];
+    if (ctrl_systemName == "fcpo") ctrl_fcpo_config = j["fcpo_parameters"];
 }
 
 void TaskDescription::from_json(const nlohmann::json &j, TaskDescription::TaskStruct &val) {
@@ -269,7 +270,7 @@ Controller::Controller(int argc, char **argv) {
     devices.addDevice("sink", sink_node);
 
     if (ctrl_systemName == "fcpo") {
-        ctrl_fcpo_server = new FCPOServer(ctrl_systemName + "_" + ctrl_experimentName);
+        ctrl_fcpo_server = new FCPOServer(ctrl_systemName + "_" + ctrl_experimentName, ctrl_fcpo_config);
     }
 
     ctrl_nextSchedulingTime = std::chrono::system_clock::now();
@@ -282,6 +283,10 @@ Controller::~Controller() {
     }
 
     for (auto &device: devices.getList()) {
+        //skip Sink
+        if (device->name == "sink") {
+            continue;
+        }
         EmptyMessage request;
         EmptyMessage reply;
         ClientContext context;
