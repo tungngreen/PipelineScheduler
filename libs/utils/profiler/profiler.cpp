@@ -77,6 +77,7 @@ std::vector<Profiler::sysStats> Profiler::reportDeviceStats() {
         nvmlUtilization_t gpu = getGPUInfo(0, cuda_devices[i]);
         value.gpuUtilization = gpu.gpu;
         value.gpuMemoryUsage = gpu.memory;
+        value.energyConsumption = getEnergyConsumption(cuda_devices[i]);
         deviceStats.push_back(value);
     }
     return deviceStats;
@@ -304,6 +305,16 @@ nvmlUtilization_t Profiler::getGPUInfo(unsigned int pid, nvmlDevice_t device) {
         util.memory = mem.used / 1000000;
     }
     return util;
+}
+
+int Profiler::getEnergyConsumption(nvmlDevice_t device) {
+    unsigned int power;
+    nvmlReturn_t result = nvmlDeviceGetPowerUsage(device, &power);
+    if (result != NVML_SUCCESS) {
+        spdlog::get("container_agent")->error("Failed to get energy consumption: {}", nvmlErrorString(result));
+        return 0;
+    }
+    return power;
 }
 
 unsigned int Profiler::getPcieInfo(nvmlDevice_t device) {
