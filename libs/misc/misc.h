@@ -380,6 +380,7 @@ struct DeviceHardwareMetrics {
     MemUsageType rssMemUsage = 0;
     std::vector<GpuUtilType> gpuUsage;
     std::vector<GpuMemUsageType> gpuMemUsage;
+    std::vector<int> powerConsumption;
 };
 
 struct SummarizedHardwareMetrics {

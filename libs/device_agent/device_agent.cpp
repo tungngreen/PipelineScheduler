@@ -177,7 +177,8 @@ DeviceAgent::DeviceAgent(const std::string &controller_url) : DeviceAgent() {
                                                                                     "   mem_usage INT,"; // Megabytes
         for (auto i = 0; i < dev_numCudaDevices; i++) {
             sql += "gpu_" + std::to_string(i) + "_usage INT," // percentage (1-100)
-                   "gpu_" + std::to_string(i) + "_mem_usage INT,"; // Megabytes
+                   "gpu_" + std::to_string(i) + "_mem_usage INT," // Megabytes
+                     "gpu_" + std::to_string(i) + "_power_consumption INT,"; // Milli-Watts
         };
         sql += "   PRIMARY KEY (timestamps));";
         pushSQL(*dev_metricsServerConn, sql);
@@ -248,6 +249,7 @@ void DeviceAgent::collectRuntimeMetrics() {
                 for (unsigned int i = 0; i < stats.size(); i++) {
                     metrics.gpuUsage.emplace_back(stats[i].gpuUtilization);
                     metrics.gpuMemUsage.emplace_back(stats[i].gpuMemoryUsage);
+                    metrics.powerConsumption.emplace_back(stats[i].energyConsumption);
                 }
                 dev_runtimeMetrics.emplace_back(metrics);
             }
@@ -284,14 +286,15 @@ void DeviceAgent::collectRuntimeMetrics() {
                   " (timestamps, cpu_usage, mem_usage";
 
             for (int i = 0; i < dev_numCudaDevices; i++) {
-                sql += ", gpu_" + std::to_string(i) + "_usage, gpu_" + std::to_string(i) + "_mem_usage";
+                sql += ", gpu_" + std::to_string(i) + "_usage, gpu_" + std::to_string(i) + "_mem_usage" +
+                       ", gpu_" + std::to_string(i) + "_power_consumption";;
             }
             sql += ") VALUES ";
             for (const auto& entry : dev_runtimeMetrics) {
                 sql += absl::StrFormat("(%s, %d, %d", timePointToEpochString(entry.timestamp),
                     entry.cpuUsage, entry.memUsage);
                 for (int i = 0; i < dev_numCudaDevices; i++) {
-                    sql += absl::StrFormat(", %d, %d", entry.gpuUsage[i], entry.gpuMemUsage[i]);
+                    sql += absl::StrFormat(", %d, %d, %d", entry.gpuUsage[i], entry.gpuMemUsage[i], entry.powerConsumption[i]);
                 }
                 sql += "),";
             }
