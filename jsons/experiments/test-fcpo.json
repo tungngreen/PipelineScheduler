@@ -51,7 +51,7 @@
             "pipeline_source_device": "agxavier3"
         }
     ],
-  "fcpo_params": {
+  "fcpo_parameters": {
     "lambda": 0.1,
     "gamma": 0.1,
     "clip_epsilon": 0.9,

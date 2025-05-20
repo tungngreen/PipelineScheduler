@@ -279,6 +279,7 @@ ContainerAgent::ContainerAgent(const json& configs) {
     cont_experimentName = containerConfigs["cont_experimentName"].get<std::string>();
     cont_name = containerConfigs["cont_name"].get<std::string>();
     cont_pipeName = containerConfigs["cont_pipeName"].get<std::string>();
+    cont_pipeSLO = containerConfigs["cont_pipelineSLO"].get<int>();
     cont_taskName = containerConfigs["cont_taskName"].get<std::string>();
     cont_hostDevice = containerConfigs["cont_hostDevice"].get<std::string>();
     cont_hostDeviceType = containerConfigs["cont_hostDeviceType"].get<std::string>();
@@ -1049,7 +1050,8 @@ void ContainerAgent::collectRuntimeMetrics() {
                                           cont_request_arrival_rate / 250.0,
                                           cont_msvcsGroups["receiver"].msvcList[0]->msvc_OutQueue[0]->size(),
                                           cont_msvcsGroups["preprocessor"].msvcList[0]->msvc_OutQueue[0]->size(),
-                                          cont_msvcsGroups["inference"].msvcList[0]->msvc_OutQueue[0]->size());
+                                          cont_msvcsGroups["inference"].msvcList[0]->msvc_OutQueue[0]->size(),
+                                          cont_pipeSLO);
                 auto [targetRes, newBS, scaling] = cont_fcpo_agent->runStep();
                 spdlog::get("container_agent")->info(
                         "RL Decision Output: Resolution: {0:d}, Batch Size: {1:d}, Scaling: {2:d}", targetRes, newBS, scaling);

@@ -1,8 +1,8 @@
 {
-    "expName": "full",
+    "expName": "nful",
     "system_fps": 15,
     "systemName": "fcpo",
-    "runtime": 775,
+    "runtime": 30,
     "port_offset": 0,
     "sink_ip": "143.248.55.76",
     "yolov5_batch_size": 2,
@@ -135,17 +135,17 @@
             "pipeline_source_device": "onprem1"
         }
     ],
-  "fcpo_params": {
-    "lambda": 0.1,
-    "gamma": 0.1,
-    "clip_epsilon": 0.9,
-    "penalty_weight": 0.2,
-    "theta": 1.1,
-    "sigma": 10.0,
-    "phi": 2.0,
-    "update_steps": 100,
-    "update_step_incs": 10,
-    "federated_steps": 10,
-    "seed": 42
-  }
+    "fcpo_parameters": {
+        "lambda": 0.1,
+        "gamma": 0.1,
+        "clip_epsilon": 0.9,
+        "penalty_weight": 0.2,
+        "theta": 1.1,
+        "sigma": 10.0,
+        "phi": 2.0,
+        "update_steps": 100,
+        "update_step_incs": 10,
+        "federated_steps": 10,
+        "seed": 42
+    }
 }

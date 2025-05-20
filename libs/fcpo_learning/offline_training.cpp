@@ -133,7 +133,7 @@ int main(int argc, char **argv) {
                 double arrival = 30.0;
                 auto device = deviceTypes[rand() % deviceTypes.size()];
                 auto model = modelNames[device][0];
-                fcpo->setState(last_resolution, last_batch_size, last_threading, arrival, 0.0, 0.0, 0.0);
+                fcpo->setState(last_resolution, last_batch_size, last_threading, arrival, 0.0, 0.0, 0.0, slo);
                 std::tie(last_resolution, last_batch_size, last_threading) = fcpo->runStep();
                 double avg_latency = (double) (profiles[device][model.first].batchInfer[last_batch_size].p95prepLat +
                                                profiles[device][model.first].batchInfer[last_batch_size].p95inferLat * last_batch_size +

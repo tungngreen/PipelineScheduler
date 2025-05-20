@@ -1,0 +1,19 @@
+{
+    "metricsServer_hwMetricsScrapeIntervalMillisec": 50,
+    "metricsServer_queryArrivalPeriodMillisec": [
+        1000,
+        3000,
+        7000,
+        15000,
+        30000,
+        60000
+    ],
+    "metricsServer_metricsReportIntervalMillisec": 15000,
+    "metricsServer_ip": "143.248.57.18",
+    "metricsServer_port": 60004,
+    "metricsServer_DBName": "pipeline",
+    "metricsServer_user": "",
+    "metricsServer_password": "pipe"
+}
+
+

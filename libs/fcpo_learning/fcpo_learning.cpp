@@ -175,9 +175,9 @@ void FCPOAgent::rewardCallback(double throughput, double drops, double latency_p
 }
 
 void FCPOAgent::setState(double curr_resolution, double curr_batch, double curr_scaling,  double arrival,
-                         double pre_queue_size, double inf_queue_size, double post_queue_size) {
+                         double pre_queue_size, double inf_queue_size, double post_queue_size, double pipelineSLO) {
     state = torch::tensor({curr_resolution / resolution_size, curr_batch / max_batch, curr_scaling / scaling_size,
-                           arrival, pre_queue_size / 100.0, inf_queue_size / 100.0, post_queue_size / 100.0}, precision);
+                           arrival, pre_queue_size / 100.0, inf_queue_size / 100.0, post_queue_size / 100.0, pipelineSLO / 100000.0}, precision);
 }
 
 void FCPOAgent::selectAction() {
