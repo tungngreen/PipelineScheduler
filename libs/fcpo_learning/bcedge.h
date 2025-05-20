@@ -41,7 +41,7 @@ struct BCEdgeNet: torch::nn::Module {
 
 class BCEdgeAgent {
 public:
-    BCEdgeAgent(std::string& dev_name, double max_memory, torch::Dtype precision = torch::kF32, uint update_steps = 200,
+    BCEdgeAgent(std::string path, double max_memory, torch::Dtype precision = torch::kF32, uint update_steps = 200,
                 double lambda = 0.1, double gamma = 0.1, double clip_epsilon = 0.9);
 
     ~BCEdgeAgent(){
@@ -82,7 +82,6 @@ private:
 
     std::ofstream out;
     std::string path;
-    std::string dev_name;
     double max_memory;
 
     double lambda;

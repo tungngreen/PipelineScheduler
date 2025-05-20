@@ -195,9 +195,9 @@ DeviceAgent::DeviceAgent(const std::string &controller_url) : DeviceAgent() {
 
     if (dev_system_name == "bce") {
         if (dev_type == SystemDeviceType::Server || dev_type == SystemDeviceType::OnPremise) {
-            dev_bcedge_agent = new BCEdgeAgent(dev_name, 3500, torch::kF32, 0);
+            dev_bcedge_agent = new BCEdgeAgent("/ssd0/tung/PipelineScheduler/models/bcedge/" + dev_name, 3500, torch::kF32, 0);
         } else {
-            dev_bcedge_agent = new BCEdgeAgent(dev_name, 3000000, torch::kF32, 0);
+            dev_bcedge_agent = new BCEdgeAgent("../../pipe/models/bcedge/" + dev_name, 3000000, torch::kF32, 0);
         }
     } else if (dev_system_name == "edvi") {
         dev_rlDecisionInterval = TimePrecisionType(200000);

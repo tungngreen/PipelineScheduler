@@ -746,7 +746,7 @@ void Controller::StartContainer(ContainerHandle *container, bool easy_allocation
             start_config["container"]["cont_batchMode"] = 0;
         }
         if (ctrl_systemName == "ppp" || ctrl_systemName == "fcpo" || ctrl_systemName == "bce" || ctrl_systemName == "jlf") {
-            start_config["container"]["cont_dropMode"] = 1;
+            start_config["container"]["cont_dropMode"] = 0;
         }
         start_config["container"]["cont_pipelineSLO"] = container->task->tk_slo;
         start_config["container"]["cont_timeBudgetLeft"] = container->timeBudgetLeft;

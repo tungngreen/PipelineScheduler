@@ -789,7 +789,7 @@ bool Controller::containerColocationTemporalScheduling(ContainerHandle *containe
  * @return true 
  * @return false 
  */
-bool Controller::modelColocationTemporalScheduling(PipelineModel *pipelineModel, unsigned int replica_id) {
+bool Controller::modelColocationTemporalScheduling(PipelineModel *pipelineModel, int replica_id) {
     if (pipelineModel->gpuScheduled) { return true; }
     if (pipelineModel->name.find("datasource") == std::string::npos &&
         (pipelineModel->name.find("dsrc") == std::string::npos ||
