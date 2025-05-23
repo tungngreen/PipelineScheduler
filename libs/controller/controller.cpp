@@ -236,13 +236,11 @@ Controller::Controller(int argc, char **argv) {
         sql = "ALTER DEFAULT PRIVILEGES IN SCHEMA " + ctrl_metricsServerConfigs.schema + 
               " GRANT ALL PRIVILEGES ON TABLES TO controller;";
         pushSQL(*ctrl_metricsServerConn, sql);
-        sql = "GRANT USAGE ON SCHEMA " + ctrl_metricsServerConfigs.schema + " TO device_agent, container_agent;";
-        pushSQL(*ctrl_metricsServerConn, sql);
         sql = "GRANT SELECT, INSERT ON ALL TABLES IN SCHEMA " + ctrl_metricsServerConfigs.schema + " TO device_agent, container_agent;";
         pushSQL(*ctrl_metricsServerConn, sql);
-        sql = "GRANT CREATE ON SCHEMA " + ctrl_metricsServerConfigs.schema + " TO device_agent, container_agent;";
-        pushSQL(*ctrl_metricsServerConn, sql);
         sql = "ALTER DEFAULT PRIVILEGES IN SCHEMA " + ctrl_metricsServerConfigs.schema + " GRANT SELECT, INSERT ON TABLES TO device_agent, container_agent;";
+        pushSQL(*ctrl_metricsServerConn, sql);
+        sql = "GRANT USAGE, CREATE ON SCHEMA " + ctrl_metricsServerConfigs.schema + " TO device_agent, container_agent;";
         pushSQL(*ctrl_metricsServerConn, sql);
     }
 
@@ -277,7 +275,7 @@ Controller::Controller(int argc, char **argv) {
 }
 
 Controller::~Controller() {
-    ctrl_fcpo_server->stop();
+    if (ctrl_systemName == "fcpo") ctrl_fcpo_server->stop();
     for (auto msvc: containers.getList()) {
         StopContainer(msvc, msvc->device_agent, true);
     }

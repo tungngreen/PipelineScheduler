@@ -228,7 +228,7 @@ void Controller::Scheduling() {
     uint64_t sleepTime = std::chrono::duration_cast<TimePrecisionType>(nextTime - std::chrono::system_clock::now()).count();
     startTime = std::chrono::system_clock::now();
     while (running) {
-        if (std::chrono::duration_cast<std::chrono::minutes>(std::chrono::system_clock::now() - startTime).count() > ctrl_runtime + 10) {
+        if (std::chrono::duration_cast<std::chrono::minutes>(std::chrono::system_clock::now() - startTime).count() > ctrl_runtime) {
             running = false;
             break;
         }

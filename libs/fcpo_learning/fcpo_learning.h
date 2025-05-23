@@ -303,6 +303,7 @@ private:
     uint update_steps_inc;
     uint federated_steps_counter = 1;
     uint federated_steps;
+    ClockType  federatedStartTime;
 };
 
 class FCPOServer {
