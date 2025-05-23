@@ -1,5 +1,5 @@
 {
-    "expName": "crl-aic",
+    "expName": "aic",
     "system_fps": 10,
     "systemName": "fcpo",
     "runtime": 7,
@@ -14,63 +14,63 @@
     "scale_down_interval_threshold_sec": 240,
     "initial_pipelines": [
         {
-            "pipeline_name": "S05-c010",
+            "pipeline_name": "traffic1",
             "pipeline_target_slo": 250000,
             "pipeline_type": 0,
             "video_source": "../data/S05-c010.mp4",
             "pipeline_source_device": "nxavier1"
         },
         {
-            "pipeline_name": "S05-c016",
+            "pipeline_name": "traffic2",
             "pipeline_target_slo": 250000,
             "pipeline_type": 0,
             "video_source": "../data/S05-c016.mp4",
             "pipeline_source_device": "nxavier2"
         },
         {
-            "pipeline_name": "S05-c018",
+            "pipeline_name": "traffic3",
             "pipeline_target_slo": 250000,
             "pipeline_type": 0,
             "video_source": "../data/S05-c018.mp4",
             "pipeline_source_device": "nxavier3"
         },
         {
-            "pipeline_name": "S05-c017",
+            "pipeline_name": "traffic4",
             "pipeline_target_slo": 250000,
             "pipeline_type": 0,
             "video_source": "../data/S05-c017.mp4",
             "pipeline_source_device": "orinano1"
         },
         {
-            "pipeline_name": "S05-c020",
+            "pipeline_name": "traffic5",
             "pipeline_target_slo": 250000,
             "pipeline_type": 0,
             "video_source": "../data/S05-c020.mp4",
             "pipeline_source_device": "orinano2"
         },
                 {
-            "pipeline_name": "S05-c023",
+            "pipeline_name": "traffic6",
             "pipeline_target_slo": 250000,
             "pipeline_type": 0,
             "video_source": "../data/S05-c023.mp4",
             "pipeline_source_device": "orinano3"
         },
         {
-            "pipeline_name": "S05-c022",
+            "pipeline_name": "traffic7",
             "pipeline_target_slo": 250000,
             "pipeline_type": 0,
             "video_source": "../data/S05-c022.mp4",
             "pipeline_source_device": "agxavier1"
         },
         {
-            "pipeline_name": "S05-c026",
+            "pipeline_name": "traffic20",
             "pipeline_target_slo": 250000,
             "pipeline_type": 0,
             "video_source": "../data/S05-c026.mp4",
             "pipeline_source_device": "agxavier3"
         },
         {
-         	"pipeline_name":"S05-c027",
+         	"pipeline_name":"traffic30",
          	"pipeline_target_slo" : 250000,
          	"pipeline_type" : 0,
          	"video_source" : "../data/S05-c027.mp4",
