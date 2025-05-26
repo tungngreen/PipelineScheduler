@@ -2,10 +2,12 @@
 
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.14789255.svg)](https://doi.org/10.5281/zenodo.14789255)
 
-PipelineScheduler is a system which enables the highest performance in terms of throughput and latency for can find the **optimal workload distribution** to split the pipelines between the server and the Edge devices, and set the **optimal batch sizes** for them to ensure the best throughput and latency against challenges such as *content dynamics* and *network instability*.
+PipelineScheduler is a system which enables the highest performance in terms of throughput and latency. 
+It can find the **optimal workload distribution** to split the pipelines between the server and the Edge devices, and apply **local optimization** of runtime parameters like **inference batch size**.
+The control components ensure the best throughput and latency against challenges such as *content dynamics* and *network instability*.
 PipelineScheduler also considers *resource contention* and is equipped with **inference spatiotemporal scheduling** to mitigate the adverse effects of *co-location interference*.
 
-The current stage of PipelineScheduler is the implementation for our [ICDCS 2025](https://icdcs2025.icdcs.org/) full paper, titled **"FCPO: Federated Continual Policy Optimization with Heterogeneous Action Spaces for Real-Time High-Throughput Edge Video Analytics"**, available [here](). Future improvements will be continually updated. Architectural diagram:
+The current stage of PipelineScheduler is the implementation for our [RTSS 2025](https://2025.rtss.org/) full paper, titled **"FCPO: Federated Continual Policy Optimization for Real-Time High-Throughput Edge Video Analytics"**, available [here](). Future improvements will be continually updated. Architectural diagram:
 
 ![overall-arch](/assets/overall-arch.png)
 
@@ -153,9 +155,34 @@ The microservice details are defined under `"cont_pipeline"`. This is what the e
         1
     ]
 
-},
+}
 ```
+
+When running FCPO, the config should also contain an fcpo section with hyperparameterts.
+
+```json
+{
+    "state_size": 7,
+    "resolution_size": 4,
+    "batch_size": 16,
+    "threads_size": 4,
+    "lambda": 0.2,
+    "gamma": 0.2,
+    "clip_epsilon": 0.9,
+    "penalty_weight": 0.2,
+    "theta": 1.1,
+    "sigma": 10.0,
+    "phi": 2.0,
+    "precision": "float",
+    "update_steps": 150,
+    "update_step_incs": 10,
+    "federated_steps": 10,
+    "seed": 42
+}
+```
+
 Details on how to set the configurations can be found [here](/jsons/README).
+However, when running the whole system, the configurations are automatically modified by the **Controller** based on the model and experiment configurations.
 
 ## Knowledge Base
 The Knowledge Base is a PostgreSQL (14) database which contains all the operational statistics.
@@ -173,9 +200,10 @@ To run the system, this following software must be installed on the host machine
 
 Inside the container, it is also necessary to install inference software platforms (e.g., TensorRT, ONNX).
 
-The specific software versions and commands for installation can be found taken from the [dockerfiles](/dockerfiles/), which are written to build inference container images. Since the current version is run on NVIDIA hardware (i.e., GPU and Jetson devices), most of the images are built upon NVIDIA container images published [here](https://catalog.ngc.nvidia.com/containers).
+The specific software versions and commands for installation can be found taken from the [dockerfiles](/dockerfiles/), which are written to build inference container images. 
+Since the current version is run on NVIDIA hardware (i.e., GPU and Jetson devices), most of the images are built upon NVIDIA container images published [here](https://catalog.ngc.nvidia.com/containers).
 
-The build instructions can be found [here](dockerfiles/README).
+The build instructions can be found [here](dockerfiles/README) and base containers without data or models are available [here](https://hub.docker.com/r/lucasliebe/pipeplusplus/tags).
 
 ### Inference Platform
 The current versions of `Preprocessors, Postprocessors and Inferencer` are written for NVIDIA hardware, especially the `Inferencer`. But custom microservices can be written based on these with minimal adaptation.
@@ -213,10 +241,11 @@ The first step is to build the source code, here you can use multiple options fo
     ```
 
 ## Preparing Data
-The data is collected from publicly available streams on website like [www.earthcam.com](https://www.earthcam.com). The script for pulling the data can be found [here](/scripts/collect_dataset.sh).
+The data is collected from publicly available streams on website like [www.earthcam.com](https://www.earthcam.com). 
+The script for pulling the data can be found [here](/scripts/collect_dataset.sh) and requires python3 to run.
 
 ## Preparing Models
-Models need to be prepared according to fit the current hardware and software inference platforms. For NVIDIA-TensorRT, please build and use following script.
+Models need to be prepared accordingly to fit the current hardware and software inference platforms. For NVIDIA-TensorRT, please build and use following script.
 
 * Build
     ```bash
@@ -282,15 +311,15 @@ The required json configurations can be found [here](/jsons/) or created from th
 # Citing our works
 If you find the repo useful, please cite the following works which have encompassed the development of this repo.
 
-* **FCPO: Federated Continual Policy Optimization with Heterogeneous Action Spaces for Real-Time High-Throughput Edge Video Analytics** 
+* **FCPO: Federated Continual Policy Optimization for Real-Time High-Throughput Edge Video Analytics** 
     ```
     @inproceedings{nguyen2025,
         author={Lucas Liebe and Thanh-Tung Nguyen and Dongman Lee}
-        title = {{FCPO: Federated Continual Policy Optimization with Heterogeneous Action Spaces for Real-Time High-Throughput Edge Video Analytics}},
-        booktitle = {The 45th International Conference on Distributed Computing Systems (ICDCS)},
+        title = {{FCPO: Federated Continual Policy Optimization for Real-Time High-Throughput Edge Video Analytics}},
+        booktitle = {The 46th IEEE Real-Time Systems Symposium (RTSS)},
         year = {2025},
         publisher = {IEEE},
-        month = march,
+        month = december,
     }
     ```
 
