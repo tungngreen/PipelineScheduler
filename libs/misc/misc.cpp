@@ -1271,29 +1271,37 @@ std::map<std::string, std::string> keywordAbbrs = {
 };
 
 std::map<SystemDeviceType, std::string> SystemDeviceTypeList = {
+    {Virtual, "virtual"},
     {Server, "server"},
     {OnPremise, "onprem"},
-    {NXXavier, "nxavier"},
+    {OrinAGX, "orinagx"},
+    {OrinNX, "orinnx"},
+    {OrinNano, "orinano"},
     {AGXXavier, "agxavier"},
-    {OrinNano, "orinano"}
+    {NXXavier, "nxavier"},
+    {NanoXavier, "nanoxavier"},
 };
 
 // Reverse map for SystemDeviceTypeList
 std::map<std::string, SystemDeviceType> SystemDeviceTypeReverseList = {
+    {"virtual", Virtual},
+    {"virt", Virtual},
     {"server", Server},
     {"serv", Server},
     {"onprem", OnPremise},
     {"onp", OnPremise},
-    {"nxavier", NXXavier},
-    {"nx", NXXavier},
-    {"agxavier", AGXXavier},
-    {"agx", AGXXavier},
-    {"orinano", OrinNano},
-    {"orn", OrinNano},
+    {"orinagx", OrinAGX},
+    {"oagx", OrinAGX},
     {"orinnx", OrinNX},
     {"ornx", OrinNX},
-    {"orinagx", OrinAGX},
-    {"oagx", OrinAGX}
+    {"orinano", OrinNano},
+    {"orn", OrinNano},
+    {"agxavier", AGXXavier},
+    {"agx", AGXXavier},
+    {"nxavier", NXXavier},
+    {"nx", NXXavier},
+    {"nanoxavier", NanoXavier},
+    {"naxa", NanoXavier}
 };
 
 std::map<ModelType, std::string> ModelTypeList = {

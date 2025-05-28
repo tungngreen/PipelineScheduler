@@ -465,11 +465,14 @@ struct MetricsServerConfigs {
 std::unique_ptr<pqxx::connection> connectToMetricsServer(MetricsServerConfigs &metricsServerConfigs, const std::string &name);
 
 enum SystemDeviceType {
+    Virtual,
     Server,
     OnPremise,
+
     OrinAGX,
     OrinNX,
     OrinNano,
+
     AGXXavier,
     NXXavier,
     NanoXavier

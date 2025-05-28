@@ -1110,6 +1110,7 @@ private:
 
     ContainerLibType ctrl_containerLib;
     DeviceInfoType ctrl_sysDeviceInfo = {
+        {Virtual, "virtual"},
         {Server, "server"},
         {OnPremise, "onprem"},
         {OrinAGX, "orinagx"},

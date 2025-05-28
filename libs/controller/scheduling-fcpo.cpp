@@ -17,7 +17,7 @@ void Controller::initiateGPULanes(NodeHandle &node) {
         return;
     }
 
-    if (node.type == SystemDeviceType::Server) {
+    if (node.type == Server) {
         node.numGPULanes = NUM_LANES_PER_GPU * NUM_GPUS;
     } else {
         node.numGPULanes = 1;

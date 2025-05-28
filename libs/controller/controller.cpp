@@ -263,8 +263,7 @@ Controller::Controller(int argc, char **argv) {
     NodeHandle *sink_node = new NodeHandle("sink", ctrl_sinkNodeIP,
                                            ControlCommands::NewStub(grpc::CreateChannel(
                                       absl::StrFormat("%s:%d", ctrl_sinkNodeIP, DEVICE_CONTROL_PORT + ctrl_port_offset), grpc::InsecureChannelCredentials())),
-                      new CompletionQueue(), SystemDeviceType::Server,
-                      DATA_BASE_PORT + ctrl_port_offset, {});
+                      new CompletionQueue(), SystemDeviceType::Server, DATA_BASE_PORT + ctrl_port_offset, {});
     devices.addDevice("sink", sink_node);
 
     if (ctrl_systemName == "fcpo") {
@@ -307,10 +306,11 @@ Controller::~Controller() {
 // ============================================================================================================================================= //
 
 MemUsageType ContainerHandle::getExpectedTotalMemUsage() const {
-    if (device_agent->type == SystemDeviceType::Server) {
-        return pipelineModel->processProfiles.at("server").batchInfer[pipelineModel->batchSize].gpuMemUsage;
-    }
     std::string deviceTypeName = getDeviceTypeName(device_agent->type);
+    if (device_agent->type == SystemDeviceType::Virtual || device_agent->type == SystemDeviceType::Server
+                || device_agent->type == SystemDeviceType::OnPremise) {
+        return pipelineModel->processProfiles.at(deviceTypeName).batchInfer[pipelineModel->batchSize].gpuMemUsage;
+    }
     return (pipelineModel->processProfiles.at(deviceTypeName).batchInfer[pipelineModel->batchSize].gpuMemUsage +
             pipelineModel->processProfiles.at(deviceTypeName).batchInfer[pipelineModel->batchSize].rssMemUsage) / 1000;
 }
@@ -344,14 +344,16 @@ bool Controller::AddTask(const TaskDescription::TaskStruct &t) {
 }
 
 void Controller::initialiseGPU(NodeHandle *node, int numGPUs, std::vector<int> memLimits) {
-    if (node->type == SystemDeviceType::Server) {
+    if (node->type == SystemDeviceType::Virtual) {
+        GPUHandle *gpuNode = new GPUHandle{node->name, node->name, 0, memLimits[0] / 5, 1, node};
+        node->gpuHandles.emplace_back(gpuNode);
+    } else if (node->type == SystemDeviceType::Server) {
         for (uint8_t gpuIndex = 0; gpuIndex < numGPUs; gpuIndex++) {
             std::string gpuName = "gpu" + std::to_string(gpuIndex);
             GPUHandle *gpuNode = new GPUHandle{"3090", "server", gpuIndex, memLimits[gpuIndex] - 2000, NUM_LANES_PER_GPU, node};
             node->gpuHandles.emplace_back(gpuNode);
         }
     } else {
-        //MemUsageType memSize = node->type == SystemDeviceType::AGXXavier ? 30000 : 5000;
         GPUHandle *gpuNode = new GPUHandle{node->name, node->name, 0, memLimits[0] - 1500, 1, node};
         node->gpuHandles.emplace_back(gpuNode);
     }
@@ -1148,15 +1150,15 @@ void Controller::DeviseAdvertisementHandler::Proceed() {
         service->RequestAdvertiseToController(&ctx, &request, &responder, cq, cq, this);
     } else if (status == PROCESS) {
         new DeviseAdvertisementHandler(service, cq, controller);
-        std::string target_str = absl::StrFormat("%s:%d", request.ip_address(), DEVICE_CONTROL_PORT + controller->ctrl_port_offset);
+        std::string target_str = absl::StrFormat("%s:%d", request.ip_address(),
+                                                 DEVICE_CONTROL_PORT + controller->ctrl_port_offset + request.agent_port_offset());
         std::string deviceName = request.device_name();
         NodeHandle *node = new NodeHandle{deviceName,
                                      request.ip_address(),
                                           ControlCommands::NewStub(
                                              grpc::CreateChannel(target_str, grpc::InsecureChannelCredentials())),
-                                     new CompletionQueue(),
-                                     static_cast<SystemDeviceType>(request.device_type()),
-                                     DATA_BASE_PORT + controller->ctrl_port_offset, {}};
+                                     new CompletionQueue(),static_cast<SystemDeviceType>(request.device_type()),
+                                     DATA_BASE_PORT + controller->ctrl_port_offset + request.agent_port_offset(), {}};
         reply.set_name(controller->ctrl_systemName);
         reply.set_experiment(controller->ctrl_experimentName);
         status = FINISH;

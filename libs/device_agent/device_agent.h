@@ -32,8 +32,10 @@ ABSL_DECLARE_FLAG(uint16_t, dev_verbose);
 ABSL_DECLARE_FLAG(uint16_t, dev_loggingMode);
 ABSL_DECLARE_FLAG(std::string, dev_logPath);
 ABSL_DECLARE_FLAG(uint16_t, dev_port_offset);
+ABSL_DECLARE_FLAG(uint16_t, dev_system_port_offset);
 ABSL_DECLARE_FLAG(uint16_t, dev_bandwidthLimitID);
 ABSL_DECLARE_FLAG(std::string, dev_networkInterface);
+ABSL_DECLARE_FLAG(int, dev_gpuID);
 
 using grpc::ServerBuilder;
 using grpc::ServerContext;
@@ -108,22 +110,21 @@ protected:
     void ContainersLifeCheck();
 
     std::string runDocker(const std::string &executable, const std::string &cont_name, const std::string &start_string,
-                         const int &device, const int &port) {
+                         int device, const int &port) {
         std::string command = "docker run -d --rm --network=host --runtime nvidia --gpus all ";
         std::string docker_tag;
-        if (dev_type == SystemDeviceType::Server || dev_type == SystemDeviceType::OnPremise) {
+        if (dev_gpuID > 0) device = dev_gpuID;
+        if (dev_type == Virtual || dev_type == Server || dev_type == OnPremise) {
             command += "-v /ssd0/tung/PipePlusPlus/data/:/app/data/  -v /ssd0/tung/PipePlusPlus/logs/:/app/logs/ "
                        "-v /ssd0/tung/PipePlusPlus/models/:/app/models/ "
                        "-v /ssd0/tung/PipePlusPlus/model_profiles/:/app/model_profiles/ --name " +
                        absl::StrFormat(
                                R"(%s lucasliebe/pipeplusplus:amd64-torch %s --json '%s' --device %i --port %i --port_offset %i)",
-                               cont_name, executable, start_string, device, port, dev_port_offset);
+                               cont_name, executable, start_string, device, port, dev_system_port_offset);
         } else {
-            if (dev_type == SystemDeviceType::NanoXavier || dev_type == SystemDeviceType::NXXavier
-                || dev_type == SystemDeviceType::AGXXavier) {
+            if (dev_type == NanoXavier || dev_type == NXXavier || dev_type == AGXXavier) {
                 docker_tag = "jp512-torch";
-            } else if (dev_type == SystemDeviceType::OrinNano || dev_type == SystemDeviceType::OrinNX
-                        || dev_type == SystemDeviceType::OrinAGX) {
+            } else if (dev_type == OrinNano || dev_type == OrinNX || dev_type == OrinAGX) {
                 docker_tag = "jp61-torch";
             } else {
                 spdlog::get("container_agent")->error("Unknown edge device type while trying to start container!");
@@ -134,12 +135,12 @@ protected:
                        "-v /run/jtop.sock:/run/jtop.sock  -v /usr/bin/tegrastats:/usr/bin/tegrastats --name " +
                         absl::StrFormat(
                                 R"(%s lucasliebe/pipeplusplus:%s %s --json '%s' --device %i --port %i --port_offset %i)",
-                                cont_name, docker_tag, executable, start_string, device, port, dev_port_offset);
+                                cont_name, docker_tag, executable, start_string, device, port, dev_system_port_offset);
         }
         command += " --log_dir ../logs";
         command += (deploy_mode? " --logging_mode 1" : " --verbose 0 --logging_mode 2");
 
-        if (dev_type == SystemDeviceType::Server) { // since many models might start on the server we need to slow down creation to prevent errors
+        if (dev_type == Server || dev_type == Virtual) { // since many models might start on the server we need to slow down creation to prevent errors
             std::this_thread::sleep_for(std::chrono::milliseconds(700));
         }
 
@@ -163,7 +164,7 @@ protected:
 
     void SyncDatasources(const std::string &cont_name, const std::string &dsrc);
 
-    SystemInfo Ready(const std::string &ip, SystemDeviceType type);
+    SystemInfo Ready(const std::string &ip);
 
     void HandleDeviceRecvRpcs();
 
@@ -405,7 +406,9 @@ protected:
     std::atomic<bool> running;
     std::string dev_experiment_name;
     std::string dev_system_name;
-    int dev_port_offset;
+    int dev_agent_port_offset;
+    int dev_system_port_offset;
+    int dev_gpuID;
 
     // Runtime variables
     Profiler *dev_profiler;

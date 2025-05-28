@@ -6,9 +6,11 @@ ABSL_FLAG(std::string, controller_url, "", "string that identifies the controlle
 ABSL_FLAG(uint16_t, dev_verbose, 0, "Verbosity level of the Device Agent.");
 ABSL_FLAG(uint16_t, dev_loggingMode, 0, "Logging mode of the Device Agent. 0:stdout, 1:file, 2:both");
 ABSL_FLAG(std::string, dev_logPath, "../logs", "Path to the log dir for the Device Agent.");
-ABSL_FLAG(uint16_t, dev_port_offset, 0, "port offset for starting the control communication");
+ABSL_FLAG(uint16_t, dev_port_offset, 0, "port offset the deviceAgents ports to allow for co-located virtual nodes");
+ABSL_FLAG(uint16_t, dev_system_port_offset, 0, "port offset of the whole system for starting the control communication");
 ABSL_FLAG(uint16_t, dev_bandwidthLimitID, 0, "id at the end of bandwidth_limits{}.json file to indicate which should be used");
 ABSL_FLAG(std::string, dev_networkInterface, "eth0", "optionally specify the network interface to use for bandwidth limiting");
+ABSL_FLAG(int, dev_gpuID, -1, "GPU ID to use a specific GPU for containers (setting for virtual Devices)");
 
 std::string getHostIP() {
     struct ifaddrs *ifAddrStruct = nullptr;
@@ -39,7 +41,9 @@ std::string getHostIP() {
 DeviceAgent::DeviceAgent() {
     dev_name = absl::GetFlag(FLAGS_name);
     std::string type = absl::GetFlag(FLAGS_device_type);
-    if (type == "server") {
+    if (type == "virtual") {
+        dev_type = SystemDeviceType::Virtual;
+    } else if (type == "server") {
         dev_type = SystemDeviceType::Server;
     } else if (type == "onprem") {
         dev_type = SystemDeviceType::OnPremise;
@@ -54,10 +58,12 @@ DeviceAgent::DeviceAgent() {
     } else if (type == "nxavier") {
         dev_type = SystemDeviceType::NXXavier;
     } else {
-        std::cerr << "Invalid device type, use [server, onprem, orinagx, orinnx, orinano, agxavier, nxavier]" << std::endl;
+        std::cerr << "Invalid device type, use [virtual, server, onprem, orinagx, orinnx, orinano, agxavier, nxavier]" << std::endl;
         exit(1);
     }
-    dev_port_offset = absl::GetFlag(FLAGS_dev_port_offset);
+    dev_agent_port_offset = absl::GetFlag(FLAGS_dev_port_offset);
+    dev_system_port_offset = absl::GetFlag(FLAGS_dev_system_port_offset) + dev_agent_port_offset;
+    dev_gpuID = absl::GetFlag(FLAGS_dev_gpuID);
     dev_loggingMode = absl::GetFlag(FLAGS_dev_loggingMode);
     dev_verbose = absl::GetFlag(FLAGS_dev_verbose);
     dev_logPath = absl::GetFlag(FLAGS_dev_logPath);
@@ -73,7 +79,7 @@ DeviceAgent::DeviceAgent() {
     grpc::EnableDefaultHealthCheckService(true);
     grpc::reflection::InitProtoReflectionServerBuilderPlugin();
 
-    std::string server_address = absl::StrFormat( "%s:%d", "0.0.0.0", DEVICE_CONTROL_PORT + dev_port_offset);
+    std::string server_address = absl::StrFormat( "%s:%d", "0.0.0.0", DEVICE_CONTROL_PORT + dev_system_port_offset);
     ServerBuilder controller_builder;
     controller_builder.AddListeningPort(server_address, grpc::InsecureServerCredentials());
     controller_builder.RegisterService(&controller_service);
@@ -104,20 +110,20 @@ DeviceAgent::DeviceAgent() {
 }
 
 DeviceAgent::DeviceAgent(const std::string &controller_url) : DeviceAgent() {
-    std::string server_address = absl::StrFormat("%s:%d", "0.0.0.0", INDEVICE_CONTROL_PORT + dev_port_offset);
+    std::string server_address = absl::StrFormat("%s:%d", "0.0.0.0", INDEVICE_CONTROL_PORT + dev_system_port_offset);
     ServerBuilder device_builder;
     device_builder.AddListeningPort(server_address, grpc::InsecureServerCredentials());
     device_builder.RegisterService(&device_service);
     device_cq = device_builder.AddCompletionQueue();
     device_server = device_builder.BuildAndStart();
 
-    server_address = absl::StrFormat("%s:%d", controller_url, CONTROLLER_BASE_PORT + dev_port_offset);
+    server_address = absl::StrFormat("%s:%d", controller_url, CONTROLLER_BASE_PORT + dev_system_port_offset);
     controller_stub = ControlMessages::NewStub(
             grpc::CreateChannel(server_address, grpc::InsecureChannelCredentials()));
     controller_sending_cq = new CompletionQueue();
 
     dev_profiler = new Profiler({(unsigned int) getpid()}, "runtime");
-    SystemInfo readyReply = Ready(getHostIP(), dev_type);
+    SystemInfo readyReply = Ready(getHostIP());
 
     dev_logPath += "/" + dev_experiment_name;
     std::filesystem::create_directories(
@@ -194,7 +200,7 @@ DeviceAgent::DeviceAgent(const std::string &controller_url) : DeviceAgent() {
     }
 
     if (dev_system_name == "bce") {
-        if (dev_type == SystemDeviceType::Server || dev_type == SystemDeviceType::OnPremise) {
+        if (dev_type == Virtual || dev_type == Server || dev_type == OnPremise) {
             dev_bcedge_agent = new BCEdgeAgent("/ssd0/tung/PipePlusPlus/models/bcedge/" + dev_name, 3500, torch::kF32, 0);
         } else {
             dev_bcedge_agent = new BCEdgeAgent("../../pipe/models/bcedge/" + dev_name, 3000000, torch::kF32, 0);
@@ -544,32 +550,43 @@ void DeviceAgent::SyncDatasources(const std::string &cont_name, const std::strin
     if (containers[cont_name].cq != nullptr) GPR_ASSERT(containers[cont_name].cq->Next(&got_tag, &ok));
 }
 
-SystemInfo DeviceAgent::Ready(const std::string &ip, SystemDeviceType type) {
+SystemInfo DeviceAgent::Ready(const std::string &ip) {
     ConnectionConfigs request;
     SystemInfo reply;
     ClientContext context;
     Status status;
-    int processing_units;
     request.set_device_name(dev_name);
-    request.set_device_type(type);
+    request.set_device_type(dev_type);
     request.set_ip_address(ip);
-    if (type == SystemDeviceType::Server) {
-        processing_units = dev_profiler->getGpuCount();
-        request.set_processors(processing_units);
-        for (auto &mem: dev_profiler->getGpuMemory(processing_units)) {
+    request.set_agent_port_offset(dev_agent_port_offset);
+    if (dev_type == SystemDeviceType::Virtual) {
+        auto processing_units = dev_profiler->getGpuCount();
+        auto mem = dev_profiler->getGpuMemory(processing_units);
+        dev_numCudaDevices = 1;
+        request.set_processors(dev_numCudaDevices);
+        request.add_memory(mem[std::max(0,dev_gpuID)]);
+    } else if (dev_type == SystemDeviceType::Server) {
+        dev_numCudaDevices = dev_profiler->getGpuCount();
+        request.set_processors(dev_numCudaDevices);
+        for (auto &mem: dev_profiler->getGpuMemory(dev_numCudaDevices)) {
             request.add_memory(mem);
         }
+    } else if (dev_type == SystemDeviceType::OnPremise) {
+        auto processing_units = dev_profiler->getGpuCount();
+        auto mem = dev_profiler->getGpuMemory(processing_units);
+        dev_numCudaDevices = 1;
+        request.set_processors(dev_numCudaDevices);
+        request.add_memory(mem[dev_gpuID]);
     } else {
         struct sysinfo sys_info;
         if (sysinfo(&sys_info) != 0) {
             spdlog::get("container_agent")->error("sysinfo call failed!");
             exit(1);
         }
-        processing_units = 1;
-        request.set_processors(processing_units);
+        dev_numCudaDevices = 1;
+        request.set_processors(dev_numCudaDevices);
         request.add_memory(sys_info.totalram * sys_info.mem_unit / 1000000);
     }
-    dev_numCudaDevices = processing_units;
 
     std::unique_ptr<ClientAsyncResponseReader<SystemInfo>> rpc(
             controller_stub->AsyncAdvertiseToController(&context, request, controller_sending_cq));
