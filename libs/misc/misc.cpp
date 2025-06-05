@@ -305,11 +305,22 @@ NetworkProfile queryNetworkProfile(
     const NetworkEntryType &networkEntries,
     uint16_t systemFPS
 ) {
-    std::string senderHostAbbr = abbreviate(senderHost);
-    std::string receiverHostAbbr = abbreviate(receiverHost);
+    std::string senderHostAbbr, senderDeviceTypeAbbr, receiverHostAbbr, receiverDeviceTypeAbbr;
+    if (senderDeviceType == "virtual") {// Virtual device is always the server
+        senderHostAbbr = "serv";
+        senderDeviceTypeAbbr = "serv";
+    } else {
+        senderHostAbbr = abbreviate(senderHost);
+        senderDeviceTypeAbbr= abbreviate(senderDeviceType);
+    }
+    if (receiverDeviceType == "virtual") {// Virtual device is always the server
+        receiverHostAbbr = "serv";
+        receiverDeviceTypeAbbr = "serv";
+    } else {
+        receiverHostAbbr = abbreviate(receiverHost);
+        receiverDeviceTypeAbbr = abbreviate(receiverDeviceType);
+    }
 
-    std::string senderDeviceTypeAbbr = abbreviate(senderDeviceType);
-    std::string receiverDeviceTypeAbbr = abbreviate(receiverDeviceType);    
 
     std::string schemaName = abbreviate(experimentName + "_" + systemName);
     std::string tableName = abbreviate(experimentName + "_" + pipelineName + "_" + taskName + "_arr");
@@ -560,12 +571,16 @@ void queryPrePostLatency(
     const std::string &systemName,
     const std::string &pipelineName,
     const std::string &streamName,
-    const std::string &deviceName,
-    const std::string &deviceTypeName,
+    std::string &deviceName,
+    std::string &deviceTypeName,
     const std::string &modelName,
     ModelProfile &profile,
     const uint16_t systemFPS
 ) {
+    if (deviceTypeName == "virtual") { // Virtual device is always the server
+        deviceTypeName = "server";
+        deviceName = "server";
+    }
     std::string schemaName = abbreviate(experimentName + "_" + systemName);
     std::string modelNameAbbr = abbreviate(splitString(modelName, ".").front()); 
     std::string tableName = schemaName + "." + abbreviate(experimentName + "_" + pipelineName + "__" + modelNameAbbr + "__" + deviceName + "_proc");
@@ -662,12 +677,16 @@ void queryBatchInferLatency(
     const std::string &systemName,
     const std::string &pipelineName,
     const std::string &streamName,
-    const std::string &deviceName,
-    const std::string &deviceTypeName,
+    std::string &deviceName,
+    std::string &deviceTypeName,
     const std::string &modelName,
     ModelProfile &profile,
     const uint16_t systemFPS
 ) {
+    if (deviceTypeName == "virtual") { // Virtual device is always the server
+        deviceTypeName = "server";
+        deviceName = "server";
+    }
     std::string modelNameAbbr = abbreviate(splitString(modelName, ".").front());
     std::string schemaName = abbreviate(experimentName + "_" + systemName);
     std::string tableName = schemaName + "." + abbreviate(experimentName + "_" + pipelineName + "__" + modelNameAbbr + "__" + deviceName)  + "_batch";
@@ -714,11 +733,15 @@ BatchInferProfileListType queryBatchInferLatency(
     const std::string &systemName,
     const std::string &pipelineName,
     const std::string &streamName,
-    const std::string &deviceName,
-    const std::string &deviceTypeName,
+    std::string &deviceName,
+    std::string &deviceTypeName,
     const std::string &modelName,
     const uint16_t systemFPS
 ) {
+    if (deviceTypeName == "virtual") { // Virtual device is always the server
+        deviceTypeName = "server";
+        deviceName = "server";
+    }
     ModelProfile modelProfile;
     queryBatchInferLatency(
         metricsConn,
@@ -745,11 +768,14 @@ BatchInferProfileListType queryBatchInferLatency(
  */
 void queryResourceRequirements(
     pqxx::connection &metricsConn,
-    const std::string &deviceTypeName,
+    std::string &deviceTypeName,
     const std::string &modelName,
     ModelProfile &profile,
     const uint16_t systemFPS
 ) {
+    if (deviceTypeName == "virtual") { // Virtual device is always the server
+        deviceTypeName = "server";
+    }
     std::string modelNameAbbr = abbreviate(splitString(modelName, ".").front());
     std::string tableName = abbreviate("pf" + std::to_string(systemFPS) + "__" + modelNameAbbr + "__" + deviceTypeName + "_hw");
     std::string query = absl::StrFormat("SELECT batch_size, MAX(cpu_usage), MAX(mem_usage), MAX(rss_mem_usage), MAX(gpu_usage), MAX(gpu_mem_usage) "
@@ -790,11 +816,15 @@ ModelProfile queryModelProfile(
     const std::string &systemName,
     const std::string &pipelineName,
     const std::string &streamName,
-    const std::string &deviceName,
-    const std::string &deviceTypeName,
+    std::string &deviceName,
+    std::string &deviceTypeName,
     const std::string &modelName,
     uint16_t systemFPS
 ) {
+    if (deviceTypeName == "virtual") { // Virtual device is always the server
+        deviceTypeName = "server";
+        deviceName = "server";
+    }
     ModelProfile profile;
 
     // // Query batch inference profilectrl_systemName;
