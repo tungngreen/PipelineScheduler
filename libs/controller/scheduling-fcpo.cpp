@@ -138,7 +138,7 @@ void Controller::queryingProfiles(TaskHandle *task) {
             model->arrivalProfiles.d2dNetworkProfile[std::make_pair(pair.first, pair.second)] = test;
         }
 
-        for (const auto &deviceName : model->possibleDevices) {
+        for (auto &deviceName : model->possibleDevices) {
             std::string deviceTypeName = getDeviceTypeName(deviceList.at(deviceName)->type);
             containerName = model->name + "_" + deviceTypeName;
             ModelProfile profile = queryModelProfile(

@@ -808,7 +808,7 @@ ModelProfile queryModelProfile(
     const std::string &systemName,
     const std::string &pipelineName,
     const std::string &streamName,
-    const std::string &deviceName,
+    std::string &deviceName,
     std::string &deviceTypeName,
     const std::string &modelName,
     uint16_t systemFPS = 15
