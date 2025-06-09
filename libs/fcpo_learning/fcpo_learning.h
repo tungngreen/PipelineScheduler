@@ -12,14 +12,7 @@
 #ifndef PIPEPLUSPLUS_BATCH_LEARNING_H
 #define PIPEPLUSPLUS_BATCH_LEARNING_H
 
-using controlcommands::ControlCommands;
-using grpc::Status;
-using grpc::CompletionQueue;
-using grpc::ClientContext;
-using grpc::ClientAsyncResponseReader;
-using indevicemessages::InDeviceMessages;
 using indevicecommands::FlData;
-using EmptyMessage = google::protobuf::Empty;
 using T = torch::Tensor;
 
 enum threadingAction {
@@ -237,10 +230,9 @@ struct SinglePolicyNet: torch::nn::Module {
 class FCPOAgent {
 public:
     FCPOAgent(std::string& cont_name, uint state_size, uint resolution_size, uint max_batch, uint scaling_size,
-             CompletionQueue *cq, std::shared_ptr<InDeviceMessages::Stub> stub, torch::Dtype precision = torch::kF64,
-             uint update_steps = 60, uint update_steps_inc = 5, uint federated_steps = 5, double lambda = 0.95,
-             double gamma = 0.99, double clip_epsilon = 0.2, double penalty_weight = 0.1, double theta = 1.1,
-             double sigma = 10.0, double phi = 2.0, int seed = 42);
+             torch::Dtype precision = torch::kF64, uint update_steps = 60, uint update_steps_inc = 5,
+             uint federated_steps = 5, double lambda = 0.95, double gamma = 0.99, double clip_epsilon = 0.2,
+             double penalty_weight = 0.1, double theta = 1.1, double sigma = 10.0, double phi = 2.0, int seed = 42);
 
     ~FCPOAgent() {
         torch::save(model, path + "/latest_model.pt");
@@ -277,8 +269,6 @@ private:
     std::ofstream out;
     std::string path;
     std::string cont_name;
-    CompletionQueue *cq;
-    std::shared_ptr<InDeviceMessages::Stub> stub;
 
     // PPO Hyperparameters
     double lambda;
@@ -308,13 +298,14 @@ private:
 
 class FCPOServer {
 public:
-    FCPOServer(std::string run_name, nlohmann::json parameters, uint state_size = 8, torch::Dtype precision = torch::kF32);
+    FCPOServer(std::string run_name, nlohmann::json parameters, socket_t *mq, uint state_size = 8,
+               torch::Dtype precision = torch::kF32);
     ~FCPOServer() {
         torch::save(model, path + "/latest_model.pt");
         out.close();
     }
 
-    bool addClient(FlData &data, std::shared_ptr<ControlCommands::Stub> stub, CompletionQueue *cq);
+    bool addClient(FlData &data);
 
     void incrementClientCounter() {
         client_counter++;
@@ -349,8 +340,6 @@ private:
     struct ClientModel{
         FlData data;
         std::shared_ptr<MultiPolicyNet> model;
-        std::shared_ptr<ControlCommands::Stub> stub;
-        CompletionQueue *cq;
     };
 
     void proceed();
@@ -367,6 +356,7 @@ private:
     std::ofstream out;
     std::string path;
     std::atomic<bool> run;
+    socket_t *message_queue;
 
     // PPO Hyperparameters
     double lambda;

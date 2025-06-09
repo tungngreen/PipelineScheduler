@@ -15,7 +15,7 @@
 #include "opencv2/opencv.hpp"
 #include <unordered_set>
 #include <pqxx/pqxx>
-#include <grpcpp/grpcpp.h>
+#include <zmq.hpp>
 #include "absl/strings/str_format.h"
 #include "absl/flags/parse.h"
 #include "absl/flags/flag.h"
@@ -25,9 +25,7 @@
 
 ABSL_DECLARE_FLAG(uint16_t, deploy_mode);
 
-using grpc::Status;
-using grpc::CompletionQueue;
-using grpc::ClientAsyncResponseReader;
+using namespace zmq;
 
 typedef uint16_t NumQueuesType;
 typedef uint16_t QueueLengthType;
@@ -48,9 +46,57 @@ typedef uint16_t BatchSizeType;
 typedef uint32_t RequestMemSizeType;
 
 const int DATA_BASE_PORT = 55001;
-const int CONTROLLER_BASE_PORT = 60001;
-const int DEVICE_CONTROL_PORT = 60002;
-const int INDEVICE_CONTROL_PORT = 60003;
+const int CONTROLLER_RECEIVE_PORT = 60001;
+const int CONTROLLER_MESSAGE_QUEUE_PORT = 60002;
+const int IN_DEVICE_RECEIVE_PORT = 60011;
+const int IN_DEVICE_MESSAGE_QUEUE_PORT = 60012;
+
+enum MESSAGE_TYPE_VALUES {
+    DEVICE_ADVERTISEMENT,
+    DUMMY_DATA,
+
+    NETWORK_CHECK,
+    DEVICE_SHUTDOWN,
+
+    CONTAINER_START,
+    MSVC_START_REPORT,
+    CONTEXT_METRICS,
+    ADJUST_UPSTREAM,
+    UPDATE_SENDER,
+    SYNC_DATASOURCES,
+    BATCH_SIZE_UPDATE,
+    RESOLUTION_UPDATE,
+    TIME_KEEPING_UPDATE,
+    CONTAINER_STOP,
+
+    START_FL,
+    FEDERATED_LEARNING_REQUEST,
+    RETURN_FL,
+    BCEDGE_UPDATE
+};
+std::unordered_map<MESSAGE_TYPE_VALUES, std::string> MSG_TYPE = {
+    {DEVICE_ADVERTISEMENT, "DEV_AD"},
+    {DUMMY_DATA, "DUMMY"},
+
+    {NETWORK_CHECK, "NET_CHECK"},
+    {DEVICE_SHUTDOWN, "SHUTDOWN"},
+
+    {CONTAINER_START, "CONT_START"},
+    {MSVC_START_REPORT, "MSVC_START"},
+    {CONTEXT_METRICS, "CXT_MET"},
+    {ADJUST_UPSTREAM, "ADJ_UPSTR"},
+    {UPDATE_SENDER, "UPD_SENDER"},
+    {SYNC_DATASOURCES, "SYNC_DS"},
+    {BATCH_SIZE_UPDATE, "BS"},
+    {RESOLUTION_UPDATE, "RES"},
+    {TIME_KEEPING_UPDATE, "TIME_KEEP"},
+    {CONTAINER_STOP, "CONT_STOP"},
+
+    {START_FL, "FL_START"},
+    {FEDERATED_LEARNING_REQUEST, "FL_REQ"},
+    {RETURN_FL, "RET_FL"},
+    {BCEDGE_UPDATE, "BCEDGE_UPD"}
+};
 
 std::chrono::time_point<std::chrono::_V2::system_clock, std::chrono::milliseconds> timePointCastMillisecond(
     std::chrono::system_clock::time_point tp);

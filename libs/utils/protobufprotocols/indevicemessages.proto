@@ -1,17 +1,9 @@
 syntax = "proto3";
-import "google/protobuf/empty.proto";
-import "indevicecommands.proto";
 
 option java_multiple_files = true;
 option objc_class_prefix = "HLW";
 
 package indevicemessages;
-
-service InDeviceMessages {
-  rpc ReportMsvcStart(ProcessData) returns (ProcessData) {}
-  rpc StartFederatedLearning(indevicecommands.FlData) returns (google.protobuf.Empty) {}
-  rpc BCEdgeConfigUpdate(BCEdgeData) returns (BCEdgeConfig) {}
-}
 
 message BCEdgeData {
   string msvc_name = 1;

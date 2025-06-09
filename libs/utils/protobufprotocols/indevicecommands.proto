@@ -1,23 +1,9 @@
 syntax = "proto3";
-import "google/protobuf/empty.proto";
 
 option java_multiple_files = true;
 option objc_class_prefix = "HLW";
 
 package indevicecommands;
-
-service InDeviceCommands {
-  rpc KeepAlive(google.protobuf.Empty) returns (google.protobuf.Empty) {}
-  rpc UpdateSender(Connection) returns (google.protobuf.Empty) {}
-  rpc UpdateBatchSize(Int32) returns (google.protobuf.Empty) {}
-  rpc UpdateResolution(Dimensions) returns (google.protobuf.Empty) {}
-  rpc UpdateTimeKeeping(TimeKeeping) returns (google.protobuf.Empty) {}
-  rpc SyncDatasources(Int32) returns (google.protobuf.Empty) {}
-  rpc SetStartFrame(Int32) returns (google.protobuf.Empty) {}
-  rpc FederatedLearningReturn(FlData) returns (google.protobuf.Empty) {}
-  rpc RetrieveContainerMetrics(google.protobuf.Empty) returns (ContainerMetrics) {}
-  rpc StopExecution(ContainerSignal) returns (google.protobuf.Empty) {}
-}
 
 message ContainerSignal {
   string name = 1;

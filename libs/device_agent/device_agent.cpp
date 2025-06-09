@@ -76,15 +76,25 @@ DeviceAgent::DeviceAgent() {
     dev_metricsServerConfigs.password = "agent";
     dev_metricsServerConn = connectToMetricsServer(dev_metricsServerConfigs, "Device_agent");
 
-    grpc::EnableDefaultHealthCheckService(true);
-    grpc::reflection::InitProtoReflectionServerBuilderPlugin();
+    in_device_handlers = {
+        {MSG_TYPE[MSVC_START_REPORT], std::bind(&DeviceAgent::handleThis, this, std::placeholders::_1)},
+        {MSG_TYPE[START_FL], std::bind(&DeviceAgent::handleThis, this, std::placeholders::_1)},
+        {MSG_TYPE[BCEDGE_UPDATE], std::bind(&DeviceAgent::handleThis, this, std::placeholders::_1)},
+        {MSG_TYPE[CONTEXT_METRICS], std::bind(&DeviceAgent::handleThis, this, std::placeholders::_1)}
+    };
 
-    std::string server_address = absl::StrFormat( "%s:%d", "0.0.0.0", DEVICE_CONTROL_PORT + dev_system_port_offset);
-    ServerBuilder controller_builder;
-    controller_builder.AddListeningPort(server_address, grpc::InsecureServerCredentials());
-    controller_builder.RegisterService(&controller_service);
-    controller_cq = controller_builder.AddCompletionQueue();
-    controller_server = controller_builder.BuildAndStart();
+    controller_handlers = {
+        {MSG_TYPE[NETWORK_CHECK], std::bind(&DeviceAgent::testNetwork, this, std::placeholders::_1)},
+        {MSG_TYPE[CONTAINER_START], std::bind(&DeviceAgent::CreateContainer, this, std::placeholders::_1)},
+        {MSG_TYPE[ADJUST_UPSTREAM], std::bind(static_cast<void (DeviceAgent::*)(const std::string&)>(&DeviceAgent::UpdateContainerSender), this, std::placeholders::_1)},
+        {MSG_TYPE[SYNC_DATASOURCES], std::bind(&DeviceAgent::SyncDatasources, this, std::placeholders::_1)},
+        {MSG_TYPE[BATCH_SIZE_UPDATE], std::bind(&DeviceAgent::handleThis, this, std::placeholders::_1)},
+        {MSG_TYPE[RESOLUTION_UPDATE], std::bind(&DeviceAgent::handleThis, this, std::placeholders::_1)},
+        {MSG_TYPE[TIME_KEEPING_UPDATE], std::bind(&DeviceAgent::handleThis, this, std::placeholders::_1)},
+        {MSG_TYPE[CONTAINER_STOP], std::bind(static_cast<void (DeviceAgent::*)(const std::string&)>(&DeviceAgent::StopContainer), this, std::placeholders::_1)},
+        {MSG_TYPE[RETURN_FL], std::bind(&DeviceAgent::handleThis, this, std::placeholders::_1)}
+        {MSG_TYPE[DEVICE_SHUTDOWN], std::bind(&DeviceAgent::handleContainerStart, this, std::placeholders::_1)}
+    };
 
     dev_totalBandwidthData = std::vector<BandwidthManager>();
     for (int id = 0; id <= 20; ++id) {
@@ -110,17 +120,22 @@ DeviceAgent::DeviceAgent() {
 }
 
 DeviceAgent::DeviceAgent(const std::string &controller_url) : DeviceAgent() {
-    std::string server_address = absl::StrFormat("%s:%d", "0.0.0.0", INDEVICE_CONTROL_PORT + dev_system_port_offset);
-    ServerBuilder device_builder;
-    device_builder.AddListeningPort(server_address, grpc::InsecureServerCredentials());
-    device_builder.RegisterService(&device_service);
-    device_cq = device_builder.AddCompletionQueue();
-    device_server = device_builder.BuildAndStart();
+    in_device_ctx = context_t(dev_type == Server ? 2 : 1);
+    std::string server_address = absl::StrFormat("tcp://*:%d", IN_DEVICE_RECEIVE_PORT + dev_system_port_offset);
+    in_device_socket = socket_t(in_device_ctx, ZMQ_REP);
+    in_device_socket.bind(server_address);
+    server_address = absl::StrFormat("tcp://*:%d", IN_DEVICE_MESSAGE_QUEUE_PORT + dev_system_port_offset);
+    in_device_message_queue = socket_t(in_device_ctx, ZMQ_PUB);
+    in_device_message_queue.bind(server_address);
 
-    server_address = absl::StrFormat("%s:%d", controller_url, CONTROLLER_BASE_PORT + dev_system_port_offset);
-    controller_stub = ControlMessages::NewStub(
-            grpc::CreateChannel(server_address, grpc::InsecureChannelCredentials()));
-    controller_sending_cq = new CompletionQueue();
+    controller_ctx = context_t(1);
+    server_address = absl::StrFormat("%s:%d", controller_url, CONTROLLER_RECEIVE_PORT + dev_system_port_offset);
+    controller_socket = socket_t(controller_ctx, ZMQ_REQ);
+    controller_socket.connect(server_address);
+    server_address = absl::StrFormat("%s:%d", controller_url, CONTROLLER_MESSAGE_QUEUE_PORT + dev_system_port_offset);
+    controller_message_queue = socket_t(controller_ctx, ZMQ_SUB);
+    controller_message_queue.setsockopt(ZMQ_SUBSCRIBE, dev_name + "|");
+    controller_message_queue.connect(server_address);
 
     dev_profiler = new Profiler({(unsigned int) getpid()}, "runtime");
     SystemInfo readyReply = Ready(getHostIP());
@@ -215,8 +230,8 @@ DeviceAgent::DeviceAgent(const std::string &controller_url) : DeviceAgent() {
 
     running = true;
     threads = std::vector<std::thread>();
-    threads.emplace_back(&DeviceAgent::HandleDeviceRecvRpcs, this);
-    threads.emplace_back(&DeviceAgent::HandleControlRecvRpcs, this);
+    threads.emplace_back(&DeviceAgent::HandleDeviceMessages, this);
+    threads.emplace_back(&DeviceAgent::HandleControlCommands, this);
     for (auto &thread: threads) {
         thread.detach();
     }
@@ -329,38 +344,21 @@ void DeviceAgent::collectRuntimeMetrics() {
             int i = 0, target = 0;
             for (auto *dnstr: local_downstreams) {
                 if (i == 0) {
-                    ContainerMetrics reply;
-                    ClientContext context;
-                    Status status;
-                    CompletionQueue *sending_cq = dnstr->cq;
-                    std::unique_ptr<ClientAsyncResponseReader<ContainerMetrics>> rpc(
-                            dnstr->stub->AsyncRetrieveContainerMetrics(&context, request, sending_cq));
-                    rpc->Finish(&reply, &status, (void *) 1);
-                    void *got_tag;
-                    bool ok = false;
-                    if (sending_cq != nullptr) {
-                        GPR_ASSERT(sending_cq->Next(&got_tag, &ok));
-                        if (status.ok()) {
-                            dev_edgevision_agent->rewardCallback(reply.throughput(), reply.drops(),
-                                                                 reply.avg_latency());
-                            int runtime = std::ceil(std::chrono::duration_cast<std::chrono::seconds>(
-                                    std::chrono::high_resolution_clock::now() - dev_startTime).count());
+                    dev_edgevision_agent->rewardCallback(dnstr->contextMetrics.throughput(), dnstr->contextMetrics.drops(),
+                                                         dnstr->contextMetrics.avg_latency());
+                    int runtime = std::ceil(std::chrono::duration_cast<std::chrono::seconds>(
+                            std::chrono::high_resolution_clock::now() - dev_startTime).count());
 
-                            for (auto &el: edgevision_dwnstrList) {
-                                edgevisionBWs[i++] = dev_totalBandwidthData[el.bandwidth_id].getMbps(runtime);
-                            }
-                            dev_edgevision_agent->setState(reply.arrival_rate(), reply.queue_size(), 0, edgevisionBWs);
-                            target = dev_edgevision_agent->runStep();
-                            if (target == 0) {
-                                spdlog::get("container_agent")->trace("EdgeVision decision: 0@localhost");
-                            } else {
-                                spdlog::get("container_agent")->trace("EdgeVision  decision: {1:d}@{2:s}", target,
-                                                                      edgevision_dwnstrList[target - 1].offloading_ip);
-                            }
-                        } else {
-                            spdlog::get("container_agent")->error("{0:s} error {1:d}: {2:s}", dev_name,
-                                                                  status.error_code(), status.error_message());
-                        }
+                    for (auto &el: edgevision_dwnstrList) {
+                        edgevisionBWs[i++] = dev_totalBandwidthData[el.bandwidth_id].getMbps(runtime);
+                    }
+                    dev_edgevision_agent->setState(dnstr->contextMetrics.arrival_rate(), dnstr->contextMetrics.queue_size(), 0, edgevisionBWs);
+                    target = dev_edgevision_agent->runStep();
+                    if (target == 0) {
+                        spdlog::get("container_agent")->trace("EdgeVision decision: 0@localhost");
+                    } else {
+                        spdlog::get("container_agent")->trace("EdgeVision  decision: {1:d}@{2:s}", target,
+                                                              edgevision_dwnstrList[target - 1].offloading_ip);
                     }
                 }
                 if (target == 0) {
@@ -390,71 +388,67 @@ void DeviceAgent::collectRuntimeMetrics() {
     }
 }
 
-void DeviceAgent::testNetwork(float min_size, float max_size, int num_loops) {
+void DeviceAgent::testNetwork(const std::string &msg) {
+    LoopRange range;
+    if (!range.ParseFromString(msg)){
+        spdlog::get("container_agent")->error("Failed start network test with msg: {}", msg);
+        return;
+    }
     spdlog::get("container_agent")->info("Testing network with min size: {}, max size: {}, num loops: {}",
-                                         min_size, max_size, num_loops);
+                                         range.min(), range.max(), range.repetitions());
     ClockType timestamp;
     std::random_device rd;
     std::mt19937 gen(rd());
-    std::normal_distribution<float> dist = std::normal_distribution<float>((min_size + max_size) / 2, (max_size - min_size) / 6);
+    std::normal_distribution<float> dist = std::normal_distribution<float>((range.min() + range.max()) / 2,
+                                                                           (range.max() - range.min()) / 6);
     std::vector<char> data;
-    data.reserve(static_cast<size_t>(max_size));
-    for (int i = 0; i < max_size + 1; i++) {
+    data.reserve(static_cast<size_t>(range.max()));
+    for (int i = 0; i < range.max() + 1; i++) {
         data.push_back('x');
     }
 
-    for (int i = 0; i < num_loops; i++) {
+    for (int i = 0; i < range.repetitions(); i++) {
         DummyMessage request;
-        EmptyMessage reply;
-        ClientContext context;
-        Status status;
         int size = std::abs((int) dist(gen));
         timestamp = std::chrono::high_resolution_clock::now();
         request.set_origin_name(dev_name);
         request.set_gen_time(std::chrono::duration_cast<TimePrecisionType>(timestamp.time_since_epoch()).count());
         spdlog::get("container_agent")->debug("Sending data of size: {}", size);
         request.set_data(data.data(), size);
-        std::unique_ptr<ClientAsyncResponseReader<EmptyMessage>> rpc(
-                controller_stub->AsyncSendDummyData(&context, request, controller_sending_cq));
-
-        rpc->Finish(&reply, &status, (void *)1);
-        CompletionQueue* sending_cq = controller_sending_cq;
-        void *got_tag;
-        bool ok = false;
-        if (sending_cq != nullptr) {
-            GPR_ASSERT(sending_cq->Next(&got_tag, &ok));
-        } else {
-            i--;
-        }
+        std::string message = MSG_TYPE[DUMMY_DATA] + " " + request.SerializeAsString();
+        message_t zmq_msg(message.size());
+        memcpy(zmq_msg.data(), message.data(), message.size());
+        controller_socket.send(zmq_msg, send_flags::dontwait);
+        message_t reply;
+        if (!controller_socket.recv(reply)) { i--; }
     }
     spdlog::get("container_agent")->info("Network test completed");
 }
 
-bool DeviceAgent::CreateContainer(ContainerConfig &c) {
+void DeviceAgent::CreateContainer(const std::string &msg) {
+    ContainerConfig c;
+    if (!c.ParseFromString(msg)){
+        spdlog::get("container_agent")->error("Failed start container with msg: {}", msg);
+        return;
+    }
     spdlog::get("container_agent")->info("Creating container: {}", c.name());
     try {
         std::string command = runDocker(c.executable(), c.name(), c.json_config(), c.device(), c.control_port());
         std::string target = absl::StrFormat("%s:%d", "localhost", c.control_port());
         if (c.name().find("sink") != std::string::npos) {
-            return true;
+            return;
         }
         std::vector<int> dims = {};
         for (auto &dim: c.input_shape()) {
             dims.push_back(dim);
         }
         std::lock_guard<std::mutex> lock(containers_mutex);
-        containers[c.name()] = {c.name(), InDeviceCommands::NewStub(
-                grpc::CreateChannel(target, grpc::InsecureChannelCredentials())),
-                                new CompletionQueue(), static_cast<unsigned int>(c.control_port()), 0, command,
+        containers[c.name()] = {c.name(), static_cast<unsigned int>(c.control_port()), 0, command,
                                 static_cast<ModelType>(c.model_type()), dims, 1, {}};
-
-        if (command == "") {
-            return false;
-        }
-        return true;
+        return;
     } catch (std::exception &e) {
         spdlog::get("container_agent")->error("Error creating container: {}", e.what());
-        return false;
+        return;
     }
 }
 
@@ -462,41 +456,54 @@ void DeviceAgent::ContainersLifeCheck() {
     std::lock_guard<std::mutex> lock(containers_mutex);
     for (auto &container: containers) {
         if (container.second.pid == 0) continue;
-        EmptyMessage request;
-        EmptyMessage reply;
-        ClientContext context;
-        Status status;
-        CompletionQueue *cq = container.second.cq;
-        if (cq == nullptr) {
-            spdlog::get("container_agent")->error("Container {}'s completion queue is null!", container.first);
-            continue;
-        }
-        std::unique_ptr<ClientAsyncResponseReader<EmptyMessage>> rpc(
-                container.second.stub->AsyncKeepAlive(&context, request, cq));
-
-        rpc->Finish(&reply, &status, (void *)1);
-        void *got_tag;
-        bool ok = false;
-        if (cq != nullptr) GPR_ASSERT(cq->Next(&got_tag, &ok));
-        if (!status.ok() && container.second.startCommand != "") {
-            if (runDocker(container.second.startCommand) != 0) {
-                container.second.pid = 0;
+        if (system(("docker inspect -f '{{.State.Running}}' " + container.first).c_str()) != 0) {
+            if (container.second.startCommand != "") {
+                spdlog::get("container_agent")->error("Container {} is not running anymore, trying restart.", container.first);
+                if (runDocker(container.second.startCommand) != 0) container.second.pid = 0;
             }
         }
     }
 }
 
-void DeviceAgent::StopContainer(const DevContainerHandle &container, ContainerSignal message) {
-    EmptyMessage reply;
-    ClientContext context;
-    Status status;
-    std::unique_ptr<ClientAsyncResponseReader<EmptyMessage>> rpc(
-            container.stub->AsyncStopExecution(&context, message, container.cq));
+void DeviceAgent::StopContainer(const std::string &msg) {
+    ContainerSignal request;
+    if (!request.ParseFromString(msg)){
+        spdlog::get("container_agent")->error("Failed stopping container with msg: {}", msg);
+        return;
+    }
+    StopContainer(request);
+}
 
-    rpc->Finish(&reply, &status, (void *)1);
-    void *got_tag;
-    bool ok = false;
-    if (container.cq != nullptr) GPR_ASSERT(container.cq->Next(&got_tag, &ok));
+void DeviceAgent::StopContainer(ContainerSignal request) {
+    if (containers.find(request.name()) == containers.end()) {
+        if (request.name().find("sink") != std::string::npos) {
+            std::string command = "docker stop " + request.name();
+            int status = system(command.c_str());
+            containers.erase(request.name());
+            spdlog::get("container_agent")->info("Stopped container: {} with status: {}", request.name(), status);
+        } else {
+            spdlog::get("container_agent")->error("Container {} not found for deletion!", request.name());
+            return;
+        }
+    } else {
+        unsigned int pid = containers[request.name()].pid;
+        containers[request.name()].pid = 0;
+        spdlog::get("container_agent")->info("Stopping container: {}", request.name());
+        sendMessageToContainer(request.name(), MSG_TYPE[CONTAINER_STOP], request.SerializeAsString());
+        std::lock_guard<std::mutex> lock(containers_mutex);
+        containers.erase(request.name());
+        dev_profiler->removePid(pid);
+    }
+}
+
+void DeviceAgent::UpdateContainerSender(const std::string &msg) {
+    ContainerLink request;
+    if (!request.ParseFromString(msg)){
+        spdlog::get("container_agent")->error("Failed update container sender with msg: {}", msg);
+        return;
+    }
+    UpdateContainerSender(request.mode(), request.name(), request.downstream_name(), request.ip(), request.port(),
+                          request.data_portion(), request.old_link(), request.timestamp(), request.offloading_duration());
 }
 
 void DeviceAgent::UpdateContainerSender(int mode, const std::string &cont_name, const std::string &dwnstr,
@@ -504,9 +511,6 @@ void DeviceAgent::UpdateContainerSender(int mode, const std::string &cont_name, 
                                         const std::string &old_link, const int64_t &timestamp,
                                         const int &offloading_duration) {
     Connection request;
-    EmptyMessage reply;
-    ClientContext context;
-    Status status;
     request.set_mode(mode);
     request.set_name(dwnstr);
     request.set_ip(ip);
@@ -521,40 +525,27 @@ void DeviceAgent::UpdateContainerSender(int mode, const std::string &cont_name, 
         spdlog::get("container_agent")->error("UpdateSender: Container {} not found!", cont_name);
         return;
     }
-    std::unique_ptr<ClientAsyncResponseReader<EmptyMessage>> rpc(
-            containers[cont_name].stub->AsyncUpdateSender(&context, request, containers[cont_name].cq));
-
-    rpc->Finish(&reply, &status, (void *)1);
-    void *got_tag;
-    bool ok = false;
-    if (containers[cont_name].cq != nullptr) GPR_ASSERT(containers[cont_name].cq->Next(&got_tag, &ok));
+    sendMessageToContainer(cont_name, MSG_TYPE[UPDATE_SENDER], request.SerializeAsString());
 }
 
-void DeviceAgent::SyncDatasources(const std::string &cont_name, const std::string &dsrc) {
-    indevicecommands::Int32 request;
-    EmptyMessage reply;
-    ClientContext context;
-    Status status;
-    request.set_value(containers[dsrc].port);
-    //check if cont_name is in containers
-    if (containers.find(cont_name) == containers.end()) {
-        spdlog::get("container_agent")->error("SyncDatasources: Container {} not found!", cont_name);
+void DeviceAgent::SyncDatasources(const std::string &msg) {
+    ContainerLink link;
+    if (!link.ParseFromString(msg)){
+        spdlog::get("container_agent")->error("Failed sync datasources with msg: {}", msg);
         return;
     }
-    std::unique_ptr<ClientAsyncResponseReader<EmptyMessage>> rpc(
-            containers[cont_name].stub->AsyncSyncDatasources(&context, request, containers[cont_name].cq));
-
-    rpc->Finish(&reply, &status, (void *)1);
-    void *got_tag;
-    bool ok = false;
-    if (containers[cont_name].cq != nullptr) GPR_ASSERT(containers[cont_name].cq->Next(&got_tag, &ok));
+    indevicecommands::Int32 request;
+    request.set_value(containers[link.downstream_name()].port);
+    //check if cont_name is in containers
+    if (containers.find(link.name()) == containers.end()) {
+        spdlog::get("container_agent")->error("SyncDatasources: Container {} not found!", link.name());
+        return;
+    }
+    sendMessageToContainer(link.name(), MSG_TYPE[SYNC_DATASOURCES], request.SerializeAsString());
 }
 
 SystemInfo DeviceAgent::Ready(const std::string &ip) {
     ConnectionConfigs request;
-    SystemInfo reply;
-    ClientContext context;
-    Status status;
     request.set_device_name(dev_name);
     request.set_device_type(dev_type);
     request.set_ip_address(ip);
@@ -587,59 +578,63 @@ SystemInfo DeviceAgent::Ready(const std::string &ip) {
         request.set_processors(dev_numCudaDevices);
         request.add_memory(sys_info.totalram * sys_info.mem_unit / 1000000);
     }
-
-    std::unique_ptr<ClientAsyncResponseReader<SystemInfo>> rpc(
-            controller_stub->AsyncAdvertiseToController(&context, request, controller_sending_cq));
-
-    rpc->Finish(&reply, &status, (void *)1);
-    void *got_tag;
-    bool ok = false;
-    if (controller_sending_cq != nullptr) GPR_ASSERT(controller_sending_cq->Next(&got_tag, &ok));
-    if (!status.ok()) {
-        spdlog::error("Ready RPC failed with code: {} and message: {}", status.error_code(), status.error_message());
+    std::string msg = absl::StrFormat("%s %s", MSG_TYPE[DEVICE_ADVERTISEMENT], request.SerializeAsString());
+    message_t zmq_msg(msg.size());
+    memcpy(zmq_msg.data(), msg.data(), msg.size());
+    controller_socket.send(zmq_msg, send_flags::dontwait);
+    message_t reply;
+    if (!controller_socket.recv(reply)) {
+        spdlog::error("Ready message failed! Is the Server running?");
         exit(1);
     }
-    dev_system_name = reply.name();
-    dev_experiment_name = reply.experiment();
-    return reply;
+    SystemInfo info;
+    if (!info.ParseFromString(std::string(static_cast<char *>(reply.data()), reply.size()))) {
+        spdlog::get("container_agent")->error("Failed to parse SystemInfo from reply: {}", std::string(static_cast<char *>(reply.data()), reply.size()));
+        exit(1);
+    }
+    dev_system_name = info.name();
+    dev_experiment_name = info.experiment();
+    return info;
 }
 
-void DeviceAgent::HandleDeviceRecvRpcs() {
-    new ReportStartRequestHandler(&device_service, device_cq.get(), this);
-    new StartFederatedLearningRequestHandler(&device_service, device_cq.get(), this);
-    if (dev_system_name == "bce") {
-        new BCEdgeConfigUpdateRequestHandler(&device_service, device_cq.get(), this);
-    }
-    void *tag;
-    bool ok;
+void DeviceAgent::HandleDeviceMessages() {
     while (running) {
-        if (!device_cq->Next(&tag, &ok)) {
-            break;
+        message_t message;
+        if (in_device_socket.recv(message, recv_flags::none)) {
+            std::string raw = message.to_string();
+            std::istringstream iss(raw);
+            std::string topic, payload;
+            iss >> topic;
+            std::getline(iss, payload);
+            if (in_device_handlers.count(topic)) {
+                in_device_handlers[topic](payload);
+            } else {
+                spdlog::get("container_agent")->error("Received unknown device topic: {}", topic);
+            }
+        } else {
+            spdlog::get("container_agent")->error("Received unsupported message in device communication!");
         }
-        GPR_ASSERT(ok);
-        static_cast<RequestHandler *>(tag)->Proceed();
     }
 }
 
-void DeviceAgent::HandleControlRecvRpcs() {
-    new ExecuteNetworkTestRequestHandler(&controller_service, controller_cq.get(), this);
-    new StartContainerRequestHandler(&controller_service, controller_cq.get(), this);
-    new UpdateDownstreamRequestHandler(&controller_service, controller_cq.get(), this);
-    new SyncDatasourceRequestHandler(&controller_service, controller_cq.get(), this);
-    new UpdateBatchsizeRequestHandler(&controller_service, controller_cq.get(), this);
-    new UpdateResolutionRequestHandler(&controller_service, controller_cq.get(), this);
-    new UpdateTimeKeepingRequestHandler(&controller_service, controller_cq.get(), this);
-    new ReturnFlRequestHandler(&controller_service, controller_cq.get(), this);
-    new StopContainerRequestHandler(&controller_service, controller_cq.get(), this);
-    new ShutdownRequestHandler(&controller_service, controller_cq.get(), this);
-    void *tag;
-    bool ok;
+void DeviceAgent::HandleControlCommands() {
     while (running) {
-        if (!controller_cq->Next(&tag, &ok)) {
-            break;
+        message_t message;
+        if (controller_message_queue.recv(message, recv_flags::none)) {
+            std::string raw = message.to_string();
+            std::istringstream iss(raw);
+            std::string topic, type, payload;
+            iss >> topic;
+            iss >> type;
+            std::getline(iss, payload);
+            if (controller_handlers.count(type)) {
+                controller_handlers[type](payload);
+            } else {
+                spdlog::get("container_agent")->error("Received unknown controller type: {} (topic: {})", type, topic);
+            }
+        } else {
+            spdlog::get("container_agent")->error("Received unsupported message in controller communication!");
         }
-        GPR_ASSERT(ok);
-        static_cast<RequestHandler *>(tag)->Proceed();
     }
 }
 
@@ -662,315 +657,107 @@ int getContainerProcessPid(std::string container_name_or_id) {
 }
 
 void DeviceAgent::ReportStartRequestHandler::Proceed() {
-    if (status == CREATE) {
-        status = PROCESS;
-        service->RequestReportMsvcStart(&ctx, &request, &responder, cq, cq, this);
-    } else if (status == PROCESS) {
-        new ReportStartRequestHandler(service, cq, device_agent);
-        int pid = getContainerProcessPid(request.msvc_name());
-        device_agent->containers[request.msvc_name()].pid = pid;
-        device_agent->dev_profiler->addPid(pid);
-        spdlog::get("container_agent")->info("Received start report from {} with pid: {}", request.msvc_name(), pid);
-        reply.set_pid(pid);
-        status = FINISH;
-        responder.Finish(reply, Status::OK, this);
-    } else {
-        GPR_ASSERT(status == FINISH);
-        delete this;
-    }
+    int pid = getContainerProcessPid(request.msvc_name());
+    device_agent->containers[request.msvc_name()].pid = pid;
+    device_agent->dev_profiler->addPid(pid);
+    spdlog::get("container_agent")->info("Received start report from {} with pid: {}", request.msvc_name(), pid);
+    reply.set_pid(pid);
+    status = FINISH;
+    responder.Finish(reply, Status::OK, this);
 }
 
 void DeviceAgent::StartFederatedLearningRequestHandler::Proceed() {
-    if (status == CREATE) {
-        status = PROCESS;
-        service->RequestStartFederatedLearning(&ctx, &request, &responder, cq, cq, this);
-    } else if (status == PROCESS) {
-        new StartFederatedLearningRequestHandler(service, cq, device_agent);
-        ClientContext context;
-        Status sending_status;
-        CompletionQueue* sending_cq = device_agent->controller_sending_cq;
-        request.set_device_name(device_agent->dev_name);
-        std::unique_ptr<ClientAsyncResponseReader<EmptyMessage>> rpc(
-                device_agent->controller_stub->AsyncForwardFl(&context, request, sending_cq));
-        rpc->Finish(&reply, &sending_status, (void *)1);
-        void *got_tag;
-        bool ok = false;
-        if (sending_cq != nullptr) GPR_ASSERT(sending_cq->Next(&got_tag, &ok));
-        status = FINISH;
-        responder.Finish(reply, sending_status, this);
-    } else {
-        GPR_ASSERT(status == FINISH);
-        delete this;
-    }
+    ClientContext context;
+    Status sending_status;
+    CompletionQueue* sending_cq = device_agent->controller_sending_cq;
+    request.set_device_name(device_agent->dev_name);
+    std::unique_ptr<ClientAsyncResponseReader<EmptyMessage>> rpc(
+            device_agent->controller_stub->AsyncForwardFl(&context, request, sending_cq));
+    void *got_tag;
+    bool ok = false;
+    if (sending_cq != nullptr) GPR_ASSERT(sending_cq->Next(&got_tag, &ok));
 }
 
 void DeviceAgent::BCEdgeConfigUpdateRequestHandler::Proceed() {
-    if (status == CREATE) {
-        status = PROCESS;
-        service->RequestBCEdgeConfigUpdate(&ctx, &request, &responder, cq, cq, this);
-    } else if (status == PROCESS) {
-        new BCEdgeConfigUpdateRequestHandler(service, cq, device_agent);
-        DevContainerHandle *node = &device_agent->containers[request.msvc_name()];
-        device_agent->dev_bcedge_agent->rewardCallback(request.throughput(), request.latency(), request.slo(), node->hwMetrics.gpuMemUsage);
-        device_agent->dev_bcedge_agent->setState(node->modelType, node->dataShape, request.slo());
-        int batching, scaling, memory;
-        std::tie(batching, scaling, memory) = device_agent->dev_bcedge_agent->runStep();
-        reply.set_batch_size(batching);
-        node->instances = scaling;
-        reply.set_shared_mem_config(memory);
-        status = FINISH;
-        responder.Finish(reply, Status::OK, this);
-    } else {
-        GPR_ASSERT(status == FINISH);
-        delete this;
-    }
+    DevContainerHandle *node = &device_agent->containers[request.msvc_name()];
+    device_agent->dev_bcedge_agent->rewardCallback(request.throughput(), request.latency(), request.slo(), node->hwMetrics.gpuMemUsage);
+    device_agent->dev_bcedge_agent->setState(node->modelType, node->dataShape, request.slo());
+    int batching, scaling, memory;
+    std::tie(batching, scaling, memory) = device_agent->dev_bcedge_agent->runStep();
+    reply.set_batch_size(batching);
+    node->instances = scaling;
+    reply.set_shared_mem_config(memory);
+    status = FINISH;
+    responder.Finish(reply, Status::OK, this);
 }
 
-void DeviceAgent::ExecuteNetworkTestRequestHandler::Proceed() {
-    if (status == CREATE) {
-        status = PROCESS;
-        service->RequestExecuteNetworkTest(&ctx, &request, &responder, cq, cq, this);
-    } else if (status == PROCESS) {
-        new ExecuteNetworkTestRequestHandler(service, cq, device_agent);
-        status = FINISH;
-        responder.Finish(reply, Status::OK, this);
-        device_agent->testNetwork((float) request.min(), (float) request.max(), request.repetitions());
-    } else {
-        GPR_ASSERT(status == FINISH);
-        delete this;
-    }
-}
-
-void DeviceAgent::StartContainerRequestHandler::Proceed() {
-    if (status == CREATE) {
-        status = PROCESS;
-        service->RequestStartContainer(&ctx, &request, &responder, cq, cq, this);
-    } else if (status == PROCESS) {
-        new StartContainerRequestHandler(service, cq, device_agent);
-        bool success = device_agent->CreateContainer(request);
-        if (!success) {
-            status = FINISH;
-            responder.Finish(reply, Status::CANCELLED, this);
-        } else {
-            status = FINISH;
-            responder.Finish(reply, Status::OK, this);
-        }
-    } else {
-        GPR_ASSERT(status == FINISH);
-        delete this;
-    }
-}
-
-void DeviceAgent::StopContainerRequestHandler::Proceed() {
-    if (status == CREATE) {
-        status = PROCESS;
-        service->RequestStopContainer(&ctx, &request, &responder, cq, cq, this);
-    } else if (status == PROCESS) {
-        new StopContainerRequestHandler(service, cq, device_agent);
-        if (device_agent->containers.find(request.name()) == device_agent->containers.end()) {
-            if (request.name().find("sink") != std::string::npos) {
-                std::string command = "docker stop " + request.name();
-                int status = system(command.c_str());
-                device_agent->containers.erase(request.name());
-                spdlog::get("container_agent")->info("Stopped container: {} with status: {}", request.name(), status);
-            } else {
-                spdlog::get("container_agent")->error("Container {} not found for deletion!", request.name());
-                status = FINISH;
-                responder.Finish(reply, Status::CANCELLED, this);
-                return;
-            }
-        } else {
-            unsigned int pid = device_agent->containers[request.name()].pid;
-            device_agent->containers[request.name()].pid = 0;
-            spdlog::get("container_agent")->info("Stopping container: {}", request.name());
-            DeviceAgent::StopContainer(device_agent->containers[request.name()], request);
-            std::lock_guard<std::mutex> lock(device_agent->containers_mutex);
-            device_agent->containers.erase(request.name());
-            device_agent->dev_profiler->removePid(pid);
-        }
-        status = FINISH;
-        responder.Finish(reply, Status::OK, this);
-    } else {
-        GPR_ASSERT(status == FINISH);
-        delete this;
-    }
-}
-
-void DeviceAgent::UpdateDownstreamRequestHandler::Proceed() {
-    if (status == CREATE) {
-        status = PROCESS;
-        service->RequestUpdateDownstream(&ctx, &request, &responder, cq, cq, this);
-    } else if (status == PROCESS) {
-        new UpdateDownstreamRequestHandler(service, cq, device_agent);
-        device_agent->UpdateContainerSender(request.mode(), request.name(), request.downstream_name(), request.ip(), request.port(), request.data_portion(), request.old_link(), request.timestamp(), request.offloading_duration());
-        status = FINISH;
-        responder.Finish(reply, Status::OK, this);
-    } else {
-        GPR_ASSERT(status == FINISH);
-        delete this;
-    }
-}
-
-void DeviceAgent::SyncDatasourceRequestHandler::Proceed() {
-    if (status == CREATE) {
-        status = PROCESS;
-        service->RequestSyncDatasource(&ctx, &request, &responder, cq, cq, this);
-    } else if (status == PROCESS) {
-        new SyncDatasourceRequestHandler(service, cq, device_agent);
-        device_agent->SyncDatasources(request.name(), request.downstream_name());
-        status = FINISH;
-        responder.Finish(reply, Status::OK, this);
-    } else {
-        GPR_ASSERT(status == FINISH);
-        delete this;
-    }
-}
 
 void DeviceAgent::UpdateBatchsizeRequestHandler::Proceed() {
-    if (status == CREATE) {
-        status = PROCESS;
-        service->RequestUpdateBatchSize(&ctx, &request, &responder, cq, cq, this);
-    } else if (status == PROCESS) {
-        new UpdateBatchsizeRequestHandler(service, cq, device_agent);
-        ClientContext context;
-        Status state;
-        indevicecommands::Int32 bs;
-        bs.set_value(request.value().at(0));
+    indevicecommands::Int32 bs;
+    bs.set_value(request.value().at(0));
 
-        //check if cont_name is in containers
-        if (device_agent->containers.find(request.name()) == device_agent->containers.end()) {
-            spdlog::get("container_agent")->error("UpdateBatchSize: Container {} not found!", request.name());
-            status = FINISH;
-            responder.Finish(reply, Status::CANCELLED, this);
-            return;
-        }
-        std::unique_ptr<ClientAsyncResponseReader<EmptyMessage>> rpc(
-                device_agent->containers[request.name()].stub->AsyncUpdateBatchSize(&context, bs,
-                                                                                    device_agent->containers[request.name()].cq));
-
-        rpc->Finish(&reply, &state, (void *)1);
-        void *got_tag;
-        bool ok = false;
-        if (device_agent->containers[request.name()].cq != nullptr) GPR_ASSERT(device_agent->containers[request.name()].cq->Next(&got_tag, &ok));
-        status = FINISH;
-        responder.Finish(reply, Status::OK, this);
-    } else {
-        GPR_ASSERT(status == FINISH);
-        delete this;
+    //check if cont_name is in containers
+    if (device_agent->containers.find(request.name()) == device_agent->containers.end()) {
+        spdlog::get("container_agent")->error("UpdateBatchSize: Container {} not found!", request.name());
+        return;
     }
+    std::unique_ptr<ClientAsyncResponseReader < EmptyMessage>>
+    rpc(
+            device_agent->containers[request.name()].stub->AsyncUpdateBatchSize(&context, bs,
+                                                                                device_agent->containers[request.name()].cq));
 }
 
 void DeviceAgent::UpdateResolutionRequestHandler::Proceed() {
-    if (status == CREATE) {
-        status = PROCESS;
-        service->RequestUpdateResolution(&ctx, &request, &responder, cq, cq, this);
-    } else if (status == PROCESS) {
-        new UpdateResolutionRequestHandler(service, cq, device_agent);
-        ClientContext context;
-        Status state;
-        indevicecommands::Dimensions dims;
-        dims.set_channels(request.value().at(0));
-        dims.set_height(request.value().at(1));
-        dims.set_width(request.value().at(2));
+    indevicecommands::Dimensions dims;
+    dims.set_channels(request.value().at(0));
+    dims.set_height(request.value().at(1));
+    dims.set_width(request.value().at(2));
 
-        //check if cont_name is in containers
-        if (device_agent->containers.find(request.name()) == device_agent->containers.end()) {
-            spdlog::get("container_agent")->error("UpdateResolution: Container {} not found!", request.name());
-            status = FINISH;
-            responder.Finish(reply, Status::CANCELLED, this);
-            return;
-        }
-        std::unique_ptr<ClientAsyncResponseReader<EmptyMessage>> rpc(
-                device_agent->containers[request.name()].stub->AsyncUpdateResolution(&context, dims,
-                                                                                    device_agent->containers[request.name()].cq));
-
-        rpc->Finish(&reply, &state, (void *)1);
-        void *got_tag;
-        bool ok = false;
-        if (device_agent->containers[request.name()].cq != nullptr) GPR_ASSERT(device_agent->containers[request.name()].cq->Next(&got_tag, &ok));
-        status = FINISH;
-        responder.Finish(reply, Status::OK, this);
-    } else {
-        GPR_ASSERT(status == FINISH);
-        delete this;
+    //check if cont_name is in containers
+    if (device_agent->containers.find(request.name()) == device_agent->containers.end()) {
+        spdlog::get("container_agent")->error("UpdateResolution: Container {} not found!", request.name());
+        return;
     }
+    std::unique_ptr<ClientAsyncResponseReader<EmptyMessage>> rpc(
+            device_agent->containers[request.name()].stub->AsyncUpdateResolution(&context, dims,
+                                                                                device_agent->containers[request.name()].cq));
 }
 
 void DeviceAgent::UpdateTimeKeepingRequestHandler::Proceed() {
-    if (status == CREATE) {
-        status = PROCESS;
-        service->RequestUpdateTimeKeeping(&ctx, &request, &responder, cq, cq, this);
-    } else if (status == PROCESS) {
-        new UpdateTimeKeepingRequestHandler(service, cq, device_agent);
-        responder.Finish(reply, Status::OK, this);
-
-        ClientContext context;
-        Status state;
-
-        //check if cont_name is in containers
-        if (device_agent->containers.find(request.name()) == device_agent->containers.end()) {
-            spdlog::get("container_agent")->error("UpdateTimeKeeping: Container {} not found!", request.name());
-            status = FINISH;
-            return;
-        }
-        std::unique_ptr<ClientAsyncResponseReader<EmptyMessage>> rpc(
-                device_agent->containers[request.name()].stub->AsyncUpdateTimeKeeping(&context, request,
-                                                                                     device_agent->containers[request.name()].cq));
-
-        rpc->Finish(&reply, &state, (void *)1);
-        void *got_tag;
-        bool ok = false;
-        if (device_agent->containers[request.name()].cq != nullptr) GPR_ASSERT(device_agent->containers[request.name()].cq->Next(&got_tag, &ok));
+    //check if cont_name is in containers
+    if (device_agent->containers.find(request.name()) == device_agent->containers.end()) {
+        spdlog::get("container_agent")->error("UpdateTimeKeeping: Container {} not found!", request.name());
         status = FINISH;
-    } else {
-        GPR_ASSERT(status == FINISH);
-        delete this;
+        return;
     }
+    std::unique_ptr<ClientAsyncResponseReader<EmptyMessage>> rpc(
+            device_agent->containers[request.name()].stub->AsyncUpdateTimeKeeping(&context, request,
+                                                                                 device_agent->containers[request.name()].cq));
 }
 
 void DeviceAgent::ReturnFlRequestHandler::Proceed() {
-    if (status == CREATE) {
-        status = PROCESS;
-        service->RequestReturnFl(&ctx, &request, &responder, cq, cq, this);
-    } else if (status == PROCESS) {
-        new ReturnFlRequestHandler(service, cq, device_agent);
-        ClientContext context;
-        Status sending_status;
-        CompletionQueue* sending_cq = device_agent->containers[request.name()].cq;
-        if (sending_cq == nullptr) {
-            spdlog::get("container_agent")->error("ReturnFl: Container {}'s cq is null!", request.name());
-            status = FINISH;
-            responder.Finish(reply, Status::CANCELLED, this);
-            return;
-        }
-        std::unique_ptr<ClientAsyncResponseReader<EmptyMessage>> rpc(
-                device_agent->containers[request.name()].stub->AsyncFederatedLearningReturn(&context, request, sending_cq));
-        rpc->Finish(&reply, &sending_status, (void *)1);
-        void *got_tag;
-        bool ok = false;
-        if (sending_cq != nullptr) GPR_ASSERT(sending_cq->Next(&got_tag, &ok));
-        status = FINISH;
-        responder.Finish(reply, Status::OK, this);
-    } else {
-        GPR_ASSERT(status == FINISH);
-        delete this;
+    CompletionQueue* sending_cq = device_agent->containers[request.name()].cq;
+    if (sending_cq == nullptr) {
+        spdlog::get("container_agent")->error("ReturnFl: Container {}'s cq is null!", request.name());
+        return;
     }
+    std::unique_ptr<ClientAsyncResponseReader<EmptyMessage>> rpc(
+            device_agent->containers[request.name()].stub->AsyncFederatedLearningReturn(&context, request, sending_cq));
+    rpc->Finish(&reply, &sending_status, (void *)1);
+    void *got_tag;
+    bool ok = false;
+    if (sending_cq != nullptr) GPR_ASSERT(sending_cq->Next(&got_tag, &ok));
 }
 
-void DeviceAgent::ShutdownRequestHandler::Proceed() {
-    if (status == CREATE) {
-        status = PROCESS;
-        service->RequestShutdown(&ctx, &request, &responder, cq, cq, this);
-    } else if (status == PROCESS) {
-        device_agent->running = false;
-        status = FINISH;
-        responder.Finish(reply, Status::OK, this);
-    } else {
-        GPR_ASSERT(status == FINISH);
-        delete this;
-        device_agent->controller_cq->Shutdown();
-        device_agent->device_cq->Shutdown();
-    }
+void DeviceAgent::Shutdown(const std::string &msg) {
+    running = false;
+}
+
+void DeviceAgent::sendMessageToContainer(const std::string &topik, const std::string &type, const std::string &content) {
+    std::string msg = absl::StrFormat("%s| %s %s", topik, type, content);
+    message_t zmq_msg(msg.size());
+    memcpy(zmq_msg.data(), msg.data(), msg.size());
+    in_device_message_queue.send(zmq_msg, send_flags::dontwait);
 }
 
 // Function to run the bash script with parameters from a JSON file

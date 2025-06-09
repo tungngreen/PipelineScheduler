@@ -7,9 +7,6 @@
 #include "absl/strings/str_format.h"
 #include "absl/flags/parse.h"
 #include "absl/flags/flag.h"
-#include <grpcpp/grpcpp.h>
-#include <grpcpp/ext/proto_server_reflection_plugin.h>
-#include <grpcpp/health_check_service_interface.h>
 #include <google/protobuf/empty.pb.h>
 #include <filesystem>
 #include <pqxx/pqxx>
@@ -37,10 +34,6 @@ ABSL_DECLARE_FLAG(uint16_t, profiling_mode);
 
 using json = nlohmann::ordered_json;
 
-using grpc::ServerBuilder;
-using grpc::ServerContext;
-using grpc::ServerCompletionQueue;
-using indevicecommands::InDeviceCommands;
 using indevicecommands::ContainerSignal;
 using indevicecommands::Connection;
 using indevicecommands::TimeKeeping;
