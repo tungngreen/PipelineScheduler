@@ -1,9 +1,10 @@
 #include "fcpo_learning.h"
 
 FCPOAgent::FCPOAgent(std::string& cont_name, uint state_size, uint resolution_size, uint max_batch,  uint scaling_size,
-                     torch::Dtype precision, uint update_steps, uint update_steps_inc, uint federated_steps, double lambda, double gamma,
-                     double clip_epsilon, double penalty_weight, double theta, double sigma, double phi, int seed)
-        : precision(precision), cont_name(cont_name), lambda(lambda), gamma(gamma),
+                     socket_t *socket, torch::Dtype precision, uint update_steps, uint update_steps_inc,
+                     uint federated_steps, double lambda, double gamma, double clip_epsilon, double penalty_weight,
+                     double theta, double sigma, double phi, int seed)
+        : precision(precision), cont_name(cont_name), device_socket(socket), lambda(lambda), gamma(gamma),
           clip_epsilon(clip_epsilon), penalty_weight(penalty_weight), theta(theta), sigma(sigma), phi(phi),
           state_size(state_size), resolution_size(resolution_size), max_batch(max_batch), scaling_size(scaling_size),
           update_steps(update_steps), update_steps_inc(update_steps_inc), federated_steps(federated_steps) {
@@ -122,14 +123,22 @@ void FCPOAgent::federatedUpdate(const double loss) {
     torch::save(model, oss);
     request.set_network(oss.str());
     oss.str("");
-//    std::unique_ptr<ClientAsyncResponseReader<EmptyMessage>> rpc(
-//            stub->AsyncStartFederatedLearning(&context, request, cq));
-//    if (!status.ok()){
-//        spdlog::get("container_agent")->error("Federated update failed: {}", status.error_message());
-//        federated_steps_counter = 1; // 1 means that we are starting local updates again until the next federation
-//    } else {
-//        federatedStartTime = std::chrono::high_resolution_clock::now();
-//    }
+
+    std::string msg = absl::StrFormat("%s %s", MSG_TYPE[START_FL], request.SerializeAsString());
+    message_t zmq_msg(msg.size()), reply;
+    memcpy(zmq_msg.data(), msg.data(), msg.size());
+    if (!device_socket->send(zmq_msg, send_flags::dontwait)) {
+        spdlog::get("container_agent")->error("Failed to send federated update request to device socket.");
+        federated_steps_counter = 1; // 1 means that we are starting local updates again until the next federation
+        return;
+    }
+    if (device_socket->recv(reply) && reply.to_string() == "success") {
+        spdlog::get("container_agent")->info("Federated update request sent successfully.");
+        federatedStartTime = std::chrono::high_resolution_clock::now();
+    } else {
+        spdlog::get("container_agent")->error("Federated update failed (no response or error).");
+        federated_steps_counter = 1; // 1 means that we are starting local updates again until the next federation
+    }
 }
 
 void FCPOAgent::federatedUpdateCallback(FlData &response) {

@@ -77,23 +77,25 @@ DeviceAgent::DeviceAgent() {
     dev_metricsServerConn = connectToMetricsServer(dev_metricsServerConfigs, "Device_agent");
 
     in_device_handlers = {
-        {MSG_TYPE[MSVC_START_REPORT], std::bind(&DeviceAgent::handleThis, this, std::placeholders::_1)},
-        {MSG_TYPE[START_FL], std::bind(&DeviceAgent::handleThis, this, std::placeholders::_1)},
-        {MSG_TYPE[BCEDGE_UPDATE], std::bind(&DeviceAgent::handleThis, this, std::placeholders::_1)},
-        {MSG_TYPE[CONTEXT_METRICS], std::bind(&DeviceAgent::handleThis, this, std::placeholders::_1)}
+        {MSG_TYPE[MSVC_START_REPORT], std::bind(&DeviceAgent::ReceiveStartReport, this, std::placeholders::_1)},
+        {MSG_TYPE[START_FL], std::bind(&DeviceAgent::ForwardFL, this, std::placeholders::_1)},
+        {MSG_TYPE[BCEDGE_UPDATE], std::bind(&DeviceAgent::InferBCEdge, this, std::placeholders::_1)},
+        {MSG_TYPE[CONTEXT_METRICS], std::bind(&DeviceAgent::ReceiveContainerMetrics, this, std::placeholders::_1)}
     };
 
     controller_handlers = {
         {MSG_TYPE[NETWORK_CHECK], std::bind(&DeviceAgent::testNetwork, this, std::placeholders::_1)},
         {MSG_TYPE[CONTAINER_START], std::bind(&DeviceAgent::CreateContainer, this, std::placeholders::_1)},
-        {MSG_TYPE[ADJUST_UPSTREAM], std::bind(static_cast<void (DeviceAgent::*)(const std::string&)>(&DeviceAgent::UpdateContainerSender), this, std::placeholders::_1)},
+        {MSG_TYPE[ADJUST_UPSTREAM], std::bind(static_cast<void (DeviceAgent::*)(const std::string&)>
+                                            (&DeviceAgent::UpdateContainerSender), this, std::placeholders::_1)},
         {MSG_TYPE[SYNC_DATASOURCES], std::bind(&DeviceAgent::SyncDatasources, this, std::placeholders::_1)},
-        {MSG_TYPE[BATCH_SIZE_UPDATE], std::bind(&DeviceAgent::handleThis, this, std::placeholders::_1)},
-        {MSG_TYPE[RESOLUTION_UPDATE], std::bind(&DeviceAgent::handleThis, this, std::placeholders::_1)},
-        {MSG_TYPE[TIME_KEEPING_UPDATE], std::bind(&DeviceAgent::handleThis, this, std::placeholders::_1)},
-        {MSG_TYPE[CONTAINER_STOP], std::bind(static_cast<void (DeviceAgent::*)(const std::string&)>(&DeviceAgent::StopContainer), this, std::placeholders::_1)},
-        {MSG_TYPE[RETURN_FL], std::bind(&DeviceAgent::handleThis, this, std::placeholders::_1)}
-        {MSG_TYPE[DEVICE_SHUTDOWN], std::bind(&DeviceAgent::handleContainerStart, this, std::placeholders::_1)}
+        {MSG_TYPE[BATCH_SIZE_UPDATE], std::bind(&DeviceAgent::UpdateBatchSize, this, std::placeholders::_1)},
+        {MSG_TYPE[RESOLUTION_UPDATE], std::bind(&DeviceAgent::UpdateResolution, this, std::placeholders::_1)},
+        {MSG_TYPE[TIME_KEEPING_UPDATE], std::bind(&DeviceAgent::UpdateTimeKeeping, this, std::placeholders::_1)},
+        {MSG_TYPE[CONTAINER_STOP], std::bind(static_cast<void (DeviceAgent::*)(const std::string&)>
+                                            (&DeviceAgent::StopContainer), this, std::placeholders::_1)},
+        {MSG_TYPE[RETURN_FL], std::bind(&DeviceAgent::ReturnFL, this, std::placeholders::_1)},
+        {MSG_TYPE[DEVICE_SHUTDOWN], std::bind(&DeviceAgent::Shutdown, this, std::placeholders::_1)}
     };
 
     dev_totalBandwidthData = std::vector<BandwidthManager>();
@@ -418,7 +420,9 @@ void DeviceAgent::testNetwork(const std::string &msg) {
         std::string message = MSG_TYPE[DUMMY_DATA] + " " + request.SerializeAsString();
         message_t zmq_msg(message.size());
         memcpy(zmq_msg.data(), message.data(), message.size());
-        controller_socket.send(zmq_msg, send_flags::dontwait);
+        if (!controller_socket.send(zmq_msg, send_flags::dontwait)) {
+            continue;
+        }
         message_t reply;
         if (!controller_socket.recv(reply)) { i--; }
     }
@@ -534,7 +538,7 @@ void DeviceAgent::SyncDatasources(const std::string &msg) {
         spdlog::get("container_agent")->error("Failed sync datasources with msg: {}", msg);
         return;
     }
-    indevicecommands::Int32 request;
+    indevicemessages::Int32 request;
     request.set_value(containers[link.downstream_name()].port);
     //check if cont_name is in containers
     if (containers.find(link.name()) == containers.end()) {
@@ -579,12 +583,14 @@ SystemInfo DeviceAgent::Ready(const std::string &ip) {
         request.add_memory(sys_info.totalram * sys_info.mem_unit / 1000000);
     }
     std::string msg = absl::StrFormat("%s %s", MSG_TYPE[DEVICE_ADVERTISEMENT], request.SerializeAsString());
-    message_t zmq_msg(msg.size());
+    message_t zmq_msg(msg.size()), reply;
     memcpy(zmq_msg.data(), msg.data(), msg.size());
-    controller_socket.send(zmq_msg, send_flags::dontwait);
-    message_t reply;
+    if (!controller_socket.send(zmq_msg, send_flags::dontwait)){
+        spdlog::error("Sending ready message failed! Is the Server running?");
+        exit(1);
+    }
     if (!controller_socket.recv(reply)) {
-        spdlog::error("Ready message failed! Is the Server running?");
+        spdlog::error("Ready message reply failed! Is the Server running correctly?");
         exit(1);
     }
     SystemInfo info;
@@ -656,97 +662,150 @@ int getContainerProcessPid(std::string container_name_or_id) {
     }
 }
 
-void DeviceAgent::ReportStartRequestHandler::Proceed() {
+void DeviceAgent::ReceiveStartReport(const std::string &msg) {
+    ProcessData request;
+    if (!request.ParseFromString(msg)){
+        spdlog::get("container_agent")->error("Error receiving container start report with msg: {}", msg);
+        return;
+    }
+
     int pid = getContainerProcessPid(request.msvc_name());
-    device_agent->containers[request.msvc_name()].pid = pid;
-    device_agent->dev_profiler->addPid(pid);
+    containers[request.msvc_name()].pid = pid;
+    dev_profiler->addPid(pid);
     spdlog::get("container_agent")->info("Received start report from {} with pid: {}", request.msvc_name(), pid);
+    ProcessData reply;
+    reply.set_msvc_name(request.msvc_name());
     reply.set_pid(pid);
-    status = FINISH;
-    responder.Finish(reply, Status::OK, this);
+    in_device_socket.send(message_t(reply.SerializeAsString()), send_flags::dontwait);
 }
 
-void DeviceAgent::StartFederatedLearningRequestHandler::Proceed() {
-    ClientContext context;
-    Status sending_status;
-    CompletionQueue* sending_cq = device_agent->controller_sending_cq;
-    request.set_device_name(device_agent->dev_name);
-    std::unique_ptr<ClientAsyncResponseReader<EmptyMessage>> rpc(
-            device_agent->controller_stub->AsyncForwardFl(&context, request, sending_cq));
-    void *got_tag;
-    bool ok = false;
-    if (sending_cq != nullptr) GPR_ASSERT(sending_cq->Next(&got_tag, &ok));
+void DeviceAgent::ForwardFL(const std::string &msg) {
+    FlData request;
+    if (!request.ParseFromString(msg)){
+        spdlog::get("container_agent")->error("Failed stopping container with msg: {}", msg);
+        return;
+    }
+    request.set_device_name(dev_name);
+
+    std::string message = absl::StrFormat("%s %s", MSG_TYPE[START_FL], request.SerializeAsString());
+    message_t zmq_msg(message.size()), reply;
+    memcpy(zmq_msg.data(), message.data(), message.size());
+    if (!controller_socket.send(zmq_msg, send_flags::dontwait)) {
+        spdlog::get("container_agent")->error("Failed to send FL data to controller.");
+        in_device_socket.send(message_t("error"), send_flags::dontwait);
+        return;
+    }
+    if (controller_socket.recv(reply)) {
+        spdlog::get("container_agent")->info("Forwarded FL data to controller successfully.");
+        in_device_socket.send(reply, send_flags::dontwait);
+    } else {
+        spdlog::get("container_agent")->error("Failed to receive reply from controller for FL data forwarding.");
+        in_device_socket.send(message_t("error"), send_flags::dontwait);
+    }
 }
 
-void DeviceAgent::BCEdgeConfigUpdateRequestHandler::Proceed() {
-    DevContainerHandle *node = &device_agent->containers[request.msvc_name()];
-    device_agent->dev_bcedge_agent->rewardCallback(request.throughput(), request.latency(), request.slo(), node->hwMetrics.gpuMemUsage);
-    device_agent->dev_bcedge_agent->setState(node->modelType, node->dataShape, request.slo());
+void DeviceAgent::InferBCEdge(const std::string &msg) {
+    BCEdgeData request;
+    if (!request.ParseFromString(msg)){
+        spdlog::get("container_agent")->error("Failed InferBCEdge with msg: {}", msg);
+        return;
+    }
+
+    DevContainerHandle *node = &containers[request.msvc_name()];
+    dev_bcedge_agent->rewardCallback(request.throughput(), request.latency(), request.slo(), node->hwMetrics.gpuMemUsage);
+    dev_bcedge_agent->setState(node->modelType, node->dataShape, request.slo());
     int batching, scaling, memory;
-    std::tie(batching, scaling, memory) = device_agent->dev_bcedge_agent->runStep();
+    std::tie(batching, scaling, memory) = dev_bcedge_agent->runStep();
+
+    BCEdgeConfig reply;
     reply.set_batch_size(batching);
     node->instances = scaling;
     reply.set_shared_mem_config(memory);
-    status = FINISH;
-    responder.Finish(reply, Status::OK, this);
+    in_device_socket.send(message_t(reply.SerializeAsString()), send_flags::dontwait);
 }
 
+void DeviceAgent::ReceiveContainerMetrics(const std::string &msg) {
+    ContainerMetrics request;
+    if (!request.ParseFromString(msg)){
+        spdlog::get("container_agent")->error("Failed to receive container metrics with msg: {}", msg);
+        return;
+    }
 
-void DeviceAgent::UpdateBatchsizeRequestHandler::Proceed() {
-    indevicecommands::Int32 bs;
+    //check if cont_name is in containers
+    if (containers.find(request.name()) == containers.end()) {
+        spdlog::get("container_agent")->error("ReceiveContainerMetrics: Container {} not found!", request.name());
+        return;
+    }
+
+    containers[request.name()].contextMetrics = request;
+}
+
+void DeviceAgent::UpdateBatchSize(const std::string &msg) {
+    ContainerInts request;
+    if (!request.ParseFromString(msg)){
+        spdlog::get("container_agent")->error("Failed UpdateBatchSize container with msg: {}", msg);
+        return;
+    }
+
+    indevicemessages::Int32 bs;
     bs.set_value(request.value().at(0));
 
     //check if cont_name is in containers
-    if (device_agent->containers.find(request.name()) == device_agent->containers.end()) {
+    if (containers.find(request.name()) == containers.end()) {
         spdlog::get("container_agent")->error("UpdateBatchSize: Container {} not found!", request.name());
         return;
     }
-    std::unique_ptr<ClientAsyncResponseReader < EmptyMessage>>
-    rpc(
-            device_agent->containers[request.name()].stub->AsyncUpdateBatchSize(&context, bs,
-                                                                                device_agent->containers[request.name()].cq));
+    sendMessageToContainer(request.name(), MSG_TYPE[BATCH_SIZE_UPDATE], bs.SerializeAsString());
 }
 
-void DeviceAgent::UpdateResolutionRequestHandler::Proceed() {
-    indevicecommands::Dimensions dims;
+void DeviceAgent::UpdateResolution(const std::string &msg) {
+    ContainerInts request;
+    if (!request.ParseFromString(msg)){
+        spdlog::get("container_agent")->error("Failed UpdateResolution container with msg: {}", msg);
+        return;
+    }
+
+    indevicemessages::Dimensions dims;
     dims.set_channels(request.value().at(0));
     dims.set_height(request.value().at(1));
     dims.set_width(request.value().at(2));
 
     //check if cont_name is in containers
-    if (device_agent->containers.find(request.name()) == device_agent->containers.end()) {
+    if (containers.find(request.name()) == containers.end()) {
         spdlog::get("container_agent")->error("UpdateResolution: Container {} not found!", request.name());
         return;
     }
-    std::unique_ptr<ClientAsyncResponseReader<EmptyMessage>> rpc(
-            device_agent->containers[request.name()].stub->AsyncUpdateResolution(&context, dims,
-                                                                                device_agent->containers[request.name()].cq));
+    sendMessageToContainer(request.name(), MSG_TYPE[RESOLUTION_UPDATE], dims.SerializeAsString());
 }
 
-void DeviceAgent::UpdateTimeKeepingRequestHandler::Proceed() {
+void DeviceAgent::UpdateTimeKeeping(const std::string &msg) {
+    TimeKeeping request;
+    if (!request.ParseFromString(msg)){
+        spdlog::get("container_agent")->error("Failed UpdateTimeKeeping container with msg: {}", msg);
+        return;
+    }
+
     //check if cont_name is in containers
-    if (device_agent->containers.find(request.name()) == device_agent->containers.end()) {
+    if (containers.find(request.name()) == containers.end()) {
         spdlog::get("container_agent")->error("UpdateTimeKeeping: Container {} not found!", request.name());
-        status = FINISH;
         return;
     }
-    std::unique_ptr<ClientAsyncResponseReader<EmptyMessage>> rpc(
-            device_agent->containers[request.name()].stub->AsyncUpdateTimeKeeping(&context, request,
-                                                                                 device_agent->containers[request.name()].cq));
+    sendMessageToContainer(request.name(), MSG_TYPE[TIME_KEEPING_UPDATE], msg);
 }
 
-void DeviceAgent::ReturnFlRequestHandler::Proceed() {
-    CompletionQueue* sending_cq = device_agent->containers[request.name()].cq;
-    if (sending_cq == nullptr) {
-        spdlog::get("container_agent")->error("ReturnFl: Container {}'s cq is null!", request.name());
+void DeviceAgent::ReturnFL(const std::string &msg) {
+    FlData request;
+    if (!request.ParseFromString(msg)){
+        spdlog::get("container_agent")->error("Failed returning FL to container with msg: {}", msg);
         return;
     }
-    std::unique_ptr<ClientAsyncResponseReader<EmptyMessage>> rpc(
-            device_agent->containers[request.name()].stub->AsyncFederatedLearningReturn(&context, request, sending_cq));
-    rpc->Finish(&reply, &sending_status, (void *)1);
-    void *got_tag;
-    bool ok = false;
-    if (sending_cq != nullptr) GPR_ASSERT(sending_cq->Next(&got_tag, &ok));
+
+    //check if cont_name is in containers
+    if (containers.find(request.name()) == containers.end()) {
+        spdlog::get("container_agent")->error("ReturnFL: Container {} not found!", request.name());
+        return;
+    }
+    sendMessageToContainer(request.name(), MSG_TYPE[RETURN_FL], msg);
 }
 
 void DeviceAgent::Shutdown(const std::string &msg) {

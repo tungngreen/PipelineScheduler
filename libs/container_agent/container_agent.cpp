@@ -1721,7 +1721,7 @@ void ContainerAgent::UpdateTimeKeepingRequestHandler::Proceed() {
 }
 
 void ContainerAgent::transferFrameID(std::string url) {
-    indevicecommands::Int32 request;
+    indevicemessages::Int32 request;
     EmptyMessage reply;
     ClientContext context;
     Status status;

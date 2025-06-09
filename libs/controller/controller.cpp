@@ -257,7 +257,7 @@ Controller::Controller(int argc, char **argv) {
     handlers = {
         {MSG_TYPE[DEVICE_ADVERTISEMENT], std::bind(&Controller::handleDeviseAdvertisement, this, std::placeholders::_1)},
         {MSG_TYPE[DUMMY_DATA], std::bind(&Controller::handleDummyDataRequest, this, std::placeholders::_1)},
-        {MSG_TYPE[FEDERATED_LEARNING_REQUEST], std::bind(&Controller::handleForwardFLRequest, this, std::placeholders::_1)}
+        {MSG_TYPE[START_FL], std::bind(&Controller::handleForwardFLRequest, this, std::placeholders::_1)}
     };
     server_address = absl::StrFormat("tcp://*:%d", CONTROLLER_MESSAGE_QUEUE_PORT + ctrl_port_offset);
     message_queue = socket_t(ctx, ZMQ_PUB);

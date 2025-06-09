@@ -34,11 +34,13 @@ ABSL_DECLARE_FLAG(uint16_t, dev_bandwidthLimitID);
 ABSL_DECLARE_FLAG(std::string, dev_networkInterface);
 ABSL_DECLARE_FLAG(int, dev_gpuID);
 
-using indevicecommands::ContainerSignal;
-using indevicecommands::Connection;
-using indevicecommands::TimeKeeping;
+using indevicemessages::ContainerSignal;
+using indevicemessages::Connection;
+using indevicemessages::TimeKeeping;
 using indevicemessages::ProcessData;
-using indevicecommands::ContainerMetrics;
+using indevicemessages::BCEdgeConfig;
+using indevicemessages::BCEdgeData;
+using indevicemessages::ContainerMetrics;
 using EmptyMessage = google::protobuf::Empty;
 
 class DeviceAgent {
@@ -95,12 +97,20 @@ protected:
 
     // CONTAINER CONTROL
     void CreateContainer(const std::string &msg);
+    void ReceiveStartReport(const std::string &msg);
     void ContainersLifeCheck();
+    void ReceiveContainerMetrics(const std::string &msg);
     void UpdateContainerSender(const std::string &msg);
     void UpdateContainerSender(int mode, const std::string &cont_name, const std::string &dwnstr, const std::string &ip,
                                const int &port, const float &data_portion, const std::string &old_link,
                                const int64_t &timestamp, const int &offloading_duration);
     void SyncDatasources(const std::string &msg);
+    void InferBCEdge(const std::string &msg);
+    void UpdateBatchSize(const std::string &msg);
+    void UpdateResolution(const std::string &msg);
+    void UpdateTimeKeeping(const std::string &msg);
+    void ForwardFL(const std::string &msg);
+    void ReturnFL(const std::string &msg);
     void StopContainer(const std::string &msg);
     void StopContainer(ContainerSignal request);
 

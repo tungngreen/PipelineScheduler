@@ -122,11 +122,8 @@ int main(int argc, char **argv) {
 
 
     } else if (algorithm == "fcpo") { // only used for testing the convergence in simulation to tune hyperparameters
-        FCPOAgent *fcpo = new FCPOAgent(algorithm, 7, 2,
-                                        16, 2, nullptr, nullptr,
-                                        torch::kF32, steps,
-                                        0, epochs + 2, .95,
-                                        .99, .75, .15);
+        FCPOAgent *fcpo = new FCPOAgent(algorithm, 7, 2,16, 2, nullptr, torch::kF32, steps,0, epochs + 2,
+                                        .95,.99, .75, .15);
         for (int i = 0; i < epochs; i++) {
             int last_resolution = 0, last_batch_size = 0, last_threading = 0;
             for (int j = 0; j < steps; j++) {

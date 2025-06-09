@@ -3,8 +3,6 @@
 
 #include "microservice.h"
 #include <thread>
-#include "controlcommands.grpc.pb.h"
-#include "controlmessages.grpc.pb.h"
 #include <pqxx/pqxx>
 #include "absl/strings/str_format.h"
 #include "absl/flags/parse.h"
@@ -12,16 +10,16 @@
 #include <random>
 #include "fcpo_learning.h"
 
-using controlcommands::LoopRange;
-using controlcommands::ContainerConfig;
-using controlcommands::ContainerLink;
-using controlcommands::ContainerInts;
+using controlmessages::LoopRange;
+using controlmessages::ContainerConfig;
+using controlmessages::ContainerLink;
+using controlmessages::ContainerInts;
 using controlmessages::ConnectionConfigs;
 using controlmessages::SystemInfo;
 using controlmessages::DummyMessage;
-using indevicecommands::FlData;
-using indevicecommands::TimeKeeping;
-using indevicecommands::ContainerSignal;
+using indevicemessages::FlData;
+using indevicemessages::TimeKeeping;
+using indevicemessages::ContainerSignal;
 
 ABSL_DECLARE_FLAG(std::string, ctrl_configPath);
 ABSL_DECLARE_FLAG(uint16_t, ctrl_verbose);

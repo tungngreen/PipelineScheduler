@@ -61,8 +61,7 @@ target_include_directories(fcpo_learning
 target_link_libraries(fcpo_learning
         PUBLIC
         cppzmq
-        control_comm_grpc_proto
-        device_comm_grpc_proto
+        control_mess_grpc_proto
         device_mess_grpc_proto
         ${_REFLECTION}
         ${_PROTOBUF_LIBPROTOBUF}

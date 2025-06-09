@@ -90,7 +90,6 @@ target_include_directories(device_agent
 target_link_libraries(device_agent
         PUBLIC
             cppzmq
-            device_comm_grpc_proto
             device_mess_grpc_proto
             absl::flags
             absl::flags_parse

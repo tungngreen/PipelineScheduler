@@ -5,14 +5,13 @@
 #include <random>
 #include <cmath>
 #include <chrono>
-#include "indevicecommands.grpc.pb.h"
 #include "indevicemessages.grpc.pb.h"
-#include "controlcommands.grpc.pb.h"
+#include "controlmessages.grpc.pb.h"
 
 #ifndef PIPEPLUSPLUS_BATCH_LEARNING_H
 #define PIPEPLUSPLUS_BATCH_LEARNING_H
 
-using indevicecommands::FlData;
+using indevicemessages::FlData;
 using T = torch::Tensor;
 
 enum threadingAction {
@@ -230,7 +229,7 @@ struct SinglePolicyNet: torch::nn::Module {
 class FCPOAgent {
 public:
     FCPOAgent(std::string& cont_name, uint state_size, uint resolution_size, uint max_batch, uint scaling_size,
-             torch::Dtype precision = torch::kF64, uint update_steps = 60, uint update_steps_inc = 5,
+             socket_t *server, torch::Dtype precision = torch::kF64, uint update_steps = 60, uint update_steps_inc = 5,
              uint federated_steps = 5, double lambda = 0.95, double gamma = 0.99, double clip_epsilon = 0.2,
              double penalty_weight = 0.1, double theta = 1.1, double sigma = 10.0, double phi = 2.0, int seed = 42);
 
@@ -269,6 +268,7 @@ private:
     std::ofstream out;
     std::string path;
     std::string cont_name;
+    socket_t *device_socket;
 
     // PPO Hyperparameters
     double lambda;
