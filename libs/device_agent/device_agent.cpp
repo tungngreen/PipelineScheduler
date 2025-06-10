@@ -117,7 +117,7 @@ DeviceAgent::DeviceAgent(const std::string &controller_url) : DeviceAgent() {
     device_cq = device_builder.AddCompletionQueue();
     device_server = device_builder.BuildAndStart();
 
-    server_address = absl::StrFormat("%s:%d", controller_url, CONTROLLER_BASE_PORT + dev_system_port_offset);
+    server_address = absl::StrFormat("%s:%d", controller_url, CONTROLLER_BASE_PORT + dev_system_port_offset - dev_agent_port_offset);
     controller_stub = ControlMessages::NewStub(
             grpc::CreateChannel(server_address, grpc::InsecureChannelCredentials()));
     controller_sending_cq = new CompletionQueue();
