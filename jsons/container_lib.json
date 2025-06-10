@@ -47,6 +47,12 @@
         "runCommand": "./Container_Yolov5",
         "modelPath": "../models/yolov5n_dynamic_nms_3090_fp32_16_1.engine"
     },
+    "yolov5l1280_server": {
+        "taskName": "yolov5",
+        "templateConfigPath": "../jsons/yolov5.json",
+        "runCommand": "./Container_Yolov5",
+        "modelPath": "../models/yolov5l6_1280_dynamic_nms_3090_fp32_28_1.engine"
+    },
     "retina1face_server": {
         "taskName": "retina1face",
         "templateConfigPath": "../jsons/retina1face.json",

@@ -3,7 +3,7 @@
         "cont_experimentName": "ex1",
         "cont_systemName": "ppp",
         "cont_pipeName": "every",
-        "cont_taskName": "dsrc",
+        "cont_taskName": "datasource",
         "cont_hostDevice": "server",
         "cont_hostDeviceType": "server",
         "cont_name": "data_source_0",
