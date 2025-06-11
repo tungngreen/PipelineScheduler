@@ -46,7 +46,7 @@ using EmptyMessage = google::protobuf::Empty;
 class DeviceAgent {
 public:
     DeviceAgent();
-    DeviceAgent(const std::string &controller_url);
+    explicit DeviceAgent(const std::string &controller_url);
 
     virtual ~DeviceAgent() {
         running = false;
@@ -72,6 +72,8 @@ public:
     void collectRuntimeMetrics();
 
     void limitBandwidth(const std::string& scriptPath, std::string interface);
+
+    void HandleControlCommands();
 
 protected:
 
@@ -116,7 +118,6 @@ protected:
 
     // MESSAGING & NETWORK
     void HandleDeviceMessages();
-    virtual void HandleControlCommands();
     void testNetwork(const std::string &msg);
     void sendMessageToContainer(const std::string &topik, const std::string &type, const std::string &content);
 
@@ -162,7 +163,7 @@ protected:
         }
         return command;
     };
-    int runDocker(const std::string &command) {
+    static int runDocker(const std::string &command) {
         spdlog::get("container_agent")->info("Running command: {}", command);
         return system(command.c_str());
     };

@@ -39,6 +39,7 @@ message Dimensions {
 
 message Int32 {
   int32 value = 1;
+  string name = 2;
 }
 
 message BCEdgeData {

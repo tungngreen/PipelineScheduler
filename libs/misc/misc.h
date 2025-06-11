@@ -64,6 +64,7 @@ enum MESSAGE_TYPE_VALUES {
     ADJUST_UPSTREAM,
     UPDATE_SENDER,
     SYNC_DATASOURCES,
+    TRANSFER_FRAME_ID,
     BATCH_SIZE_UPDATE,
     RESOLUTION_UPDATE,
     TIME_KEEPING_UPDATE,
@@ -73,28 +74,8 @@ enum MESSAGE_TYPE_VALUES {
     RETURN_FL,
     BCEDGE_UPDATE
 };
-std::unordered_map<MESSAGE_TYPE_VALUES, std::string> MSG_TYPE = {
-    {DEVICE_ADVERTISEMENT, "DEV_AD"},
-    {DUMMY_DATA, "DUMMY"},
 
-    {NETWORK_CHECK, "NET_CHECK"},
-    {DEVICE_SHUTDOWN, "SHUTDOWN"},
-
-    {CONTAINER_START, "CONT_START"},
-    {MSVC_START_REPORT, "MSVC_START"},
-    {CONTEXT_METRICS, "CXT_MET"},
-    {ADJUST_UPSTREAM, "ADJ_UPSTR"},
-    {UPDATE_SENDER, "UPD_SENDER"},
-    {SYNC_DATASOURCES, "SYNC_DS"},
-    {BATCH_SIZE_UPDATE, "BS"},
-    {RESOLUTION_UPDATE, "RES"},
-    {TIME_KEEPING_UPDATE, "TIME_KEEP"},
-    {CONTAINER_STOP, "CONT_STOP"},
-
-    {START_FL, "FL_START"},
-    {RETURN_FL, "RET_FL"},
-    {BCEDGE_UPDATE, "BCEDGE_UPD"}
-};
+extern std::unordered_map<MESSAGE_TYPE_VALUES, std::string> MSG_TYPE;
 
 std::chrono::time_point<std::chrono::_V2::system_clock, std::chrono::milliseconds> timePointCastMillisecond(
     std::chrono::system_clock::time_point tp);
@@ -852,7 +833,7 @@ ModelProfile queryModelProfile(
     const std::string &systemName,
     const std::string &pipelineName,
     const std::string &streamName,
-    const std::string &deviceName,
+    std::string &deviceName,
     std::string &deviceTypeName,
     const std::string &modelName,
     uint16_t systemFPS = 15

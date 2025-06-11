@@ -141,7 +141,15 @@ void FCPOAgent::federatedUpdate(const double loss) {
     }
 }
 
-void FCPOAgent::federatedUpdateCallback(FlData &response) {
+void FCPOAgent::federatedUpdateCallback(const std::string &msg) {
+    FlData response;
+    if (!response.ParseFromString(msg)) {
+        spdlog::get("container_agent")->error("Failed to parse federated update response: {}", msg);
+        steps_counter = 0;
+        federated_steps_counter = 1; // 1 means that we are starting local updates again until the next federation
+        reset();
+        return;
+    }
     spdlog::get("container_agent")->info("Federated Update received!");
     std::istringstream iss(response.network());
     std::unique_lock<std::mutex> lock(model_mutex);
