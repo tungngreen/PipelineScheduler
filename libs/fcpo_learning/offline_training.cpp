@@ -80,7 +80,7 @@ int main(int argc, char **argv) {
     modelNames["nx"] = {{"yolov5n_dynamic_nms_nx_fp32_8_1.engine", Yolov5n}, {"platedet_dyn_nms_nx_fp32_8_1.engine", PlateDet}, {"carbrand_dynamic_nx_fp32_8_1.engine", CarBrand}, {"retina1face_nx_fp32_8_1.engine", Retinaface}, {"pose_nx_fp32_8_1.engine", Movenet}, {"age_dynamic_nx_fp32_8_1.engine", Age}, {"gender_dynamic_nx_fp32_8_1.engine", Gender}, {"arcface_dynamic_nx_fp32_8_1.engine", Arcface}};
     modelNames["orn"] = {{"yolov5n_dynamic_nms_orn_fp32_8_1.engine", Yolov5n}, {"platedet_dyn_nms_orn_fp32_8_1.engine", PlateDet}, {"carbrand_dynamic_orn_fp32_8_1.engine", CarBrand}, {"retina1face_orn_fp32_8_1.engine", Retinaface}, {"pose_orn_fp32_8_1.engine", Movenet}, {"age_dynamic_orn_fp32_8_1.engine", Age}, {"gender_dynamic_orn_fp32_8_1.engine", Gender}, {"arcface_dynamic_orn_fp32_8_1.engine", Arcface}, {"emotion_dyn_orn_fp32_8_1.engine", Emotionnet}};
     modelNames["onp"] = {{"yolov5n_dynamic_nms_1080_fp32_16_1.engine", Yolov5n}, {"retina_multiface_640_1080_fp32_16_1.engine", RetinaMtface}, {"pose_1080_fp32_64_1.engine", Movenet}};
-    std::string device_name = "";
+    std::string deviceName = "";
     for (auto &task : tasks) {
         for (auto &deviceType : deviceTypes) {
             for (auto &modelName : modelNames[deviceType]) {
@@ -90,7 +90,7 @@ int main(int argc, char **argv) {
                         "ppp",
                         task,
                         "",
-                        device_name,
+                        deviceName,
                         deviceType,
                         modelName.first,
                         15
