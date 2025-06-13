@@ -45,6 +45,9 @@ curve
 ## videos
 *.mp4
 
+## zips
+*.tar.gz
+
 ## models
 *.engine
 *.onnx
