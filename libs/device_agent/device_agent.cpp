@@ -437,9 +437,6 @@ void DeviceAgent::CreateContainer(const std::string &msg) {
     }
     spdlog::get("container_agent")->info("Creating container: {}", c.name());
     try {
-        if (dev_type == SystemDeviceType::Virtual) {
-            c.set_name(c.name() + "_v" + std::to_string(dev_agent_port_offset));
-        }
         std::string command = runDocker(c.executable(), c.name(), c.json_config(), c.device(), c.control_port());
         std::string target = absl::StrFormat("%s:%d", "localhost", c.control_port());
         if (c.name().find("sink") != std::string::npos) {

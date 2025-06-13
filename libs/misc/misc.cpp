@@ -1211,7 +1211,23 @@ std::string abbreviate(const std::string &keyphrase, const std::string delimiter
         try {
             abbr += keywordAbbrs.at(word);
         } catch (const std::out_of_range &e) {
-            abbr += word.substr(0, 4);
+            std::string wordWithoutNumber = word;
+            std::string number = "";
+            try {
+                if (std::isdigit(word.back())) {
+                    size_t pos = word.find_last_not_of("0123456789");
+                    if (pos != std::string::npos) {
+                        wordWithoutNumber = word.substr(0, pos + 1);
+                        number = word.substr(pos + 1);
+                    }
+                    abbr += keywordAbbrs.at(wordWithoutNumber);
+                    abbr += number;
+                } else {
+                    abbr += wordWithoutNumber.substr(0, 4);
+                }
+            } catch (const std::out_of_range &e) {
+                abbr += wordWithoutNumber.substr(0, 4);
+            }
         }
         if (word != words.back()) {
             abbr += delimiter;
@@ -1249,50 +1265,15 @@ std::map<std::string, std::string> keywordAbbrs = {
     {"server", "serv"},
     {"onprem", "onp"},
     {"agxavier", "agx"},
-    {"agxavier1", "agx1"},
-    {"agxavier2", "agx2"},
-    {"agxavier3", "agx3"},
-    {"agxavier4", "agx4"},
-    {"agxavier5", "agx5"},
     {"orinagx", "oagx"},
-    {"orinagx1", "oagx1"},
-    {"orinagx2", "oagx2"},
     {"orinnx", "ornx"},
-    {"orinnx1", "ornx1"},
-    {"orinnx2", "ornx2"},
-    {"orinnx3", "ornx3"},
     {"orinano", "orn"},
-    {"orinano1", "orn1"},
-    {"orinano2", "orn2"},
-    {"orinano3", "orn3"},
     {"nxavier", "nx"},
-    {"nxavier1", "nx1"},
-    {"nxavier2", "nx2"},
-    {"nxavier3", "nx3"},
-    {"nxavier4", "nx4"},
-    {"nxavier5", "nx5"},
     {"datasource", "dsrc"},
     {"traffic", "trfc"},
-    {"traffic1", "trfc1"},
-    {"traffic10", "trfc10"},
-    {"traffic2", "trfc2"},
-    {"traffic20", "trfc20"},
-    {"traffic3", "trfc3"},
-    {"traffic30", "trfc30"},
-    {"traffic4", "trfc4"},
-    {"traffic40", "trfc40"},
-    {"traffic5", "trfc5"},
-    {"traffic50", "trfc50"},
-    {"traffic6", "trfc6"},
-    {"traffic60", "trfc60"},
-    {"traffic7", "trfc7"},
-    {"traffic70", "trfc70"},
     {"building", "bldg"},
     {"people", "ppl"},
-    {"people1", "ppl1"},
-    {"people2", "ppl2"},
-    {"people3", "ppl3"},
-    {"people4", "ppl4"},
+    {"indoor", "ind"},
     {"merged", "mrgd"},
     {"mergedtraffic", "mrgdtrfc"},
     {"mergedpeople", "mrgdppl"},
