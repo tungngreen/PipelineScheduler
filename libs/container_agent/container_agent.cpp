@@ -1402,9 +1402,12 @@ void ContainerAgent::HandleControlMessages() {
         if (device_message_queue.recv(message, recv_flags::none)) {
             std::string raw = message.to_string();
             std::istringstream iss(raw);
-            std::string topic, payload;
+            std::string topic, type;
             iss >> topic;
-            std::getline(iss, payload);
+            iss >> type;
+            iss.get(); // skip the space after the topic
+            std::string payload((std::istreambuf_iterator<char>(iss)),
+                                std::istreambuf_iterator<char>());
             if (handlers.count(topic)) {
                 handlers[topic](payload);
             } else {

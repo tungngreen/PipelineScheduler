@@ -582,6 +582,7 @@ SystemInfo DeviceAgent::Ready(const std::string &ip) {
         request.set_processors(dev_numCudaDevices);
         request.add_memory(sys_info.totalram * sys_info.mem_unit / 1000000);
     }
+    std::string test = request.SerializeAsString();
     std::string msg = absl::StrFormat("%s %s", MSG_TYPE[DEVICE_ADVERTISEMENT], request.SerializeAsString());
     message_t zmq_msg(msg.size()), reply;
     memcpy(zmq_msg.data(), msg.data(), msg.size());
@@ -609,9 +610,11 @@ void DeviceAgent::HandleDeviceMessages() {
         if (in_device_socket.recv(message, recv_flags::none)) {
             std::string raw = message.to_string();
             std::istringstream iss(raw);
-            std::string topic, payload;
+            std::string topic;
             iss >> topic;
-            std::getline(iss, payload);
+            iss.get(); // skip the space after the topic
+            std::string payload((std::istreambuf_iterator<char>(iss)),
+                                std::istreambuf_iterator<char>());
             if (in_device_handlers.count(topic)) {
                 in_device_handlers[topic](payload);
             } else {
@@ -629,10 +632,12 @@ void DeviceAgent::HandleControlCommands() {
         if (controller_message_queue.recv(message, recv_flags::none)) {
             std::string raw = message.to_string();
             std::istringstream iss(raw);
-            std::string topic, type, payload;
+            std::string topic, type;
             iss >> topic;
             iss >> type;
-            std::getline(iss, payload);
+            iss.get(); // skip the space after the topic
+            std::string payload((std::istreambuf_iterator<char>(iss)),
+                                std::istreambuf_iterator<char>());
             if (controller_handlers.count(type)) {
                 controller_handlers[type](payload);
             } else {
