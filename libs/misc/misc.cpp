@@ -1223,10 +1223,10 @@ std::string abbreviate(const std::string &keyphrase, const std::string delimiter
                     abbr += keywordAbbrs.at(wordWithoutNumber);
                     abbr += number;
                 } else {
-                    abbr += wordWithoutNumber.substr(0, 4);
+                    abbr += word.substr(0, 4);
                 }
             } catch (const std::out_of_range &e) {
-                abbr += wordWithoutNumber.substr(0, 4);
+                abbr += word.substr(0, 4);
             }
         }
         if (word != words.back()) {
