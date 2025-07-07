@@ -220,8 +220,8 @@ json msvcconfigs::loadJson() {
             auto containerLibs = json::parse(file);
             std::string d = json_file["container"]["cont_taskName"].get<std::string>() + "_" +
                             json_file["container"]["cont_hostDeviceType"].get<std::string>();
-            json_file["container"]["cont_pipeline"][3]["path"] = containerLibs[d]["modelPath"];
-            json_file["profiling"]["profile_templateModelPath"] = containerLibs[d]["modelPath"];
+            // json_file["container"]["cont_pipeline"][3]["path"] = containerLibs[d]["modelPath"];
+            // json_file["profiling"]["profile_templateModelPath"] = containerLibs[d]["modelPath"];
             spdlog::trace("{0:s} finished loading Json Configs from file.", __func__);
             return json_file;
         } else {

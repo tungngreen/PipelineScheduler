@@ -178,6 +178,11 @@ inline bool resizeIntoFrame(
     float r = std::min(width / (input.cols * 1.0), height / (input.rows * 1.0));
     int unpad_w = r * input.cols;
     int unpad_h = r * input.rows;
+    if (unpad_h == 0 || unpad_w == 0) {
+        // spdlog::get("container_agent")->error("{0:s} unpad_h or unpad_w is zero, cannot resize.", callerName + "::" + __func__);
+        std::cout << callerName + "::" + __func__ << " unpad_h or unpad_w is zero, cannot resize." << std::endl;
+        return false;
+    }
     cv::cuda::GpuMat resized(unpad_h, unpad_w, input.type());
     cv::cuda::resize(input, resized, resized.size(), 0, 0, RESIZE_INTERPOL_TYPE, stream);
 
