@@ -234,7 +234,7 @@ inline uint64_t getNumberAtIndex(const std::string &str, int index) {
     return 0; // Return 0 if the index is out of range
 }
 
-BasePreprocessorConfigs BasePreprocessor::loadConfigsFromJson(const json &jsonConfigs) {
+BasePreprocessorConfigs BaseVisionPreprocessor::loadConfigsFromJson(const json &jsonConfigs) {
     BasePreprocessorConfigs configs;
 
     jsonConfigs.at("msvc_imgType").get_to(configs.msvc_imgType);
@@ -257,7 +257,7 @@ BasePreprocessorConfigs BasePreprocessor::loadConfigsFromJson(const json &jsonCo
  * 
  * @note The function is called from the constructor or when the microservice is to be reloaded
  */
-void BasePreprocessor::loadConfigs(const json &jsonConfigs, bool isConstructing) {
+void BaseVisionPreprocessor::loadConfigs(const json &jsonConfigs, bool isConstructing) {
     // Load the configs from the json file for Microservice class
     if (!isConstructing) { // If the function is not called from the constructor
         Microservice::loadConfigs(jsonConfigs, isConstructing);
@@ -285,14 +285,14 @@ void BasePreprocessor::loadConfigs(const json &jsonConfigs, bool isConstructing)
  * 
  * @param configs 
  */
-BasePreprocessor::BasePreprocessor(const json &jsonConfigs) : Microservice(jsonConfigs) {
+BaseVisionPreprocessor::BaseVisionPreprocessor(const json &jsonConfigs) : Microservice(jsonConfigs) {
     loadConfigs(jsonConfigs);
     //set to maximum value
     msvc_toReloadConfigs = false;
     spdlog::get("container_agent")->info("{0:s} is created.", msvc_name);
 }
 
-BasePreprocessor::BasePreprocessor(const BasePreprocessor &other) : Microservice(other) {
+BaseVisionPreprocessor::BaseVisionPreprocessor(const BaseVisionPreprocessor &other) : Microservice(other) {
     std::lock(msvc_overallMutex, other.msvc_overallMutex);
     std::lock_guard<std::mutex> lock1(msvc_overallMutex, std::adopt_lock);
     std::lock_guard<std::mutex> lock2(other.msvc_overallMutex, std::adopt_lock);
@@ -312,7 +312,7 @@ BasePreprocessor::BasePreprocessor(const BasePreprocessor &other) : Microservice
  * @brief 
  * 
  */
-void BasePreprocessor::preprocess() {
+void BaseVisionPreprocessor::preprocess() {
     RequestData<LocalGPUReqDataType> data;
 
     std::vector<Request<LocalGPUReqDataType>> outBatch;
@@ -504,11 +504,11 @@ void BasePreprocessor::preprocess() {
     STOPPED = true;
 }
 
-void BasePreprocessor::flushBuffers() {
+void BaseVisionPreprocessor::flushBuffers() {
     flush = true;
 }
 
-// inline void BasePreprocessor::executeBatch(BatchTimeType &genTime, RequestSLOType &slo, RequestPathType &path,
+// inline void BaseVisionPreprocessor::executeBatch(BatchTimeType &genTime, RequestSLOType &slo, RequestPathType &path,
 //                                   std::vector<RequestData<LocalGPUReqDataType>> &bufferData,
 //                                   std::vector<RequestData<LocalGPUReqDataType>> &prevData) {
 //     // if (time < oldestReqTime) {
@@ -553,7 +553,7 @@ void BasePreprocessor::flushBuffers() {
 // }
 
 template<typename T>
-bool BasePreprocessor::
+bool BaseVisionPreprocessor::
 validateRequest(Request<T> &req) {
     // Meaning the the timeout in pop() has been reached and no request was actually popped
     if (strcmp(req.req_travelPath[0].c_str(), "empty") == 0) {
@@ -568,7 +568,7 @@ validateRequest(Request<T> &req) {
     return true;
 }
 
-void BasePreprocessor::preprocessProfiling() {
+void BaseVisionPreprocessor::preprocessProfiling() {
     // msvc_logFile.open(msvc_microserviceLogPath, std::ios::out);
     // // The time where the last request was generated.
     // ClockType lastReq_genTime;

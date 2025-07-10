@@ -120,15 +120,15 @@ void concatConfigsGenerator(
 
 
 
-class BasePreprocessor : public Microservice {
+class BaseVisionPreprocessor : public Microservice {
 public:
-    BasePreprocessor(const json &jsonConfigs);
-    virtual ~BasePreprocessor() override {
+    BaseVisionPreprocessor(const json &jsonConfigs);
+    virtual ~BaseVisionPreprocessor() override {
         waitStop();
         spdlog::get("container_agent")->info("{0:s}::{1:s} has stopped", typeid(*this).name(), msvc_name);
     }
 
-    BasePreprocessor(const BasePreprocessor &other);
+    BaseVisionPreprocessor(const BaseVisionPreprocessor &other);
 
     virtual void preprocess();
     virtual void preprocessProfiling();
@@ -136,12 +136,12 @@ public:
     void dispatchThread() override {
         if (msvc_RUNMODE == RUNMODE::EMPTY_PROFILING) {
             spdlog::get("container_agent")->trace("{0:s} dispatching profiling thread.", msvc_name);
-            std::thread preprocessor(&BasePreprocessor::preprocessProfiling, this);
+            std::thread preprocessor(&BaseVisionPreprocessor::preprocessProfiling, this);
             preprocessor.detach();
             return;
         }
         spdlog::get("container_agent")->trace("{0:s} dispatching preprocessing thread.", msvc_name);
-        std::thread preprocessor(&BasePreprocessor::preprocess, this);
+        std::thread preprocessor(&BaseVisionPreprocessor::preprocess, this);
         preprocessor.detach();
     }
 

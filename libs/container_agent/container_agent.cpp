@@ -610,7 +610,7 @@ void ContainerAgent::initiateMicroservices(const json &configs) {
             } else if (msvc_type >= MicroserviceType::Preprocessor &&
                        msvc_type < MicroserviceType::Batcher) {
 
-                msvcsList.push_back(new BasePreprocessor(pipeConfig));
+                msvcsList.push_back(new BaseVisionPreprocessor(pipeConfig));
                 msvcsList.back()->SetInQueue(cont_msvcsGroups["receiver"].outQueue);
             } else if (msvc_type >= MicroserviceType::Batcher &&
                        msvc_type < MicroserviceType::TRTInferencer) {
@@ -693,8 +693,8 @@ bool ContainerAgent::addPreprocessor(uint8_t totalNumInstances) {
     std::vector<Microservice *> newMsvcList;
     for (uint8_t i = 0; i < numNewInstances; i++) {
         if (cont_msvcsGroups["preprocessor"].msvcList[0]->msvc_type == MicroserviceType::Preprocessor) {
-            BasePreprocessor *preprocessor = (BasePreprocessor*) cont_msvcsGroups["preprocessor"].msvcList[0];
-            msvc = new BasePreprocessor(*preprocessor);
+            BaseVisionPreprocessor *preprocessor = (BaseVisionPreprocessor*) cont_msvcsGroups["preprocessor"].msvcList[0];
+            msvc = new BaseVisionPreprocessor(*preprocessor);
         // Add more types of preprocessors here
         } else {
             spdlog::get("container_agent")->error("{0:s} Unknown preprocessor type: {1:d}", __func__, cont_msvcsGroups["preprocessor"].msvcList[0]->msvc_type);
