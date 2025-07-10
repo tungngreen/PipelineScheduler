@@ -2,7 +2,5 @@
 
 class GenderAgent: public ContainerAgent{
 public:
-    GenderAgent(
-        const json &configs
-    );
+    GenderAgent(const json &configs) : ContainerAgent(configs) {}
 };

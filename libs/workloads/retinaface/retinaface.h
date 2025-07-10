@@ -3,10 +3,10 @@
 
 class RetinaFaceAgent : public ContainerAgent {
 public:
-    RetinaFaceAgent(const json &configs): ContainerAgent(configs) {}
+    RetinaFaceAgent(const json &configs) : ContainerAgent(configs) {}
 };
 
 class RetinaFaceDataSource : public DataSourceAgent {
 public:
-    RetinaFaceDataSource(const json &configs): DataSourceAgent(configs) {}
+    RetinaFaceDataSource(const json &configs) : DataSourceAgent(configs) {}
 };

@@ -2,7 +2,5 @@
 
 class AgeAgent: public ContainerAgent{
 public:
-    AgeAgent(
-        const json &configs
-    );
+    AgeAgent(const json &configs) : ContainerAgent(configs) {}
 };

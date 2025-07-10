@@ -2,7 +2,5 @@
 
 class MoveNetAgent: public ContainerAgent{
 public:
-    MoveNetAgent(
-        const json& configs
-    );
+    MoveNetAgent(const json& configs) : ContainerAgent(configs) {}
 };

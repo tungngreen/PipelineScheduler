@@ -5,14 +5,10 @@ using namespace spdlog;
 
 class ArcFaceAgent : public ContainerAgent {
 public:
-    ArcFaceAgent(
-        const json &configs
-    );
+    ArcFaceAgent(const json &configs) : ContainerAgent(configs) {}
 };
 
 class ArcFaceDataSource : public ContainerAgent {
 public:
-    ArcFaceDataSource(
-        const json &configs
-    );
+    ArcFaceDataSource(const json &configs) : ContainerAgent(configs) {}
 };

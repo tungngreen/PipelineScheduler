@@ -2,7 +2,5 @@
 
 class carbrandAgent: public ContainerAgent{
 public:
-    carbrandAgent(
-        const json &configs
-    );
+    carbrandAgent(const json &configs) : ContainerAgent(configs) {}
 };

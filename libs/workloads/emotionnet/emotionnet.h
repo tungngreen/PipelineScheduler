@@ -2,7 +2,5 @@
 
 class EmotionNetAgent: public ContainerAgent{
 public:
-    EmotionNetAgent(
-        const json& configs
-    );
+    EmotionNetAgent(const json& configs) : ContainerAgent(configs) {}
 };
