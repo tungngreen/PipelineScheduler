@@ -48,7 +48,7 @@ def base_plot(data, ax, title, sum_throughput=False, labels=algorithm_names, use
                 ax.bar(j * bar_width, [traffic_intime + people_intime], bar_width, label=label_map[a], color=colors[j],
                        edgecolor='white', linewidth=0.5)
                 ax.text(j * bar_width, traffic_intime + people_intime, f'{traffic_intime + people_intime:.0f}', ha='center',
-                        va='bottom', size=10)
+                        va='bottom', size=12)
             else:
                 ax.bar(x + j * bar_width, [traffic_intime, people_intime], bar_width, label=label_map[a], color=colors[j],
                        hatch=markers[j], edgecolor='white', linewidth=0.5)
@@ -59,7 +59,7 @@ def base_plot(data, ax, title, sum_throughput=False, labels=algorithm_names, use
                 ax.bar(j * bar_width, [traffic_intime + people_intime], bar_width, label=a, color=colors[j],
                        edgecolor='white', linewidth=0.5)
                 ax.text(j * bar_width, traffic_intime + people_intime, f'{traffic_intime + people_intime:.0f}', ha='center',
-                        va='bottom', size=10)
+                        va='bottom', size=12)
             else:
                 ax.bar(x + j * bar_width, [traffic_intime, people_intime], bar_width, label=a, color=colors[j],
                        hatch=markers[j], edgecolor='white', linewidth=0.5)
@@ -73,7 +73,7 @@ def base_plot(data, ax, title, sum_throughput=False, labels=algorithm_names, use
             mpl.rcParams['hatch.linewidth'] = 2
 
             if sum_throughput:
-                ax.legend(handles=[striped_patch, solid_patch, line_patch], loc='lower left', fontsize=10, frameon=True)
+                ax.legend(handles=[striped_patch, solid_patch, line_patch], loc='lower left', fontsize=12, frameon=True, bbox_to_anchor = (0, -0.06))
             else:
                 ax2 = ax.twinx()
                 ax2.set_yticks([])
@@ -83,13 +83,13 @@ def base_plot(data, ax, title, sum_throughput=False, labels=algorithm_names, use
         ax.axhline(y=data['max_traffic_throughput'] + data['max_people_throughput'], color='red', linestyle='--',
                    linewidth=2, xmin=0.05, xmax=0.95)
         ax.set_xticks([i * 0.2 for i in range(len(xticks))])
-        ax.set_xticklabels(xticks, size=10)
+        ax.set_xticklabels(xticks, size=14, rotation=35)
         yticks = np.arange(0, int(data['max_traffic_throughput'] + data['max_people_throughput']), 500).tolist()
         ax.set_yticks(yticks)
         if use_label_map:
             ax.set_yticklabels([int(y / 100) for y in yticks], size=10)
         else:
-            ax.set_yticklabels(yticks, size=10)
+            ax.set_yticklabels([int(y / 100) for y in yticks], size=12)
     else:
         ax.axhline(y=data['max_traffic_throughput'], color='red', linestyle='--', linewidth=2, xmin=0.05, xmax=0.45)
         ax.axhline(y=data['max_people_throughput'], color='red', linestyle='--', linewidth=2, xmin=0.55, xmax=0.95)
@@ -103,7 +103,7 @@ def base_plot(data, ax, title, sum_throughput=False, labels=algorithm_names, use
         ax.set_yticklabels(yticks, size=10)
 
     ax.set_title(title, size=12)
-    ax.set_ylabel(y_label, size=12)
+    ax.set_ylabel(y_label, size=15)
 
     if not sum_throughput:
         ax.legend(fontsize=12)

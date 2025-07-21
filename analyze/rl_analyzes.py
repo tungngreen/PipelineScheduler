@@ -1,4 +1,3 @@
-import itertools
 import os
 import json
 import pickle
@@ -13,9 +12,9 @@ from matplotlib import cm
 from natsort import natsorted
 from pandas import DataFrame
 
-from final_figures import colors, base_plot
+from final_figures import colors, base_plot, individual_figures
 from objectcount import load_data
-from run_log_analyzes import read_file, get_total_objects, analyze_single_experiment
+from run_log_analyzes import read_file, get_total_objects, analyze_single_experiment, get_bandwidths
 from database_conn import bucket_and_average, align_timestamps, avg_memory, avg_edge_power
 
 styles = ['-', '--', 'o-', 'x-']
@@ -100,33 +99,38 @@ def reward_plot(base_directory):
 
     # plot the results
     for j, algo in enumerate(['FCPO', 'BCE']):
-        fig, ax1 = plt.subplots(1, 1, figsize=(4, 1.5), gridspec_kw={'height_ratios': [1], 'width_ratios': [1]})
+        fig, ax1 = plt.subplots(1, 1, figsize=(2.5, 1.2), gridspec_kw={'height_ratios': [1], 'width_ratios': [1]})
         ax2 = ax1.twinx()
         ax1.plot(rewards[algo], label='reward', color=colors[j*2], linewidth=1)
         ax2.plot(loss[algo], label='loss', linestyle='--', color=colors[j*2+1], linewidth=1)
-        fig.legend(fontsize=12, loc='upper center')
-        ax1.set_ylabel('Reward Avg.', size=12)
+        #fig.legend(fontsize=12, loc='upper center')
+        ax1.set_ylabel(r'Reward $\bullet$  ', size=13, color=colors[j*2])
         ax1.set_ylim([0, 1])
         ax1.set_yticks([0, 1])
-        ax2.set_ylabel('Loss Avg.', size=12)
+
+        ax2.set_ylabel(r'Loss $\circ$', size=13, color=colors[j*2+1])
         ax1.set_xlim(0, 100)
-        ax1.set_xticks([0, 20, 40, 60, 90])
-        ax1.set_xticklabels([0, 20, 40, 60, '90 Episodes'], size=12)
+        ax1.set_xticks([0, 30, 90])
+        ax1.set_xticklabels([0, 30, '90 Episodes'], size=12)
         plt.tight_layout()
         plt.savefig(f"{algo}-learning.pdf")
         plt.show()
 
-    fig1, ax1 = plt.subplots(1, 1, figsize=(2.5, 2.5), gridspec_kw={'height_ratios': [1], 'width_ratios': [1]})
-    fig2, ax2 = plt.subplots(1, 1, figsize=(2.5, 2.5), gridspec_kw={'height_ratios': [1], 'width_ratios': [1]})
+    fig1, ax1 = plt.subplots(1, 1, figsize=(2.5, 2.7), gridspec_kw={'height_ratios': [1], 'width_ratios': [1]})
+    fig2, ax2 = plt.subplots(1, 1, figsize=(2.5, 2.7), gridspec_kw={'height_ratios': [1], 'width_ratios': [1]})
     for j, algo in enumerate(['FCPO', 'FCPO-reduced', 'without local optimization']):
         ax1.plot(rewards[algo], styles[j], label=algo, color=colors[j], linewidth=1, markevery=0.2)
         ax2.plot(loss[algo], styles[j], label=algo, color=colors[j], linewidth=1, markevery=0.2)
-    ax1.set_xlabel('Episodes', size=12)
-    ax1.set_ylabel('Reward Avg.', size=12)
-    ax2.set_xlabel('Episodes', size=12)
-    ax2.set_ylabel('Loss Avg.', size=12)
+    ax1.set_xlabel('Episodes', size=19)
+    ax1.set_ylabel('Reward Avg.', size=19)
+    ax2.set_xlabel('Episodes', size=19)
+    ax2.set_ylabel('Loss Avg.', size=19)
     ax1.set_xlim(0, 50)
     ax2.set_xlim(0, 50)
+    ax1.tick_params(axis='x', labelsize=14)
+    ax1.tick_params(axis='y', labelsize=14)
+    ax2.tick_params(axis='x', labelsize=14)
+    ax2.tick_params(axis='y', labelsize=14)
     fig1.tight_layout()
     fig1.savefig("ablation-rewards.pdf")
     fig1.show()
@@ -137,23 +141,26 @@ def reward_plot(base_directory):
     for algo, data in {'FCPO-rewards': fcpo_rewards, 'BCE-rewards': bce_rewards, 'FCPO-loss': fcpo_loss,
                        'BCE-loss': bce_loss, 'federated-rewards': fcpof_rewards, 'federated-loss': fcpof_loss}.items():
         if 'federated' in algo:
-            fig, ax1 = plt.subplots(1, 1, figsize=(4, 2), gridspec_kw={'height_ratios': [1], 'width_ratios': [1]})
+            fig, ax1 = plt.subplots(1, 1, figsize=(4, 2.5), gridspec_kw={'height_ratios': [1], 'width_ratios': [1]})
         else:
             fig, ax1 = plt.subplots(1, 1, figsize=(4, 4), gridspec_kw={'height_ratios': [1], 'width_ratios': [1]})
         i = 0
         for agent, series in data.items():
             ax1.plot(series, label=agent, color=colors[i])
             i += 1
-        if not algo == 'federated-rewards':
-            ax1.legend(fontsize=12)
-        ax1.set_xlabel('Episodes', size=12)
+        ax1.legend(fontsize=17)
+        ax1.tick_params(axis='x', labelsize=17)
+        ax1.tick_params(axis='y', labelsize=17)
         if 'reward' in algo:
-            ax1.set_ylabel('Reward', size=12)
+            ax1.set_ylabel('Avg. Reward   ', size=20)
         else:
-            ax1.set_ylabel('Loss', size=12)
+            ax1.set_ylabel('Avg. Loss', size=20)
         if 'federated' in algo:
             ax1.set_xlim(0, 40)
+            ax1.set_xticks([0, 15, 30])
+            ax1.set_xticklabels([0, 15, '30 Episodes'])
         else:
+            ax1.set_xlabel('Episodes', size=20)
             ax1.set_xlim(0, 100)
         plt.tight_layout()
         plt.savefig(f"{algo}.pdf")
@@ -162,12 +169,15 @@ def reward_plot(base_directory):
 
 def overall_performance_timeseries(directory, experiment, xticks=None):
     directory = os.path.join(directory, experiment)
-    fig1, ax1 = plt.subplots(1, 1, figsize=(6, 3), gridspec_kw={'height_ratios': [1], 'width_ratios': [1]})
-    fig2, ax2 = plt.subplots(1, 1, figsize=(6, 3), gridspec_kw={'height_ratios': [1], 'width_ratios': [1]})
-    avg_throughput = {'traffic_throughput': {'total': {}}, 'traffic_goodput': {'total': {}}, 'people_throughput': {'total': {}}, 'people_goodput': {'total': {}}}
     systems = natsorted(os.listdir(directory))
     if 'main' in experiment:
         systems = ['FCPO', 'BCEdge', 'Distream', 'OctopInf']
+        fig1, ax1 = plt.subplots(1, 1, figsize=(4.5, 3.4), gridspec_kw={'height_ratios': [1], 'width_ratios': [1]})
+        fig2, ax2 = plt.subplots(1, 1, figsize=(4, 3.4), gridspec_kw={'height_ratios': [1], 'width_ratios': [1]})
+    else:
+        fig1, ax1 = plt.subplots(1, 1, figsize=(4.5, 2.5), gridspec_kw={'height_ratios': [1], 'width_ratios': [1]})
+        fig2, ax2 = plt.subplots(1, 1, figsize=(4.5, 2.5), gridspec_kw={'height_ratios': [1], 'width_ratios': [1]})
+    avg_throughput = {'traffic_throughput': {'total': {}}, 'traffic_goodput': {'total': {}}, 'people_throughput': {'total': {}}, 'people_goodput': {'total': {}}}
     for j, d in enumerate(systems):
         if not os.path.isdir(os.path.join(directory, d)): continue
         if not os.path.exists(os.path.join(directory, d, 'df_cars.csv')) or not os.path.exists(
@@ -213,6 +223,8 @@ def overall_performance_timeseries(directory, experiment, xticks=None):
             with open(os.path.join(directory, d, 'avg_throughput.pkl'), 'rb') as f:
                 avg_throughput = pickle.load(f)
             dfs_combined = pd.read_csv(os.path.join(directory, d, 'combined_df.csv'))
+        if d == 'without local optimization':
+            d = 'no local opt.'
         ax1.plot(dfs_combined['aligned_timestamp'], dfs_combined['throughput'], styles[j], label=d,
                  color=colors[j], linewidth=1, markevery=0.2)
         ax2.plot(dfs_combined['aligned_timestamp'], dfs_combined['avg_latency'], styles[j], label=d,
@@ -220,18 +232,28 @@ def overall_performance_timeseries(directory, experiment, xticks=None):
 
     if 'main' in experiment:
         experiment = 'total'
+        ax1.set_ylabel('Thrghpt (1000 obj / s)', size=16)
+        ax2.set_ylabel('Avg Latency (100 ms)', size=16)
     else:
         experiment = 'ablation'
-    ax1.set_ylabel('Throughput (obj / s)', size=12)
-    ax2.set_ylabel('Avg Latency (ms)', size=12)
+        ax1.set_ylabel('Thrghpt (1000 o/s)     ', size=16)
+        ax2.set_ylabel('Latency (100 ms)   ', size=16)
+
+
     ax2.set_ylim([0, 850])
     for ax in [ax1, ax2]:
-        ax.set_xlabel('Minutes Passed since Start (min)', size=12)
-        ax.set_xscale('symlog', linthresh=40)
+        ax.set_xscale('symlog', linthresh=50)
         ax.set_xticks([0, 10, 20, 50, 100, 200])
-        ax.set_xticklabels([0, 10, 20, 50, 100, 200], size=12)
+        ax.set_xticklabels([0, 10, 20, 50, 100, 200], size=14)
         ax.set_xlim([0, 250])
-        ax.legend(fontsize=12, loc="lower center")
+    ax1.set_xlabel('Minutes Passed since Start (min)', size=16)
+    ax2.set_xlabel('Minutes Passed since Start (min)      ', size=16)
+    ax1.legend(fontsize=14, loc="lower center")
+    ax2.legend(fontsize=14, loc="upper right")
+    ax1.set_yticks([0, 1000, 2000, 3000, 4000, 5000])
+    ax1.set_yticklabels([0, 1, 2, 3, 4, 5], size=14)
+    ax2.set_yticks([0, 200, 400, 600, 800])
+    ax2.set_yticklabels([0, 2, 4, 6, 8], size=14)
     fig1.tight_layout()
     fig1.savefig(f"{experiment}-throughput.pdf")
     fig1.show()
@@ -240,10 +262,8 @@ def overall_performance_timeseries(directory, experiment, xticks=None):
     fig2.show()
 
     # plot the throughput and latency for each pipeline
-    fig, ax1 = plt.subplots(1, 1, figsize=(3, 3.5), gridspec_kw={'height_ratios': [1], 'width_ratios': [1]})
-    if xticks is None:
-        xticks = ['FCPO', 'BCE', 'Dis']
-    base_plot(avg_throughput, ax1, '', True, systems, False, xticks, 'Avg. Effective Throughput (obj/s)')
+    fig, ax1 = plt.subplots(1, 1, figsize=(2.5, 3.4), gridspec_kw={'height_ratios': [1], 'width_ratios': [1]})
+    base_plot(avg_throughput, ax1, '', True, systems, False, xticks, 'Effect. Thrghpt (100 obj/s)    ')
     plt.tight_layout()
     plt.savefig(f"{experiment}-throughput-comparison.pdf")
     plt.show()
@@ -332,9 +352,11 @@ def warm_start_performance(directory):
         ax1.plot(df['aligned_timestamp'], df['throughput'], styles[j], label=labels[j], color=colors[j],
                  linewidth=1, markevery=0.2)
 
-    ax1.set_xlabel('Minutes Passed since Start (min)', size=10)
+    ax1.set_xlabel('Minutes Passed since Start (min)', size=15)
     ax1.set_xlim([0, 6])
-    ax1.set_ylabel('Throughput (obj / s)', size=10)
+    ax1.tick_params(axis='x', labelsize=14)
+    ax1.set_ylabel('Throughput (obj / s)     ', size=15)
+    ax1.tick_params(axis='y', labelsize=14)
     ax1.legend(fontsize=10)
     plt.tight_layout()
     plt.savefig('warm-start.pdf')
@@ -439,24 +461,25 @@ def continual_learning_performance(base_directory):
             workload_index, workload = load_data(os.path.join(directory, 'trafficchanges.csv'))
             # 3 data sources in experiment
             ax1.plot(workload_index, [w * 3 for w in workload], label='Workload', color='red', linestyle='--', linewidth=1)
-        ax1.plot(df['aligned_timestamp'], df['throughput'], styles[j], label=d, color=colors[j], linewidth=1,
-                 markevery=0.2)
+        ax1.plot(df['aligned_timestamp'], df['throughput'], styles[j], label=d, color=colors[j], linewidth=1, markevery=0.2)
 
-    ax1.set_xlabel('Minutes Passed since Start (min)', size=10)
-    ax1.set_ylabel('Throughput (obj / s)', size=10)
+    ax1.set_xlabel('Minutes Passed since Start (min)', size=15)
+    ax1.tick_params(axis='x', labelsize=14)
+    ax1.set_ylabel('Throughput (obj / s)   ', size=15)
     ax1.set_ylim([650, 1500])
     ax1.set_yticks([800, 1000, 1200, 1400])
+    ax1.tick_params(axis='y', labelsize=14)
     ax1.set_xlim([0, 49])
-    ax1.legend(fontsize=10)
+    ax1.legend(fontsize=15, loc='lower center')
     plt.tight_layout()
     plt.savefig('continual-throughput.pdf')
     plt.show()
 
 def reduced_slo(base_directory):
     base_directory = os.path.join(base_directory, 'reduced_slo')
-    fig1, ax1 = plt.subplots(1, 1, figsize=(6, 1.75), gridspec_kw={'height_ratios': [1], 'width_ratios': [1]})
+    fig1, ax1 = plt.subplots(1, 1, figsize=(5.5, 2), gridspec_kw={'height_ratios': [1], 'width_ratios': [1]})
     algorithm_names = ['fcpo', 'bce', 'dis', 'ppp']
-    label_map = {'fcpo': 'FCPO', 'bce': 'BCE', 'dis': 'DIS', 'ppp': 'OInf'}
+    label_map = {'fcpo': 'FCPO', 'bce': 'BCE', 'dis': 'Dis', 'ppp': 'OInf'}
     slos = []
     data = {}
     for i, slo in enumerate(natsorted(os.listdir(base_directory))):
@@ -469,7 +492,6 @@ def reduced_slo(base_directory):
             with open(os.path.join(directory, 'data.pkl'), 'rb') as f:
                 data[slo] = pickle.load(f)
         slos.append(slo)
-
     slos = natsorted(slos, reverse=True)
     xs = np.arange(len(slos))
     for j, a in enumerate(algorithm_names):
@@ -487,14 +509,14 @@ def reduced_slo(base_directory):
     mpl.rcParams['hatch.linewidth'] = 2
     ax2 = ax1.twinx()
     ax2.set_yticks([])
-    ax2.legend(handles=[striped_patch, solid_patch, line_patch], loc='lower left', fontsize=10, frameon=True)
+    ax2.legend(handles=[striped_patch, solid_patch, line_patch], loc='lower left', fontsize=13, frameon=True)
 
-    ax1.set_ylabel('(100 Objects / s)', size=10)
+    ax1.set_ylabel('(100 Objects / s)   ', size=14)
     ax1.set_yticks([0, 400, 800, 1200])
-    ax1.set_yticklabels([0, 4, 8, 12], size=10)
+    ax1.set_yticklabels([0, 4, 8, 12], size=14)
     ax1.set_xticks(xs + 0.5 * 0.2 * (len(algorithm_names) - 1))
-    ax1.set_xticklabels([str(s) + 'ms' for s in slos], size=10)
-    ax1.legend(fontsize=10, loc='upper right', ncol=2)
+    ax1.set_xticklabels([str(s) + 'ms' for s in slos], size=14)
+    ax1.legend(fontsize=13, loc='upper right', ncol=2)
     plt.tight_layout()
     plt.savefig('reduced-slo.pdf')
     plt.show()
@@ -504,8 +526,8 @@ def system_overhead(directory):
     # Memory
     systems = ['fcpo', 'bce', 'ppp']
     labels = ['FCPO', 'BCE', 'OInf']
-    fig1, ax1 = plt.subplots(1, 1, figsize=(2.5, 2), gridspec_kw={'height_ratios': [1], 'width_ratios': [1]})
-    fig2, ax2 = plt.subplots(1, 1, figsize=(2.5, 2), gridspec_kw={'height_ratios': [1], 'width_ratios': [1]})
+    fig1, ax1 = plt.subplots(1, 1, figsize=(2, 2.5), gridspec_kw={'height_ratios': [1], 'width_ratios': [1]})
+    fig2, ax2 = plt.subplots(1, 1, figsize=(2, 2.5), gridspec_kw={'height_ratios': [1], 'width_ratios': [1]})
     if not os.path.exists(os.path.join(directory, '..', 'processed_logs', 'memory.pkl')):
         server_memory = avg_memory('nful', systems, 0)
         edge_memory = avg_memory('nful', systems, 1)
@@ -520,11 +542,13 @@ def system_overhead(directory):
         ax1.plot([i - 0.35, i + 0.35], [(server_memory['ppp'][0] + server_memory['ppp'][1]) / 1024,
                                          (server_memory['ppp'][0] + server_memory['ppp'][1]) / 1024], color='black')
         ax2.plot([i - 0.35, i + 0.35], [edge_memory['ppp'][0] / (1024 * 1024), edge_memory['ppp'][0] / (1024 * 1024)], color='black')
-    ax1.legend(fontsize=12, loc='lower center')
-    ax1.set_ylabel('Mem Usage (GB)', size=12)
+    ax1.legend(fontsize=14, loc='lower center')
+    ax1.set_ylabel('Mem Usage (GB)', size=15)
+    ax1.tick_params(axis='y', labelsize=14)
     ax1.set_xticks([])
-    ax2.legend(fontsize=12, loc='lower center')
-    ax2.set_ylabel('Mem Usage (GB)', size=12)
+    ax2.legend(fontsize=14, loc='lower center')
+    ax2.set_ylabel('Mem Usage (GB)', size=15)
+    ax2.tick_params(axis='y', labelsize=14)
     ax2.set_xticks([])
     fig1.tight_layout()
     fig2.tight_layout()
@@ -534,7 +558,7 @@ def system_overhead(directory):
     fig2.show()
 
     # Power consumption
-    fig1, ax1 = plt.subplots(1, 1, figsize=(2.5, 2), gridspec_kw={'height_ratios': [1], 'width_ratios': [1]})
+    fig1, ax1 = plt.subplots(1, 1, figsize=(2, 2.5), gridspec_kw={'height_ratios': [1], 'width_ratios': [1]})
     if not os.path.exists(os.path.join(directory, '..', 'processed_logs', 'power.pkl')):
         power = avg_edge_power('nful', systems)
         with open(os.path.join(directory, '..', 'processed_logs', 'power.pkl'), 'wb') as f:
@@ -546,16 +570,18 @@ def system_overhead(directory):
         if system == 'ppp':
             continue
         ax1.bar(i, (power[system][0] - power['ppp'][0]), 0.7, label=labels[i], color=colors[i])
-    ax1.legend(fontsize=12, loc='upper right', bbox_to_anchor=(1, 0.85))
-    ax1.set_ylabel('Avg Additional Power\nConsumption (mW)', size=12)
+    ax1.legend(fontsize=13, loc='upper right', bbox_to_anchor=(1, 0.8))
+    ax1.set_ylabel('Avg Additional Power\nUsage (100 mW)', size=15)
+    ax1.set_yticks([0, 100, 200])
+    ax1.set_yticklabels([0, 1, 2])
     ax1.set_xticks([])
     fig1.tight_layout()
     fig1.savefig('power-consumption.pdf')
     fig1.show()
 
     # RL Latency
-    fig1, ax1 = plt.subplots(1, 1, figsize=(4, 2), gridspec_kw={'height_ratios': [1], 'width_ratios': [1]})
-    fig2, ax2 = plt.subplots(1, 1, figsize=(4, 2), gridspec_kw={'height_ratios': [1], 'width_ratios': [1]})
+    fig1, ax1 = plt.subplots(1, 1, figsize=(3.5, 2.5), gridspec_kw={'height_ratios': [1], 'width_ratios': [1]})
+    fig2, ax2 = plt.subplots(1, 1, figsize=(3.5, 2.5), gridspec_kw={'height_ratios': [1], 'width_ratios': [1]})
     x_labels = ['Server', 'AGX', 'NX', 'Nano', 'OnPrem']
     x = np.arange(len(x_labels))
     data = json.loads(open(os.path.join(directory, 'latency.json')).read())
@@ -572,14 +598,18 @@ def system_overhead(directory):
         i += 1
 
     handles, labels = ax1.get_legend_handles_labels()
-    ax1.legend([handles[0], handles[5]], [labels[0], labels[5]], fontsize=12, loc='upper right')
+    ax1.legend([handles[0], handles[5]], [labels[0], labels[5]], fontsize=13, loc='upper right')
     ax1.set_xticks(x + 0.2)
-    ax1.set_xticklabels(x_labels, size=12)
-    ax1.set_ylabel('Decision Latency (ms)  _', size=12)
-    ax2.legend([handles[0], handles[5]], [labels[0], labels[5]], fontsize=12, loc='upper left')
+    ax1.set_xticklabels(x_labels, size=15, rotation=25)
+    ax1.set_ylabel('Decision Time (ms)       ', size=15)
+    ax1.tick_params(axis='y', labelsize=14)
+    ax2.legend([handles[0], handles[5]], [labels[0], labels[5]], fontsize=13, loc='upper left')
     ax2.set_xticks(x + 0.2)
-    ax2.set_xticklabels(x_labels, size=12)
-    ax2.set_ylabel('Update Latency (ms)  ', size=12)
+    ax2.set_xticklabels(x_labels, size=15, rotation=25)
+    ax2.set_ylabel('Train Time (100ms)      ', size=15)
+    ax2.tick_params(axis='y', labelsize=14)
+    ax2.set_yticks([0, 500, 1000])
+    ax2.set_yticklabels([0, 5, 10])
     fig1.tight_layout()
     fig2.tight_layout()
     fig1.savefig('inference-latency.pdf')
@@ -588,20 +618,40 @@ def system_overhead(directory):
     fig2.show()
 
     #FL Latency
-    fig1, ax1 = plt.subplots(1, 1, figsize=(3, 1.9), gridspec_kw={'height_ratios': [1], 'width_ratios': [1]})
-    latencies = []
+    fig1, (ax1a, ax1b) = plt.subplots(1, 2, sharey=True, figsize=(2, 2.3), gridspec_kw={'height_ratios': [1], 'width_ratios': [2,3]})
+    FineTuning_latencies = []
+    FL_latencies = []
     with open(os.path.join(directory, 'latest_log_21_20-59-1.csv'), 'r') as f:
         for line in f:
             if 'federatedAggregation' in line:
-                latencies.append(int(line.split(',')[1]) / 1000000) # convert to seconds
-    # boxplot latencies
-    ax1.boxplot(latencies, vert=False, widths=0.8, patch_artist=True, boxprops=dict(facecolor=colors[0]),
+                FineTuning_latencies.append(int(line.split(',')[1]) / 1000000) # convert to seconds
+                FL_latencies.append(int(line.split(',')[2]) / 1000000) # convert to seconds
+    ax1a.text(0.5, 0.5, 'Fine-Tune  ', ha='center', va='bottom', transform=ax1a.transAxes, fontsize=15)
+    ax1a.boxplot(FineTuning_latencies, positions=[0], vert=False, widths=0.8, patch_artist=True, boxprops=dict(facecolor=colors[0]),
                 medianprops=dict(color='black'), showfliers=True)
-    ax1.set_yticks([])
-    ax1.set_xlim([4,14])
-    ax1.set_xticks([4, 6, 8, 10, 12, 14])
-    ax1.set_xticklabels([4, 6, 8, 10, 12, '14s'], size=12)
-    fig1.tight_layout()
+    ax1b.text(0.5, 0.35, 'FL Round-Trip', ha='center', va='bottom', transform=ax1b.transAxes, fontsize=15)
+    ax1b.boxplot(FL_latencies, positions=[1], vert=False, widths=0.8, patch_artist=True, boxprops=dict(facecolor=colors[0]),
+                medianprops=dict(color='black'), showfliers=True)
+
+    ax1a.set_yticks([])
+    ax1a.set_xlim(0, 0.25)
+    ax1b.set_xlim(3.5, 12.5)
+    ax1a.set_xticks([0, 0.1, 0.2])
+    ax1b.set_xticks([4, 6, 9, 12])
+    ax1a.set_xticklabels([0, '.1', '.2'], size=15)
+    ax1b.set_xticklabels([4, 6, 9, '12s'], size=15)
+
+    ax1a.spines['right'].set_visible(False)
+    ax1b.spines['left'].set_visible(False)
+    d = .015  # size of diagonal lines
+    kwargs = dict(transform=ax1a.transAxes, color='k', clip_on=False)
+    ax1a.plot([1 - d, 1 + d], [-d, +d], **kwargs)
+    ax1a.plot([1 - d, 1 + d], [1 - d, 1 + d], **kwargs)
+
+    kwargs.update(transform=ax1b.transAxes)
+    ax1b.plot([-d, +d], [-d, +d], **kwargs)
+    ax1b.plot([-d, +d], [1 - d, 1 + d], **kwargs)
+    fig1.subplots_adjust(wspace=0.1)
     fig1.savefig('FL-latency.pdf')
     fig1.show()
 
@@ -657,6 +707,34 @@ def hyperparameter_sensitivity(base_directory):
         cbar.set_ticklabels(['high', 'avg', 'low'])
         cbar.set_label('Throughput')
         ax.set_zticks([])
+        ax.set_yticks(y_flat)
+        ax.set_xticks(x_flat)
         plt.tight_layout()
         plt.savefig(f"{exp}.pdf")
         plt.show()
+
+def perDeviceAnalysis(base_directory):
+    fig, ax = plt.subplots(4, 3, figsize=(7.5, 5))
+
+    axs = [ax[0, 0], ax[0,1], ax[0,2], ax[1,0], ax[1,1], ax[1,2], ax[2,0], ax[2,1], ax[2,2], ax[3,0], ax[3,1], ax[3,2]]
+    videos = ['traffic1.mp4', 'traffic2.mp4', 'traffic3.mp4', 'traffic4.mp4', 'traffic5.mp4', 'traffic6.mp4', 'traffic7.mp4',
+              'traffic100.mp4', 'traffic20.mp4', 'traffic30.mp4', 'traffic40.mp4', 'traffic50.mp4', 'traffic60.mp4', 'traffic70.mp4',
+              'people1.mp4', 'people2.mp4', 'people3.mp4', 'people4.mp4', 'indoor1.mp4', 'indoor2.mp4']
+    bandwidth_files = ['bandwidth_limits1.json', 'bandwidth_limits2.json', 'bandwidth_limits3.json',
+                       'bandwidth_limits4.json', 'bandwidth_limits5.json', 'bandwidth_limits6.json',
+                       'bandwidth_limits7.json', 'bandwidth_limits8.json', 'bandwidth_limits9.json',
+                       'bandwidth_limits10.json', 'bandwidth_limits11.json', 'bandwidth_limits12.json']
+    bandwidths = get_bandwidths(base_directory)
+    bandwidths_timestamps = {}
+    for b in bandwidths:
+        bandwidths_timestamps[b] = bandwidths[b][1]
+        bandwidths[b] = bandwidths[b][0]
+    for i in range(12):
+        detailed_data = []
+        individual_figures(axs[i], os.path.join(base_directory, 'workload'), detailed_data, videos[i], 0.5,
+                       bandwidths_timestamps[bandwidth_files], bandwidths[bandwidth_files], 0, 0)
+
+    plt.subplots_adjust(wspace=0.004, hspace=0)
+    plt.tight_layout(pad=0.04)
+    plt.savefig('individual-patterns.pdf')
+    plt.show()
