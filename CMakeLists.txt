@@ -175,8 +175,6 @@ endif()
 add_subdirectory(libs/microservice)
 add_subdirectory(libs/utils/protobufprotocols)
 
-add_subdirectory(libs/fcpo_learning)
-add_subdirectory(libs/controller)
 add_subdirectory(libs/communicator)
 
 
@@ -253,9 +251,6 @@ else()
     add_executable(SinkAgent libs/device_agent/sink_agent/main.cpp)
     target_link_libraries(SinkAgent sink_agent)
 
-    add_executable(Controller libs/controller/main.cpp)
-    target_link_libraries(Controller controller)
-
     add_executable(Container_DataSource libs/workloads/data_source/main.cpp)
     target_link_libraries(Container_DataSource data_source)
 
@@ -288,8 +283,5 @@ else()
 
     add_executable(Container_CarBrand libs/workloads/carbrand/carbrand.cpp)
     target_link_libraries(Container_CarBrand carbrand)
-
-    add_executable(RL_OfflineTraining libs/fcpo_learning/offline_training.cpp)
-    target_link_libraries(RL_OfflineTraining fcpo_learning absl::flags absl::flags_parse)
 
 endif()

@@ -1,7 +1,7 @@
 {
     "container": {
-        "cont_experimentName": "rl1",
-        "cont_systemName": "fcpo",
+        "cont_experimentName": "st1",
+        "cont_systemName": "st",
         "cont_pipeName": "traffic",
         "cont_taskName": "platedet",
         "cont_hostDevice": "server",
@@ -45,7 +45,7 @@
                         "nb_classOfInterest": -2,
                         "nb_commMethod": 2,
                         "nb_link": [
-                            "0.0.0.0:55012"
+                            "0.0.0.0:50010"
                         ],
                         "nb_maxQueueSize": 100,
                         "nb_name": "yolov5",
@@ -399,7 +399,7 @@
         "profile_numProfileBatches": 100,
         "profile_numProfileReqs": 1800
     },
-    "fcpo": {
+    "octocross": {
         "state_size": 5,
         "resolution_size": 1,
         "batch_size": 64,

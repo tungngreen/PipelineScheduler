@@ -23,3 +23,5 @@
     ```
     docker build --build-arg JETPACK_VERSION="r35.1.0-py3" -t pipeline-scheduler:r35.1.0-py3 -f DOCKERFILE-jetson .
     ```
+
+Base containers without data or models are available [here](https://hub.docker.com/r/anonymoussub/octocross).

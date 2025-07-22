@@ -4,3 +4,87 @@
 * postprocessor's downstreams' `nb_commMethod` should be matched with sender's downstreams' `nb_commMethod`
     * If sender communicates CPU data (`nb_commMethod = 2 or 3), it requires CPU requests from postprocessor.
     * Thus, in such a case, postprocessor's downstreams' `nb_commMethod` should be 3
+
+### Configurations
+The **Container Agent** relies on a json configuration file specifying the details of microservices inside each container.
+The current container configurations are store [here](/jsons).
+It is worth taking a look at their structures before proceeding to the next part.
+
+Besides general metadata like:
+```json
+    "cont_experimentName": "prof",
+    "cont_systemName": "octocross",
+    "cont_pipeName": "traffic",
+    "cont_taskName": "retina1face",
+    "cont_hostDevice": "server",
+    "cont_hostDeviceType": "server",
+    "cont_name": "retinaface_0",
+```
+
+The microservice details are defined under `"cont_pipeline"`. This is what the example of the `Preprocessor` for model Retina Face.
+```json
+{
+    "msvc_name": "preprocessor",
+    "msvc_numInstances": 1,
+    "msvc_concat": 1,
+    "msvc_idealBatchSize": 1,
+    "msvc_dnstreamMicroservices": [
+        {
+            "nb_classOfInterest": -1,
+            "nb_commMethod": 3,
+            "nb_link": [
+                ""
+            ],
+            "nb_maxQueueSize": 100,
+            "nb_name": "batcher",
+            "nb_expectedShape": [
+                [
+                    3,
+                    576,
+                    640
+                ]
+            ]
+        }
+    ],
+    "msvc_dataShape": [
+        [
+            -1,
+            -1
+        ]
+    ],
+    "msvc_pipelineSLO": 999999,
+    "msvc_type": 1000,
+    "msvc_upstreamMicroservices": [
+        {
+            "nb_classOfInterest": -2,
+            "nb_commMethod": 4,
+            "nb_link": [
+                ""
+            ],
+            "nb_maxQueueSize": 100,
+            "nb_name": "receiver",
+            "nb_expectedShape": [
+                [
+                    -1,
+                    -1
+                ]
+            ]
+        }
+    ],
+    "msvc_maxQueueSize": 100,
+    "msvc_imgType": 16,
+    "msvc_colorCvtType": 4,
+    "msvc_resizeInterpolType": 3,
+    "msvc_imgNormScale": "1/1",
+    "msvc_subVals": [
+        104,
+        117,
+        123
+    ],
+    "msvc_divVals": [
+        1,
+        1,
+        1
+    ]
+
+}

@@ -1,6 +1,5 @@
 syntax = "proto3";
 import "google/protobuf/empty.proto";
-import "indevicecommands.proto";
 
 option java_multiple_files = true;
 option objc_class_prefix = "HLW";
@@ -14,10 +13,6 @@ service ControlCommands {
   rpc SyncDatasource(ContainerLink) returns (google.protobuf.Empty) {}
   rpc UpdateBatchSize(ContainerInts) returns (google.protobuf.Empty) {}
   rpc UpdateResolution(ContainerInts) returns (google.protobuf.Empty) {}
-  rpc UpdateTimeKeeping(indevicecommands.TimeKeeping) returns (google.protobuf.Empty) {}
-  rpc ReturnFl(indevicecommands.FlData) returns (google.protobuf.Empty) {}
-  rpc StopContainer(indevicecommands.ContainerSignal) returns (google.protobuf.Empty) {}
-  rpc Shutdown(google.protobuf.Empty) returns (google.protobuf.Empty) {}
 }
 
 message ContainerConfig {

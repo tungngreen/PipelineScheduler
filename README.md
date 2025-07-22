@@ -1,20 +1,29 @@
 # PipelineScheduler
 
-[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.14789255.svg)](https://doi.org/10.5281/zenodo.14789255)
+# OctoCross
 
-PipelineScheduler is a system which enables the highest performance in terms of throughput and latency. 
-It can find the **optimal workload distribution** to split the pipelines between the server and the Edge devices, and apply **local optimization** of runtime parameters like **inference batch size**.
-The control components ensure the best throughput and latency against challenges such as *content dynamics* and *network instability*.
-PipelineScheduler also considers *resource contention* and is equipped with **inference spatiotemporal scheduling** to mitigate the adverse effects of *co-location interference*.
+OctoCross is a real‑time video analytics scheduling system for distributed camera networks. It learns and predicts fine‑grained spatiotemporal workload dynamics and proactively generates efficient task‑offloading strategies to:
+![System Architecture](System_arch.png)
+- **Boost throughput** by up to 5.8×  
+- **Reduce end‑to‑end latency** by up to 3.2×  
+- **Maintain high SLO compliance** in dynamic topologies of up to 100 nodes  
 
-The current stage of PipelineScheduler is the implementation for our [RTSS 2025](https://2025.rtss.org/) full paper, titled **"FCPO: Federated Continual Policy Optimization for Real-Time High-Throughput Edge Video Analytics"**, available [here](). Future improvements will be continually updated. Architectural diagram:
+Key features include:
 
-![overall-arch](/assets/overall-arch.png)
+1. **Joint Spatiotemporal Learning**  
+   - Graph‑based multi‑head attention encoder  
+   - End‑to‑end learning of historical load and network topology  
 
+2. **Predictive Scheduling Loop**  
+   - Multi‑step iterative offloading based on predicted workloads  
+   - Runtime masks skip low‑impact nodes to reduce compute overhead  
 
-This repo is contributed and maintained by Thanh-Tung Nguyen, Lucas Liebe (equally), and other colleges at [CDSN Lab](http://cds.kaist.ac.kr) at KAIST.
+3. **Continuous Adaptation**  
+   - Online masking to handle node churn  
+   - Targeted fine‑tuning of only added/removed nodes (1000 epochs, ≤30 s convergence)
 
-When using our Code please cite our works at the end of this [README](#citing-our-works).
+![overall-arch](/assets/System_arch.png)
+
 
 # Table of Contents
 
@@ -25,25 +34,24 @@ When using our Code please cite our works at the end of this [README](#citing-ou
    * [Inference Container](#inference-container)  
      * [Container Agent](#container-agent)  
      * [Configurations](#configurations)  
-   * [Knowledge Base](#knowledge-base)  
-3. [Running ***PipelineScheduler***](#running-pipelinescheduler)  
+   * [Knowledge Base](#knowledge-base)
+3. [Running ***OctoCross***](#running-pipelinescheduler)  
    * [Installation](#installation)  
      * [Prerequisites](#prerequisites)  
      * [Inference Platform](#inference-platform)  
      * [Build & Compile](#build--compile)  
-       * [Controller](#the-controller)  
-       * [Device Agent](#the-device-agent)  
-       * [Microservices Inside Each Container](#the-microservices-inside-each-container)  
    * [Preparing Data](#preparing-data)  
-   * [Preparing Models](#preparing-models)  
-     * [Build](#build)  
-     * [Run Conversion](#run-conversion)  
-     * [Edit Model Configuration Templates](#edit-model-configuration-templates)  
-     * [Running Model Profiling](#running-model-profiling)  
-   * [Running](#running)  
-     * [Step 1: Running the Controller](#step-1-running-the-controller)  
-     * [Step 2: Running the Device Agent](#step-2-once-the-controller-is-running-run-a-device-agent-on-each-device)  
-4. [Extending ***PipelineScheduler***](#extending-pipelinescheduler)  
+   * [Preparing Inference Models](#preparing-inference-models)  
+     * [Model weights](#model-weights)  
+     * [Model conversion](#model-conversion)
+   * [Docker images](#docker-images)
+   * [Running Our Experiments](#running-our-experiments)  
+     * [ST Model Training](#st-model-training)  
+     * [ST Model Testing](#st-model-testing)  
+     * [ST Model Weights](#st-model-weights)
+     * [Runtime config settings](#runtime-config-seetings)
+     * [Running OctoCross](#running-octocross)
+4. [Extending ***OctoCross***](#extending-pipelinescheduler)  
    * [Adding Models](#adding-models)  
    * [Local Optimizations](#local-optimizations)  
 5. [Misc](#misc)  
@@ -53,136 +61,49 @@ When using our Code please cite our works at the end of this [README](#citing-ou
 PipelineScheduler is composed of 4 main components:
 
 ## Controller
-The **Controller** is run as a separate C++ process to oversee the whole system.
+The **Controller** is responsible for centralized scheduling. It collects workload traces from all devices, encodes temporal load trends and spatial topology using a spatiotemporal encoder, and predicts the current load on each node. 
+Based on the prediction, it generates an offloading matrix that decides how tasks should be redistributed across the network.
+The Controller also handles dynamic changes by selectively updating the model when nodes are added or removed.
 It queries operational statistics from the Knowledge Base via the PostGreSQL API and issues commands to the **Device Agents** via custom gRPC APIs.
 
 ## Device Agent
 Each workload handling device (including the Edge server) runs a **Device Agent** as a separate C++ process to manage and monitor the containers using Docker and other APIs (e.g., NVIDIA Driver API).
+It records recent workload statistics and sends them to the Controller. Upon receiving scheduling decisions, it manages task migration via containerized modules. The agent can also report resource issues or temporarily opt out of scheduling when overloaded.
 
 ## Inference Container
 EVA pipelines are organized into DAGs with each node is a container, which packages a DNN model and its pre/postprocessing logics.
 Particularly, each container is its own pipeline of microservices which typically follows a structure of `[Receiver -> Preprocessor -> Batcher -> Inferencer -> Postprocessor -> Sender]`. Each microservice runs as a thread to ensure high parallelism.
 
-The `Preprocessor` and `Postprocessor` can be cloned (or *horizontally scaled up*), as well as the batch size of `Inferencer` can be dynamically set to ensure the highest throghput while maintain strict service-level objective (i.e., end-to-end latency) compliance.
-
 This design allows microservice to be replaced easily in a plug-and-place manner. For instane, if a TensorRT inferencer (the current version) is not suitable for the hardware, a new inferencer (e.g., ONNX-based) can be whipped up with minimal adaptation.
 
 But other designs (e.g., monolithic) works as well as long as the endpoints for sending/receiving data are specific correctly.
 
-### Container Agent
-The **Container Agent** is a light-weight thread in charge of creating/deleting the microservices according to the instructions of the **Device Agent** and **Controller**.
-It also collects operational stats inside the container and published them to designated metrics endpoints.
-
-### Configurations
-The **Container Agent** relies on a json configuration file specifying the details of microservices inside each container.
-The current container configurations are store [here](/jsons).
-It is worth taking a look at their structures before proceeding to the next part.
-
-Besides general metadata like:
-```json
-    "cont_experimentName": "prof",
-    "cont_systemName": "fcpo",
-    "cont_pipeName": "traffic",
-    "cont_taskName": "retina1face",
-    "cont_hostDevice": "server",
-    "cont_hostDeviceType": "server",
-    "cont_name": "retinaface_0",
-```
-
-The microservice details are defined under `"cont_pipeline"`. This is what the example of the `Preprocessor` for model Retina Face.
-```json
-{
-    "msvc_name": "preprocessor",
-    "msvc_numInstances": 1,
-    "msvc_concat": 1,
-    "msvc_idealBatchSize": 1,
-    "msvc_dnstreamMicroservices": [
-        {
-            "nb_classOfInterest": -1,
-            "nb_commMethod": 3,
-            "nb_link": [
-                ""
-            ],
-            "nb_maxQueueSize": 100,
-            "nb_name": "batcher",
-            "nb_expectedShape": [
-                [
-                    3,
-                    576,
-                    640
-                ]
-            ]
-        }
-    ],
-    "msvc_dataShape": [
-        [
-            -1,
-            -1
-        ]
-    ],
-    "msvc_pipelineSLO": 999999,
-    "msvc_type": 1000,
-    "msvc_upstreamMicroservices": [
-        {
-            "nb_classOfInterest": -2,
-            "nb_commMethod": 4,
-            "nb_link": [
-                ""
-            ],
-            "nb_maxQueueSize": 100,
-            "nb_name": "receiver",
-            "nb_expectedShape": [
-                [
-                    -1,
-                    -1
-                ]
-            ]
-        }
-    ],
-    "msvc_maxQueueSize": 100,
-    "msvc_imgType": 16,
-    "msvc_colorCvtType": 4,
-    "msvc_resizeInterpolType": 3,
-    "msvc_imgNormScale": "1/1",
-    "msvc_subVals": [
-        104,
-        117,
-        123
-    ],
-    "msvc_divVals": [
-        1,
-        1,
-        1
-    ]
-
-}
-```
-
-When running FCPO, the config should also contain an fcpo section with hyperparameterts.
-
-```json
-{
-    "state_size": 7,
-    "resolution_size": 4,
-    "batch_size": 16,
-    "threads_size": 4,
-    "lambda": 0.2,
-    "gamma": 0.2,
-    "clip_epsilon": 0.9,
-    "penalty_weight": 0.2,
-    "theta": 1.1,
-    "sigma": 10.0,
-    "phi": 2.0,
-    "precision": "float",
-    "update_steps": 150,
-    "update_step_incs": 10,
-    "federated_steps": 10,
-    "seed": 42
-}
-```
-
 Details on how to set the configurations can be found [here](/jsons/README).
-However, when running the whole system, the configurations are automatically modified by the **Controller** based on the model and experiment configurations.
+
+Each container exposes an gRPC API to the **Device Agent**. Two protobuf messages are used a ContainerConfig
+
+      ```protobuf
+      message ContainerConfig {
+        string name           = 1;  // container identifier
+        string json_config    = 2;  // serialized runtime config
+        string executable     = 3;  // path to binary or script
+        int32  device         = 4;  // device ID on which to run
+        int32  control_port   = 5;  // gRPC port for this container
+        int32  model_type     = 6;  // enum/model selector
+        repeated int32 input_shape = 7;  // e.g. [batch, C, H, W]
+      }
+      
+      message ContainerLink {
+        int32   mode               = 1;  // link mode (e.g. pipeline vs. broadcast)
+        string  name               = 2;  // upstream container name
+        string  downstream_name    = 3;  // downstream container name
+        string  ip                 = 4;  // downstream device IP
+        int32   port               = 5;  // downstream gRPC port
+        float   data_portion       = 6;  // fraction of tasks to offload
+        string  old_link           = 7;  // previous link identifier (optional)
+        int64   timestamp          = 8;  // link update time (ms since epoch)
+        int32   offloading_duration = 9; // duration budget (ms)
+      }'''
 
 ## Knowledge Base
 The Knowledge Base is a PostgreSQL (14) database which contains all the operational statistics.
@@ -191,19 +112,20 @@ The Knowledge Base is a PostgreSQL (14) database which contains all the operatio
 ## Installation
 ### Prerequisites
 To run the system, this following software must be installed on the host machines.
+* CUDA 11.4 - 12.6
 * CMake (or newer)
 * Docker
-* OpenCV
-* gRPC
-* Protobuf
-* PostgreSQL.
+* OpenCV 4.8.1
+* gRPC 1.62.0
+* Protobuf 25.1
+* PostgreSQL 14
 
 Inside the container, it is also necessary to install inference software platforms (e.g., TensorRT, ONNX).
 
 The specific software versions and commands for installation can be found taken from the [dockerfiles](/dockerfiles/), which are written to build inference container images. 
 Since the current version is run on NVIDIA hardware (i.e., GPU and Jetson devices), most of the images are built upon NVIDIA container images published [here](https://catalog.ngc.nvidia.com/containers).
 
-The build instructions can be found [here](dockerfiles/README) and base containers without data or models are available [here](https://hub.docker.com/r/lucasliebe/pipeplusplus/tags).
+The build instructions can be found [here](dockerfiles/README) and base containers without data or models are available [here](https://hub.docker.com/r/anonymoussub/octocross).
 
 ### Inference Platform
 The current versions of `Preprocessors, Postprocessors and Inferencer` are written for NVIDIA hardware, especially the `Inferencer`. But custom microservices can be written based on these with minimal adaptation.
@@ -212,20 +134,11 @@ The system is designed to be deployed on a Edge cluster, but can also be run on 
 The first step is to build the source code, here you can use multiple options for instance to change the scheduling system.
 
 ### Build & Compile
-* The **Controller**
-    ```bash
-    mkdir build_host && cd build_host
-    cmake -DSYSTEM_NAME=[FCPO, PPP, DIS, JLF, RIM, BCE] -DON_HOST=True -DDEVICE_ARCH=platform_name
-    # Ours are FCPO and PPP (standing for PipePlusPlus ~ OctopInf)
-    # Platform name is amd64 or Jetson.
-    make -j 64 Controller
-    ```
-
+* Controller
 * The **Device Agent** 
     ```bash
     mkdir build_host && cd build_host
-    cmake -DSYSTEM_NAME=[FCPO, PPP, DIS, JLF, RIM, BCE] -DON_HOST=True -DDEVICE_ARCH=platform_name
-    # Ours are FCPO and PPP (standing for PipePlusPlus ~ OctopInf)
+    cmake -DSYSTEM_NAME=PPP -DON_HOST=True -DDEVICE_ARCH=platform_name
     # Platform name is amd64 or Jetson.
     make -j 64 Device_Agent
     ```
@@ -233,26 +146,39 @@ The first step is to build the source code, here you can use multiple options fo
 * The microservices **inside each container**
     ```bash
     mkdir build && cd build
-    cmake -DSYSTEM_NAME=[FCPO, PPP, DIS, JLF, RIM, BCE] -DON_HOST=False -DDEVICE_ARCH=platform_name
-    # Ours are FCPO and PPP (standing for PipePlusPlus ~ OctopInf)
+    cmake -DSYSTEM_NAME=PPP -DON_HOST=False -DDEVICE_ARCH=platform_name
     # Platform name is amd64 or Jetson.
     make -j 64 Container_[name]
     # Name of the model. YoloV5 for instance.
     ```
 
 ## Preparing Data
-The data is collected from publicly available streams on website like [www.earthcam.com](https://www.earthcam.com). 
-The script for pulling the data can be found [here](/scripts/collect_dataset.sh) and requires python3 to run.
+Our experiments are conducted on two datasets: [MTMMC](https://openaccess.thecvf.com/content/CVPR2024/papers/Woo_MTMMC_A_Large-Scale_Real-World_Multi-Modal_Camera_Tracking_Benchmark_CVPR_2024_paper.pdf) for *Campus* scenario and [AI City Challenge 2022 Track 2 - Multi-vehicle Tracking dataset](https://www.aicitychallenge.org/2022-ai-city-challenge/).
 
-## Preparing Models
+**Data** 
+* Please download the data and place them as videos into `data/` in the devices where they are supposed to streamed from in a real-world setting.
+* To reproduce our experiments, please placement configurations available in `SToffloading_*.json` in `jsons/`.
+
+**Ground truth**
+* We need to collect the number of bounding boxes in each frame to use as the ground truth.
+* For the MTMMC dataset, the authors provided the corresponding annotated groundtruth, so we directly extract the number of pedestrians per frame from the GT file to build each node’s workload history.
+* In the AIcity scenario, the tracking dataset only includes moving objects and may omit certain detections. We therefore use a YOLO model to detect all target objects in each frame and generate corresponding JSON files for workload history (e.g., data/s36_person.json).Place these files in the PipePlusPlus/data directory (or your custom subfolder) and reference them in your data loading scripts accordingly.
+
+
+
+## Preparing Inference Models
+
+### Model weights
+ONNX weight files for models used for our experiments can be found [here](https://drive.google.com/drive/u/7/folders/1ir14TSpIRghK-w1nDaZ2Q7dd3O0Xqzbt)
+
+### Model conversion
 Models need to be prepared accordingly to fit the current hardware and software inference platforms. For NVIDIA-TensorRT, please build and use following script.
 
 * Build
     ```bash
     mkdir build && cd build
-    cmake -DSYSTEM_NAME=[FCPO, PPP, DIS, JLF, RIM, BCE] -DON_HOST=False -DDEVICE_ARCH=platform_name
-    # Ours are FCPO and PPP (standing for PipePlusPlus ~ OctopInf)
-    # Platform name is amd64 or Jetson.
+    cmake -DSYSTEM_NAME=PPP -DON_HOST=False -DDEVICE_ARCH=platform_name
+    # Platform name is amd64 or jetson.
     make -j 64 convert_onnx2trt
     ```
 
@@ -266,32 +192,118 @@ Models need to be prepared accordingly to fit the current hardware and software 
 * Running Model Profiling
     * This is only necessary for scheduling, the inference works without profiling.
 
-## Running
+## Docker images
+The build instructions can be found [here](dockerfiles/README) and base containers without data or models are available [here](https://hub.docker.com/r/anonymoussub/octocross).
+
+## Running Our Experiments
+
+### ST model training
+The following illustrates, using the code above as an example, how to prepare files, run training commands, and the core training workflow.
+
+
+1. Files to prepare
+- **Network topology file** `bandwidth.cites`  
+  A three‑column, space‑separated file: source node ID, destination node ID, bandwidth/distance.
+- **Time‑series data file** `s01_person.json`  
+  A JSON object where each key is a node name and each value has a `"person"` array of per‑frame counts.
+- **Training script** `train_st_model.py`  
+  Implements `load_data`, the `Generator` model, `discriminator_loss`, and the main training loop.
+
+2. Run commands
+    ```bash
+    python train_st_model.py --cites_file bandwidth.cites  --data_file s01_person.json  --epochs 50 --batch_size 16 --lr 0.001 --output_model  model_super_factory.pt
+    ```
+    Argument details
+
+    | Argument | Type | Default | Required | Description |
+    |---|---|---|---|---|
+    | `--cites_file` | `str` | — | Yes | Path to the topology file (`bandwidth.cites`), which lists edges as “source target weight.” Used by `load_data` to build the adjacency matrix. |
+    | `--data_file` | `str` | — | Yes | Path to the node‑time data file (e.g. `Data2.csv` or `s01_person.json`), containing per‑frame workload counts for each node. |
+    | `--epochs` | `int` | `100` | No | Number of epochs (full passes over the data) to train the model. |
+    | `--batch_size` | `int` | `16` | No | Number of samples per training batch. Larger values speed up training (up to GPU memory limits) but may affect convergence. |
+    | `--lr` | `float` | `0.0001` | No | Learning rate for the optimizer; controls the step size on each gradient update. |
+    | `--output_model` | `str` | `model_super_campus.pt` | No | File path to save the final trained model weights. |
+    | `--mode` | `str` | `train` | No | Operation mode:<br>- `train`: run training loop and save a model<br>- `predict`: load a saved model and perform inference |
+    | `--load_model` | `str` | `None` | No | Optional path to a pre‑trained model. If provided in `train` mode, training will resume from these weights; otherwise start from scratch. |
+    | `--num_nodes` | `int` | `16` | No | Number of graph nodes; must match the unique node count in `--cites_file`. |
+    | `--embed_dim` | `int` | `32` | No | Dimensionality of the node embedding and internal feature vectors. Higher values increase model capacity (and compute cost). |
+    | `--threshold` | `float` | `10.0` | No | Workload‑balancing threshold: nodes with load > threshold are considered senders, < threshold are receivers. |
+    | `--num_layers` | `int` | `3` | No | Number of `SimpleSTBlock` layers in the spatiotemporal encoder. More layers capture deeper spatiotemporal patterns. |
+    | `--heads` | `int` | `4` | No | Number of attention heads in each `SimpleSTBlock`. |
+    | `--forecast_horizon` | `int` | `1` | No | Number of future time steps to forecast and schedule at each forward pass. |
+    | `--history_steps` | `int` | `16` | No | Length of the historical window (in seconds) fed into the model for forecasting. |
+
+### ST model testing
+* Evaluate your Spatio‑Temporal model’s performance with the `--predict` flag:
+    ```bash
+    cd Model
+    python ST_train.py --predict
+
+* This will compare your model’s predictions against the ground truth. Next, point your inference client at the trained .pt file.
+
+### ST Model weights
+* Trained weights of models used for our experiments are provided are provided [here](https://drive.google.com/drive/folders/1ir14TSpIRghK-w1nDaZ2Q7dd3O0Xqzbt?usp=sharing)
+
+### Runtime config settings
+- **Upstream model**  
+  Always use `yolov5.json` for the initial object detection stage.
+
+- **Downstream model**  
+  Depending on your task, deploy either:
+  - `platedet.json` for license‐plate detection  
+  - `retinaface.json` for face detection  
+
+- **Class filter**  
+  Edit the `"nb_classOfInterest"` field in your JSON to select COCO class indices you care about (e.g. `[0]` for “person”, `[2,3,5]` for “car”, “motorbike”, “bus”).
+
+- **Input video**  
+  Point to the video you want to run inference on via the "input_video" field. Place your MP4 video in the PipePlusPlus/data directory. Update the ST_offloading.json file to specify the input_video and select the model you want to use, for example:
+  ```json
+  {
+    "input_video": "data/your_video.mp4",
+    "model": "your_engine_file"
+    }
+- **Example**  
+  Here’s how you’d configure `ST_offloading.json` for one device to run face detection downstream:
+
+     ```json
+     {
+       "initial_pipelines": [
+         {
+           "container_name": "cont_faces",
+           "model_type": 3,
+           "device": "server",
+           "recv_port": 5010,
+           "batch_size": 4,
+           "slo": 200000,
+           "pipeline": "face1",
+           "model_path": "../models/retinaface_1080_fp32_64_1.engine",
+           "input_shape": [3, 576, 640]
+         }
+       ]
+     }
+### Running OctoCross
 * Step 1: Running the **Controller**.
     ```bash
-    ./Controller --ctrl_configPath ../jsons/experiments/full-run-fcpo.json
+    cd controller
+    python server.py
     ```
     * The guideline to set configurations for controller run is available [here](/jsons/experiments/README).
 * Step 2: Once the **Controller** is running, run a **Device Agent** on each device.
     ```bash    
-    ./DeviceAgent --name [device_name] --device_type [server, agx, nx, orinano] --controller_url [controller_ip_address] --dev_port_offset 0 --dev_verbose 1 --deploy_mode 1
+    sudo ./DeviceAgent \
+        --name <DEVICE_NAME> \           
+        --device_type <DEVICE_TYPE> \    
+        --controller_url CONTROLLER_IP 
+        --dev_port_offset 0 \           
+        --dev_verbose 1 \                
+        --dev_bandwidthLimitID 2    
     ```
-
-# Extending ***PipelineScheduler***
-## Adding Models
-New models can be easily introduced to the system using one of the following ways:
-1. Blackbox Container
-    * This doesn't work with scheduling since it requires a [**Container Agent**](#container-agent), but as long as endpoints are correctly specified and data types are correctly aligned, pipeline inference should still work perfectly.
-2. Adding new code
-    * New code for new types of `Inferencer`, `Preprocessor`, `Postprocessor` can be easily added by modifying the current code.
-    * Instructions can be found [here](/libs/workloads/README)
-## Local Optimizations
-TBA
-
-# Misc
-* The main source code can be found within the `libs/` folder while `src/` contains the data sink and simulates the end-user receiving the data.
-* Configurations for models and experiments can be found in `jsons/` while the directories `cmake`, `scripts/`, and `dockerfiles` show deployment related code and helpers.
-* For analyzing the results we provide python scripts in `analyze`.
+* Step 3: Run the inference client
+    ```bash
+    cd controller
+    python client.py 
+    ```
 
 ## Useful Scripts
 ### Bandwidth setting
@@ -307,30 +319,3 @@ The required json configurations can be found [here](/jsons/) or created from th
 
 ### Change names/Delete of PostgreSQL tables en masse.
 * If an experiment is not running as expected and we want to wipe out the old statistics table for a clean slate.
-
-# Citing our works
-If you find the repo useful, please cite the following works which have encompassed the development of this repo.
-
-* **FCPO: Federated Continual Policy Optimization for Real-Time High-Throughput Edge Video Analytics** 
-    ```
-    @inproceedings{nguyen2025,
-        author={Lucas Liebe and Thanh-Tung Nguyen and Dongman Lee}
-        title = {{FCPO: Federated Continual Policy Optimization for Real-Time High-Throughput Edge Video Analytics}},
-        booktitle = {The 46th IEEE Real-Time Systems Symposium (RTSS)},
-        year = {2025},
-        publisher = {IEEE},
-        month = december,
-    }
-    ```
-
-* **OCTOPINF: Workload-Aware Real-Time Inference Serving for Edge Video Analytics** 
-    ```
-    @inproceedings{nguyen2025,
-        author={Thanh-Tung Nguyen and Lucas Liebe and Tau-Nhat Quang and Yuheng Wu and Jinghan Cheng and Dongman Lee}
-        title = {{OCTOPINF: Workload-Aware Real-Time Inference Serving for Edge Video Analytics}},
-        booktitle = {The 23rd International Conference on Pervasive Computing and Communications (PerCom)},
-        year = {2025},
-        publisher = {IEEE},
-        month = march,
-    }
-    ```

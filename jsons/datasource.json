@@ -1,7 +1,7 @@
 {
     "container": {
         "cont_experimentName": "rl1",
-        "cont_systemName": "fcpo",
+        "cont_systemName": "octocross",
         "cont_pipeName": "every",
         "cont_taskName": "dsrc",
         "cont_hostDevice": "server",
