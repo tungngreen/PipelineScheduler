@@ -21,9 +21,10 @@ When using our Code please cite our works at the end of this [README](#citing-ou
 1. [Overview](#pipelinescheduler)  
 2. [Implementation Architecture](#implementation-architecture)  
    * [Controller](#controller)  
-   * [Device Agent](#device-agent)  
+   * [Device Agent](#device-agent)
    * [Inference Container](#inference-container)  
-     * [Container Agent](#container-agent)  
+     * [Container Agent](#container-agent)
+     * [Local Optimizations (FCPO)](#local-optimizations-fcpo)
      * [Configurations](#configurations)  
    * [Knowledge Base](#knowledge-base)  
 3. [Running ***PipelineScheduler***](#running-pipelinescheduler)  
@@ -45,7 +46,6 @@ When using our Code please cite our works at the end of this [README](#citing-ou
      * [Step 2: Running the Device Agent](#step-2-once-the-controller-is-running-run-a-device-agent-on-each-device)  
 4. [Extending ***PipelineScheduler***](#extending-pipelinescheduler)  
    * [Adding Models](#adding-models)  
-   * [Local Optimizations](#local-optimizations)  
 5. [Misc](#misc)  
 6. [Citing Our Works](#citing-our-works)
 
@@ -72,6 +72,14 @@ But other designs (e.g., monolithic) works as well as long as the endpoints for 
 ### Container Agent
 The **Container Agent** is a light-weight thread in charge of creating/deleting the microservices according to the instructions of the **Device Agent** and **Controller**.
 It also collects operational stats inside the container and published them to designated metrics endpoints.
+
+### Local Optimizations (FCPO)
+When compiling and running the system with the `FCPO` option, the **Inference Container** will be equipped with an iAgent.
+As presented in FCPO (ICSOC25), the iAgent is a local optimization agent which runs attached to each container to optimize the inference batch size and other parameters at a high frequency.
+This is beneficial for the system to adapt to the dynamic environment, such as changing network bandwidth and varying content dynamics, in a more responsive way than the global optimization of the **Controller**.
+The iAgent is implemented as a C++ thread running inside the **Inference Container** and is implemented [here](/libs/fcpo_learning).
+Every iAgent is trained through FCRL, where models are locally trained using Continual Reinforcement Learning (CRL) and aggregated at the **Controller**.
+The Hyperparameters can be configured in the [experiment jsons](/jsons/experiments/README.md) provided to the **Controller** or in the [container configuration](#configurations).
 
 ### Configurations
 The **Container Agent** relies on a json configuration file specifying the details of microservices inside each container.
@@ -271,7 +279,7 @@ Models need to be prepared accordingly to fit the current hardware and software 
     ```bash
     ./Controller --ctrl_configPath ../jsons/experiments/full-run-fcpo.json
     ```
-    * The guideline to set configurations for controller run is available [here](/jsons/experiments/README).
+    * The guideline to set configurations for controller run is available [here](/jsons/experiments/README.md).
 * Step 2: Once the **Controller** is running, run a **Device Agent** on each device.
     ```bash    
     ./DeviceAgent --name [device_name] --device_type [server, agx, nx, orinano] --controller_url [controller_ip_address] --dev_port_offset 0 --dev_verbose 1 --deploy_mode 1
@@ -311,12 +319,12 @@ The required json configurations can be found [here](/jsons/) or created from th
 # Citing our works
 If you find the repo useful, please cite the following works which have encompassed the development of this repo.
 
-* **FCPO: Federated Continual Policy Optimization for Real-Time High-Throughput Edge Video Analytics** 
+* **FCPO: Federated Continual Policy Optimization for Real-Time Edge Video Analytic Services** 
     ```
-    @inproceedings{nguyen2025,
+    @inproceedings{liebe2025fcpo,
         author={Lucas Liebe and Thanh-Tung Nguyen and Dongman Lee}
-        title = {{FCPO: Federated Continual Policy Optimization for Real-Time High-Throughput Edge Video Analytics}},
-        booktitle = {The 46th IEEE Real-Time Systems Symposium (RTSS)},
+        title = {{FCPO: Federated Continual Policy Optimization for Real-Time Edge Video Analytic Services}},
+        booktitle = {The 23rd International Conference on Service-Oriented Computing (ICSOC)},
         year = {2025},
         publisher = {IEEE},
         month = december,
@@ -325,7 +333,7 @@ If you find the repo useful, please cite the following works which have encompas
 
 * **OCTOPINF: Workload-Aware Real-Time Inference Serving for Edge Video Analytics** 
     ```
-    @inproceedings{nguyen2025,
+    @inproceedings{nguyen2025octopinf,
         author={Thanh-Tung Nguyen and Lucas Liebe and Tau-Nhat Quang and Yuheng Wu and Jinghan Cheng and Dongman Lee}
         title = {{OCTOPINF: Workload-Aware Real-Time Inference Serving for Edge Video Analytics}},
         booktitle = {The 23rd International Conference on Pervasive Computing and Communications (PerCom)},
