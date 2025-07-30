@@ -222,7 +222,7 @@ else()
     add_subdirectory(libs/device_agent/sink_agent)
 
     add_library(PipePlusPlusSink
-        src/main.cpp)
+        libs/processing_engine/data_sink/main.cpp)
 
     target_include_directories(PipePlusPlusSink PUBLIC
         ${OpenCV_INCLUDE_DIRS}
@@ -244,7 +244,7 @@ else()
         baseprocessors
     )
 
-    add_executable(runSink src/main.cpp)
+    add_executable(runSink libs/processing_engine/data_sink/main.cpp)
     target_link_libraries(runSink PipePlusPlusSink)
 
     add_executable(DeviceAgent libs/device_agent/main.cpp)

@@ -46,6 +46,7 @@ When using our Code please cite our works at the end of this [README](#citing-ou
      * [Step 2: Running the Device Agent](#step-2-once-the-controller-is-running-run-a-device-agent-on-each-device)  
 4. [Extending ***PipelineScheduler***](#extending-pipelinescheduler)  
    * [Adding Models](#adding-models)  
+   * [Connecting with Kubernetes](#connecting-with-kubernetes)
 5. [Misc](#misc)  
 6. [Citing Our Works](#citing-our-works)
 
@@ -225,7 +226,7 @@ The first step is to build the source code, here you can use multiple options fo
     mkdir build_host && cd build_host
     cmake -DSYSTEM_NAME=[FCPO, PPP, DIS, JLF, RIM, BCE] -DON_HOST=True -DDEVICE_ARCH=platform_name
     # Ours are FCPO and PPP (standing for PipePlusPlus ~ OctopInf)
-    # Platform name is amd64 or Jetson.
+    # Platform name is amd64, orin, or xavier.
     make -j 64 Controller
     ```
 
@@ -234,7 +235,7 @@ The first step is to build the source code, here you can use multiple options fo
     mkdir build_host && cd build_host
     cmake -DSYSTEM_NAME=[FCPO, PPP, DIS, JLF, RIM, BCE] -DON_HOST=True -DDEVICE_ARCH=platform_name
     # Ours are FCPO and PPP (standing for PipePlusPlus ~ OctopInf)
-    # Platform name is amd64 or Jetson.
+    # Platform name is amd64, orin, or xavier.
     make -j 64 Device_Agent
     ```
 
@@ -243,14 +244,14 @@ The first step is to build the source code, here you can use multiple options fo
     mkdir build && cd build
     cmake -DSYSTEM_NAME=[FCPO, PPP, DIS, JLF, RIM, BCE] -DON_HOST=False -DDEVICE_ARCH=platform_name
     # Ours are FCPO and PPP (standing for PipePlusPlus ~ OctopInf)
-    # Platform name is amd64 or Jetson.
+    # Platform name is amd64, orin, or xavier.
     make -j 64 Container_[name]
     # Name of the model. YoloV5 for instance.
     ```
 
 ## Preparing Data
 The data is collected from publicly available streams on website like [www.earthcam.com](https://www.earthcam.com). 
-The script for pulling the data can be found [here](/scripts/collect_dataset.sh) and requires python3 to run.
+The script for pulling the data can be found [here](/scripts/collect_dataset.sh) and requires python3 with venv to run.
 
 ## Preparing Models
 Models need to be prepared accordingly to fit the current hardware and software inference platforms. For NVIDIA-TensorRT, please build and use following script.
@@ -260,7 +261,7 @@ Models need to be prepared accordingly to fit the current hardware and software 
     mkdir build && cd build
     cmake -DSYSTEM_NAME=[FCPO, PPP, DIS, JLF, RIM, BCE] -DON_HOST=False -DDEVICE_ARCH=platform_name
     # Ours are FCPO and PPP (standing for PipePlusPlus ~ OctopInf)
-    # Platform name is amd64 or Jetson.
+    # Platform name is amd64, orin, or xavier.
     make -j 64 convert_onnx2trt
     ```
 
@@ -293,11 +294,12 @@ New models can be easily introduced to the system using one of the following way
 2. Adding new code
     * New code for new types of `Inferencer`, `Preprocessor`, `Postprocessor` can be easily added by modifying the current code.
     * Instructions can be found [here](/libs/workloads/README)
-## Local Optimizations
+
+## Connecting with Kubernetes
 TBA
 
 # Misc
-* The main source code can be found within the `libs/` folder while `src/` contains the data sink and simulates the end-user receiving the data.
+* The main source code can be found within the `libs/` folder.
 * Configurations for models and experiments can be found in `jsons/` while the directories `cmake`, `scripts/`, and `dockerfiles` show deployment related code and helpers.
 * For analyzing the results we provide python scripts in `analyze`.
 
@@ -323,11 +325,11 @@ If you find the repo useful, please cite the following works which have encompas
     ```
     @inproceedings{liebe2025fcpo,
         author={Lucas Liebe and Thanh-Tung Nguyen and Dongman Lee}
-        title = {{FCPO: Federated Continual Policy Optimization for Real-Time Edge Video Analytic Services}},
-        booktitle = {The 23rd International Conference on Service-Oriented Computing (ICSOC)},
-        year = {2025},
-        publisher = {IEEE},
-        month = december,
+        title = {{FCPO: Federated Continual Policy Optimization for Real-Time High-Throughput Edge Video Analytics}},
+        booktitle = {Mobicom 2026},
+        year = {2026},
+        publisher = {ACM},
+        month = november,
     }
     ```
 
