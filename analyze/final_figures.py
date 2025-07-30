@@ -83,13 +83,13 @@ def base_plot(data, ax, title, sum_throughput=False, labels=algorithm_names, use
         ax.axhline(y=data['max_traffic_throughput'] + data['max_people_throughput'], color='red', linestyle='--',
                    linewidth=2, xmin=0.05, xmax=0.95)
         ax.set_xticks([i * 0.2 for i in range(len(xticks))])
-        ax.set_xticklabels(xticks, size=14, rotation=35)
+        ax.set_xticklabels(xticks, size=12, rotation=15)
         yticks = np.arange(0, int(data['max_traffic_throughput'] + data['max_people_throughput']), 500).tolist()
         ax.set_yticks(yticks)
         if use_label_map:
             ax.set_yticklabels([int(y / 100) for y in yticks], size=10)
         else:
-            ax.set_yticklabels([int(y / 100) for y in yticks], size=12)
+            ax.set_yticklabels([int(y / 100) for y in yticks], size=11)
     else:
         ax.axhline(y=data['max_traffic_throughput'], color='red', linestyle='--', linewidth=2, xmin=0.05, xmax=0.45)
         ax.axhline(y=data['max_people_throughput'], color='red', linestyle='--', linewidth=2, xmin=0.55, xmax=0.95)
@@ -103,7 +103,7 @@ def base_plot(data, ax, title, sum_throughput=False, labels=algorithm_names, use
         ax.set_yticklabels(yticks, size=10)
 
     ax.set_title(title, size=12)
-    ax.set_ylabel(y_label, size=15)
+    ax.set_ylabel(y_label, size=12)
 
     if not sum_throughput:
         ax.legend(fontsize=12)
