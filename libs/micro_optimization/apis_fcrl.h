@@ -162,7 +162,7 @@ public:
     FCRLAgent(std::string& cont_name, uint state_size, uint resolution_size, uint max_batch, uint scaling_size,
              CompletionQueue *cq, std::shared_ptr<InDeviceMessages::Stub> stub, torch::Dtype precision = torch::kF64,
              uint update_steps = 60, uint update_steps_inc = 5, uint federated_steps = 5, double lambda = 0.95,
-             double gamma = 0.99, double clip_epsilon = 0.2, double penalty_weight = 0.1, double theta = 1.1,
+             double gamma = 0.99, double clip_epsilon = 0.2, double theta = 1.1,
              double sigma = 10.0, double phi = 2.0, int seed = 42);
 
     ~FCRLAgent() {
@@ -209,7 +209,6 @@ private:
     double clip_epsilon;
     double cumu_reward;
     double last_avg_reward = 0.0;
-    double penalty_weight;
 
     // weights for reward function
     double theta;
@@ -255,7 +254,6 @@ public:
                 {"lambda", lambda},
                 {"gamma", gamma},
                 {"clip_epsilon", clip_epsilon},
-                {"penalty_weight", penalty_weight},
                 {"theta", theta},
                 {"sigma", sigma},
                 {"phi", phi},
@@ -294,7 +292,6 @@ private:
     double lambda;
     double gamma;
     double clip_epsilon;
-    double penalty_weight;
     uint state_size;
 
     // weights for reward function

@@ -1,11 +1,13 @@
 #include "apis_fcrl.h"
 
+#include <utility>
+
 FCRLAgent::FCRLAgent(std::string& cont_name, uint state_size, uint resolution_size, uint max_batch,  uint scaling_size,
                      CompletionQueue *cq, std::shared_ptr<InDeviceMessages::Stub> stub, torch::Dtype precision,
                      uint update_steps, uint update_steps_inc, uint federated_steps, double lambda, double gamma,
-                     double clip_epsilon, double penalty_weight, double theta, double sigma, double phi, int seed)
+                     double clip_epsilon, double theta, double sigma, double phi, int seed)
         : precision(precision), cont_name(cont_name), cq(cq), stub(stub), lambda(lambda), gamma(gamma),
-          clip_epsilon(clip_epsilon), penalty_weight(penalty_weight), theta(theta), sigma(sigma), phi(phi),
+          clip_epsilon(clip_epsilon), theta(theta), sigma(sigma), phi(phi),
           state_size(state_size), resolution_size(resolution_size), max_batch(max_batch), scaling_size(scaling_size),
           update_steps(update_steps), update_steps_inc(update_steps_inc), federated_steps(federated_steps) {
     path = "../models/fcpo_learning/" + cont_name;
@@ -54,10 +56,6 @@ void FCRLAgent::update() {
     T action3_probs = torch::softmax(policy3, -1);
     T action3_log_probs = torch::log(action3_probs.gather(-1, torch::tensor(experiences.get_scaling()).reshape({-1, 1})).squeeze(-1));
     T new_log_probs = (1 * action1_log_probs + 1 * action2_log_probs + 1 * action3_log_probs).squeeze(-1);
-    // code if using SinglePolicyNet
-    // auto [policy, val] = model->forward(torch::stack(experiences.get_states()));
-    // T actions = model->combine_actions(experiences.get_resolution(), experiences.get_batching(), experiences.get_scaling(), max_batch, scaling_size).to(torch::kInt64);
-    // T new_log_probs = torch::log(policy.gather(-1, actions.reshape({-1, 1})).squeeze(-1));
 
     T ratio = torch::exp(new_log_probs - torch::stack(experiences.get_log_probs()));
 
@@ -77,11 +75,9 @@ void FCRLAgent::update() {
         policy_loss = 10 * torch::mean(policy_loss_1 + policy_loss_2);
 
         value_loss = torch::mse_loss(val.squeeze(), computeCumuRewards());
-        T policy1_penalty = penalty_weight * torch::mean(torch::tensor(experiences.get_resolution()).to(precision));
-        T policy3_penalty = penalty_weight * torch::mean(torch::tensor(experiences.get_scaling()).to(precision));
-        spdlog::get("container_agent")->info("RL Agent Policy Loss: {}, Value Loss: {}, Policy1 Penalty: {}, Policy3 Penalty: {}",
-                                             policy_loss.item<double>(), value_loss.item<double>(), policy1_penalty.item<double>(), policy3_penalty.item<double>());
-        loss = (policy_loss + value_loss + policy1_penalty + policy3_penalty);
+        spdlog::get("container_agent")->info("RL Agent Policy Loss: {}, Value Loss: {}",
+                                             policy_loss.item<double>(), value_loss.item<double>());
+        loss = (policy_loss + value_loss);
     } catch (const std::exception& e) {
         spdlog::get("container_agent")->error("Error in loss computation: {}", e.what());
         reset();
@@ -262,7 +258,6 @@ FCRLServer::FCRLServer(std::string run_name, uint state_size, torch::Dtype preci
     lambda = 0.1;
     gamma = 0.1;
     clip_epsilon = 0.9;
-    penalty_weight = 0.2;
 
     theta = 1.1;
     sigma = 10.0;
