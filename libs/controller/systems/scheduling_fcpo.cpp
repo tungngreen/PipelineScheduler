@@ -17,7 +17,7 @@ void Controller::initiateGPULanes(NodeHandle &node) {
         return;
     }
 
-    if (node.type == SystemDeviceType::Server) {
+    if (node.type == Server) {
         node.numGPULanes = NUM_LANES_PER_GPU * NUM_GPUS;
     } else {
         node.numGPULanes = 1;
@@ -138,7 +138,7 @@ void Controller::queryingProfiles(TaskHandle *task) {
             model->arrivalProfiles.d2dNetworkProfile[std::make_pair(pair.first, pair.second)] = test;
         }
 
-        for (const auto &deviceName : model->possibleDevices) {
+        for (auto &deviceName : model->possibleDevices) {
             std::string deviceTypeName = getDeviceTypeName(deviceList.at(deviceName)->type);
             containerName = model->name + "_" + deviceTypeName;
             ModelProfile profile = queryModelProfile(
@@ -228,7 +228,7 @@ void Controller::Scheduling() {
     uint64_t sleepTime = std::chrono::duration_cast<TimePrecisionType>(nextTime - std::chrono::system_clock::now()).count();
     startTime = std::chrono::system_clock::now();
     while (running) {
-        if (std::chrono::duration_cast<std::chrono::minutes>(std::chrono::system_clock::now() - startTime).count() > ctrl_runtime + 10) {
+        if (std::chrono::duration_cast<std::chrono::minutes>(std::chrono::system_clock::now() - startTime).count() > ctrl_runtime) {
             running = false;
             break;
         }
@@ -828,7 +828,7 @@ bool Controller::mergeArrivalProfiles(ModelArrivalProfile &mergedProfile, const 
 
     // There should be only 1 pair in the d2dNetworkProfile with key {"merged-...", device}
     D2DNetworkProfile newProfile = {};
-    auto mergedPair = mergedProfile.d2dNetworkProfile.key_comp();
+    mergedProfile.d2dNetworkProfile.key_comp();
     for (const auto &[pair1, profile2] : mergedProfile.d2dNetworkProfile) {
         for (const auto &[pair2, profile1] : toBeMergedProfile.d2dNetworkProfile) {
             if (pair2.first != upstreamDevice || pair2.second != device || pair2.second != pair1.second) {

@@ -8,8 +8,12 @@ from natsort import natsorted
 
 def get_total_objects(dir, path='full_run_total.json'):
     traffic_people, traffic_cars, people_people, people_cars = 0, 0, 0, 0
-    with open(os.path.join(dir, path), 'r') as file:
-        meta = json.load(file)
+    try:
+        with open(os.path.join(dir, path), 'r') as file:
+            meta = json.load(file)
+    except FileNotFoundError:
+        print("Error: Json file not found.")
+        return 1, 1, 1, 1
     for key in meta:
         if "traffic" in key:
             traffic_people += meta[key]["people"]
@@ -81,6 +85,8 @@ def analyze_single_experiment(base_dir, dirs, num_results = 3, latency_target = 
         first[d], last[d] = sys.maxsize, 0
         traffic_people[d], traffic_cars[d], people_people[d], people_cars[d] = [], [], [], []
         filepath = os.path.join(base_dir, d)
+        if not os.path.isdir(filepath):
+            continue
         for file in natsorted(os.listdir(filepath)):
             if not 'txt' in file:
                 continue

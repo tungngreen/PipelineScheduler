@@ -50,6 +50,7 @@ public:
         int deviceMemoryUsage = 0;
         int gpuUtilization = 0;
         int gpuMemoryUsage = 0;
+        int energyConsumption = 0;
     };
 
 

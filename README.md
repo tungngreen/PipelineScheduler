@@ -2,10 +2,12 @@
 
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.14789255.svg)](https://doi.org/10.5281/zenodo.14789255)
 
-PipelineScheduler is a system which enables the highest performance in terms of throughput and latency for can find the **optimal workload distribution** to split the pipelines between the server and the Edge devices, and set the **optimal batch sizes** for them to ensure the best throughput and latency against challenges such as *content dynamics* and *network instability*.
+PipelineScheduler is a system which enables the highest performance in terms of throughput and latency. 
+It can find the **optimal workload distribution** to split the pipelines between the server and the Edge devices, and apply **local optimization** of runtime parameters like **inference batch size**.
+The control components ensure the best throughput and latency against challenges such as *content dynamics* and *network instability*.
 PipelineScheduler also considers *resource contention* and is equipped with **inference spatiotemporal scheduling** to mitigate the adverse effects of *co-location interference*.
 
-The current stage of PipelineScheduler is the implementation for our [ICDCS 2025](https://icdcs2025.icdcs.org/) full paper, titled **"FCPO: Federated Continual Policy Optimization with Heterogeneous Action Spaces for Real-Time High-Throughput Edge Video Analytics"**, available [here](). Future improvements will be continually updated. Architectural diagram:
+The current stage of PipelineScheduler is the implementation for our [RTSS 2025](https://2025.rtss.org/) full paper, titled **"FCPO: Federated Continual Policy Optimization for Real-Time High-Throughput Edge Video Analytics"**, available [here](). Future improvements will be continually updated. Architectural diagram:
 
 ![overall-arch](/assets/overall-arch.png)
 
@@ -19,9 +21,10 @@ When using our Code please cite our works at the end of this [README](#citing-ou
 1. [Overview](#pipelinescheduler)  
 2. [Implementation Architecture](#implementation-architecture)  
    * [Controller](#controller)  
-   * [Device Agent](#device-agent)  
+   * [Device Agent](#device-agent)
    * [Inference Container](#inference-container)  
-     * [Container Agent](#container-agent)  
+     * [Container Agent](#container-agent)
+     * [Local Optimizations (FCPO)](#local-optimizations-fcpo)
      * [Configurations](#configurations)  
    * [Knowledge Base](#knowledge-base)  
 3. [Running ***PipelineScheduler***](#running-pipelinescheduler)  
@@ -43,7 +46,7 @@ When using our Code please cite our works at the end of this [README](#citing-ou
      * [Step 2: Running the Device Agent](#step-2-once-the-controller-is-running-run-a-device-agent-on-each-device)  
 4. [Extending ***PipelineScheduler***](#extending-pipelinescheduler)  
    * [Adding Models](#adding-models)  
-   * [Local Optimizations](#local-optimizations)  
+   * [Connecting with Kubernetes](#connecting-with-kubernetes)
 5. [Misc](#misc)  
 6. [Citing Our Works](#citing-our-works)
 
@@ -70,6 +73,14 @@ But other designs (e.g., monolithic) works as well as long as the endpoints for 
 ### Container Agent
 The **Container Agent** is a light-weight thread in charge of creating/deleting the microservices according to the instructions of the **Device Agent** and **Controller**.
 It also collects operational stats inside the container and published them to designated metrics endpoints.
+
+### Local Optimizations (FCPO)
+When compiling and running the system with the `FCPO` option, the **Inference Container** will be equipped with an iAgent.
+As presented in FCPO (ICSOC25), the iAgent is a local optimization agent which runs attached to each container to optimize the inference batch size and other parameters at a high frequency.
+This is beneficial for the system to adapt to the dynamic environment, such as changing network bandwidth and varying content dynamics, in a more responsive way than the global optimization of the **Controller**.
+The iAgent is implemented as a C++ thread running inside the **Inference Container** and is implemented [here](/libs/fcpo_learning).
+Every iAgent is trained through FCRL, where models are locally trained using Continual Reinforcement Learning (CRL) and aggregated at the **Controller**.
+The Hyperparameters can be configured in the [experiment jsons](/jsons/experiments/README.md) provided to the **Controller** or in the [container configuration](#configurations).
 
 ### Configurations
 The **Container Agent** relies on a json configuration file specifying the details of microservices inside each container.
@@ -153,9 +164,34 @@ The microservice details are defined under `"cont_pipeline"`. This is what the e
         1
     ]
 
-},
+}
 ```
+
+When running FCPO, the config should also contain an fcpo section with hyperparameterts.
+
+```json
+{
+    "state_size": 7,
+    "resolution_size": 4,
+    "batch_size": 16,
+    "threads_size": 4,
+    "lambda": 0.2,
+    "gamma": 0.2,
+    "clip_epsilon": 0.9,
+    "penalty_weight": 0.2,
+    "theta": 1.1,
+    "sigma": 10.0,
+    "phi": 2.0,
+    "precision": "float",
+    "update_steps": 150,
+    "update_step_incs": 10,
+    "federated_steps": 10,
+    "seed": 42
+}
+```
+
 Details on how to set the configurations can be found [here](/jsons/README).
+However, when running the whole system, the configurations are automatically modified by the **Controller** based on the model and experiment configurations.
 
 ## Knowledge Base
 The Knowledge Base is a PostgreSQL (14) database which contains all the operational statistics.
@@ -173,9 +209,10 @@ To run the system, this following software must be installed on the host machine
 
 Inside the container, it is also necessary to install inference software platforms (e.g., TensorRT, ONNX).
 
-The specific software versions and commands for installation can be found taken from the [dockerfiles](/dockerfiles/), which are written to build inference container images. Since the current version is run on NVIDIA hardware (i.e., GPU and Jetson devices), most of the images are built upon NVIDIA container images published [here](https://catalog.ngc.nvidia.com/containers).
+The specific software versions and commands for installation can be found taken from the [dockerfiles](/dockerfiles/), which are written to build inference container images. 
+Since the current version is run on NVIDIA hardware (i.e., GPU and Jetson devices), most of the images are built upon NVIDIA container images published [here](https://catalog.ngc.nvidia.com/containers).
 
-The build instructions can be found [here](dockerfiles/README).
+The build instructions can be found [here](dockerfiles/README) and base containers without data or models are available [here](https://hub.docker.com/r/lucasliebe/pipeplusplus/tags).
 
 ### Inference Platform
 The current versions of `Preprocessors, Postprocessors and Inferencer` are written for NVIDIA hardware, especially the `Inferencer`. But custom microservices can be written based on these with minimal adaptation.
@@ -189,7 +226,7 @@ The first step is to build the source code, here you can use multiple options fo
     mkdir build_host && cd build_host
     cmake -DSYSTEM_NAME=[FCPO, PPP, DIS, JLF, RIM, BCE] -DON_HOST=True -DDEVICE_ARCH=platform_name
     # Ours are FCPO and PPP (standing for PipePlusPlus ~ OctopInf)
-    # Platform name is amd64 or Jetson.
+    # Platform name is amd64, orin, or xavier.
     make -j 64 Controller
     ```
 
@@ -198,7 +235,7 @@ The first step is to build the source code, here you can use multiple options fo
     mkdir build_host && cd build_host
     cmake -DSYSTEM_NAME=[FCPO, PPP, DIS, JLF, RIM, BCE] -DON_HOST=True -DDEVICE_ARCH=platform_name
     # Ours are FCPO and PPP (standing for PipePlusPlus ~ OctopInf)
-    # Platform name is amd64 or Jetson.
+    # Platform name is amd64, orin, or xavier.
     make -j 64 Device_Agent
     ```
 
@@ -207,23 +244,24 @@ The first step is to build the source code, here you can use multiple options fo
     mkdir build && cd build
     cmake -DSYSTEM_NAME=[FCPO, PPP, DIS, JLF, RIM, BCE] -DON_HOST=False -DDEVICE_ARCH=platform_name
     # Ours are FCPO and PPP (standing for PipePlusPlus ~ OctopInf)
-    # Platform name is amd64 or Jetson.
+    # Platform name is amd64, orin, or xavier.
     make -j 64 Container_[name]
     # Name of the model. YoloV5 for instance.
     ```
 
 ## Preparing Data
-The data is collected from publicly available streams on website like [www.earthcam.com](https://www.earthcam.com). The script for pulling the data can be found [here](/scripts/collect_dataset.sh).
+The data is collected from publicly available streams on website like [www.earthcam.com](https://www.earthcam.com). 
+The script for pulling the data can be found [here](/scripts/collect_dataset.sh) and requires python3 with venv to run.
 
 ## Preparing Models
-Models need to be prepared according to fit the current hardware and software inference platforms. For NVIDIA-TensorRT, please build and use following script.
+Models need to be prepared accordingly to fit the current hardware and software inference platforms. For NVIDIA-TensorRT, please build and use following script.
 
 * Build
     ```bash
     mkdir build && cd build
     cmake -DSYSTEM_NAME=[FCPO, PPP, DIS, JLF, RIM, BCE] -DON_HOST=False -DDEVICE_ARCH=platform_name
     # Ours are FCPO and PPP (standing for PipePlusPlus ~ OctopInf)
-    # Platform name is amd64 or Jetson.
+    # Platform name is amd64, orin, or xavier.
     make -j 64 convert_onnx2trt
     ```
 
@@ -242,7 +280,7 @@ Models need to be prepared according to fit the current hardware and software in
     ```bash
     ./Controller --ctrl_configPath ../jsons/experiments/full-run-fcpo.json
     ```
-    * The guideline to set configurations for controller run is available [here](/jsons/experiments/README).
+    * The guideline to set configurations for controller run is available [here](/jsons/experiments/README.md).
 * Step 2: Once the **Controller** is running, run a **Device Agent** on each device.
     ```bash    
     ./DeviceAgent --name [device_name] --device_type [server, agx, nx, orinano] --controller_url [controller_ip_address] --dev_port_offset 0 --dev_verbose 1 --deploy_mode 1
@@ -256,11 +294,12 @@ New models can be easily introduced to the system using one of the following way
 2. Adding new code
     * New code for new types of `Inferencer`, `Preprocessor`, `Postprocessor` can be easily added by modifying the current code.
     * Instructions can be found [here](/libs/workloads/README)
-## Local Optimizations
+
+## Connecting with Kubernetes
 TBA
 
 # Misc
-* The main source code can be found within the `libs/` folder while `src/` contains the data sink and simulates the end-user receiving the data.
+* The main source code can be found within the `libs/` folder.
 * Configurations for models and experiments can be found in `jsons/` while the directories `cmake`, `scripts/`, and `dockerfiles` show deployment related code and helpers.
 * For analyzing the results we provide python scripts in `analyze`.
 
@@ -282,21 +321,21 @@ The required json configurations can be found [here](/jsons/) or created from th
 # Citing our works
 If you find the repo useful, please cite the following works which have encompassed the development of this repo.
 
-* **FCPO: Federated Continual Policy Optimization with Heterogeneous Action Spaces for Real-Time High-Throughput Edge Video Analytics** 
+* **FCPO: Federated Continual Policy Optimization for Real-Time Edge Video Analytic Services** 
     ```
-    @inproceedings{nguyen2025,
+    @inproceedings{liebe2025fcpo,
         author={Lucas Liebe and Thanh-Tung Nguyen and Dongman Lee}
-        title = {{FCPO: Federated Continual Policy Optimization with Heterogeneous Action Spaces for Real-Time High-Throughput Edge Video Analytics}},
-        booktitle = {The 45th International Conference on Distributed Computing Systems (ICDCS)},
-        year = {2025},
-        publisher = {IEEE},
-        month = march,
+        title = {{FCPO: Federated Continual Policy Optimization for Real-Time High-Throughput Edge Video Analytics}},
+        booktitle = {Mobicom 2026},
+        year = {2026},
+        publisher = {ACM},
+        month = november,
     }
     ```
 
 * **OCTOPINF: Workload-Aware Real-Time Inference Serving for Edge Video Analytics** 
     ```
-    @inproceedings{nguyen2025,
+    @inproceedings{nguyen2025octopinf,
         author={Thanh-Tung Nguyen and Lucas Liebe and Tau-Nhat Quang and Yuheng Wu and Jinghan Cheng and Dongman Lee}
         title = {{OCTOPINF: Workload-Aware Real-Time Inference Serving for Edge Video Analytics}},
         booktitle = {The 23rd International Conference on Pervasive Computing and Communications (PerCom)},

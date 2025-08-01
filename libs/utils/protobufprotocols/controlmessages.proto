@@ -17,8 +17,9 @@ message ConnectionConfigs {
   string device_name = 1;
   uint32 device_type = 2;
   string ip_address = 3;
-  int32 processors = 4;
-  repeated uint64 memory = 5;
+  int32 agent_port_offset = 4;
+  int32 processors = 5;
+  repeated uint64 memory = 6;
 }
 
 message SystemInfo {

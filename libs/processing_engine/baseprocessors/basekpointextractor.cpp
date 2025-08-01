@@ -62,7 +62,7 @@ void BaseKPointExtractor::extractor() {
 
     cudaStream_t postProcStream;
 
-    NumQueuesType queueIndex = 0;
+    // NumQueuesType queueIndex = 0;
 
     size_t bufferSize;
     RequestDataShapeType shape;

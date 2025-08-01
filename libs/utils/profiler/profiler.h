@@ -47,6 +47,7 @@ public:
         int deviceMemoryUsage = 0;
         unsigned int gpuUtilization = 0;
         unsigned int gpuMemoryUsage = 0;
+        int energyConsumption = 0;
     };
 
 
@@ -80,6 +81,8 @@ private:
     int getDeviceMemoryInfo();
 
     nvmlUtilization_t getGPUInfo(unsigned int pid, nvmlDevice_t device);
+
+    int getEnergyConsumption(nvmlDevice_t device);
 
     unsigned int getPcieInfo(nvmlDevice_t device);
 

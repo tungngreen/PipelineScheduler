@@ -380,6 +380,7 @@ struct DeviceHardwareMetrics {
     MemUsageType rssMemUsage = 0;
     std::vector<GpuUtilType> gpuUsage;
     std::vector<GpuMemUsageType> gpuMemUsage;
+    std::vector<int> powerConsumption;
 };
 
 struct SummarizedHardwareMetrics {
@@ -464,11 +465,14 @@ struct MetricsServerConfigs {
 std::unique_ptr<pqxx::connection> connectToMetricsServer(MetricsServerConfigs &metricsServerConfigs, const std::string &name);
 
 enum SystemDeviceType {
+    Virtual,
     Server,
     OnPremise,
+
     OrinAGX,
     OrinNX,
     OrinNano,
+
     AGXXavier,
     NXXavier,
     NanoXavier
@@ -572,7 +576,7 @@ public:
     }
 
     bool empty() { return limits.empty(); }
-    int size() { return limits.size(); }
+    unsigned int size() { return limits.size(); }
 
     const BandwidthLimit& operator[](size_t index) const { return limits.at(index); }
 private:
@@ -758,8 +762,8 @@ void queryBatchInferLatency(
     const std::string &systemName,
     const std::string &pipelineName,
     const std::string &streamName,
-    const std::string &deviceName,
-    const std::string &deviceTypeName,
+    std::string &deviceName,
+    std::string &deviceTypeName,
     const std::string &modelName,
     ModelProfile &profile,
     const uint16_t systemFPS = 15
@@ -771,8 +775,8 @@ BatchInferProfileListType queryBatchInferLatency(
     const std::string &systemName,
     const std::string &pipelineName,
     const std::string &streamName,
-    const std::string &deviceName,
-    const std::string &deviceTypeName,
+    std::string &deviceName,
+    std::string &deviceTypeName,
     const std::string &modelName,
     const uint16_t systemFPS = 15
 );
@@ -783,8 +787,8 @@ void queryPrePostLatency(
     const std::string &systemName,
     const std::string &pipelineName,
     const std::string &streamName,
-    const std::string &deviceName,
-    const std::string &deviceTypeName,
+    std::string &deviceName,
+    std::string &deviceTypeName,
     const std::string &modelName,
     ModelProfile &profile,
     const uint16_t systemFPS = 15
@@ -792,7 +796,7 @@ void queryPrePostLatency(
 
 void queryResourceRequirements(
     pqxx::connection &metricsConn,
-    const std::string &deviceTypeName,
+    std::string &deviceTypeName,
     const std::string &modelName,
     ModelProfile &profile,
     const uint16_t systemFPS = 15
@@ -804,8 +808,8 @@ ModelProfile queryModelProfile(
     const std::string &systemName,
     const std::string &pipelineName,
     const std::string &streamName,
-    const std::string &deviceName,
-    const std::string &deviceTypeName,
+    std::string &deviceName,
+    std::string &deviceTypeName,
     const std::string &modelName,
     uint16_t systemFPS = 15
 );

@@ -212,7 +212,7 @@ public:
     std::tuple<int, int, int> runStep();
     void rewardCallback(double throughput, double drops, double latency_penalty, double oversize_penalty);
     void setState(double curr_resolution, double curr_batch, double curr_scaling,  double arrival, double pre_queue_size,
-                  double inf_queue_size, double post_queue_size);
+                  double inf_queue_size, double post_queue_size, double pipelineSLO);
     void federatedUpdateCallback(FlData &response);
 
 private:
@@ -265,11 +265,12 @@ private:
     uint update_steps_inc;
     uint federated_steps_counter = 1;
     uint federated_steps;
+    ClockType  federatedStartTime;
 };
 
 class FCPOServer {
 public:
-    FCPOServer(std::string run_name, uint state_size = 7, torch::Dtype precision = torch::kF32);
+    FCPOServer(std::string run_name, nlohmann::json parameters, uint state_size = 8, torch::Dtype precision = torch::kF32);
     ~FCPOServer() {
         torch::save(model, path + "/latest_model.pt");
         out.close();

@@ -132,6 +132,7 @@ void Controller::readConfigFile(const std::string &path) {
     ctrl_controlTimings.scaleUpIntervalThresholdSec = j["scale_up_interval_threshold_sec"];
     ctrl_controlTimings.scaleDownIntervalThresholdSec = j["scale_down_interval_threshold_sec"];
     initialTasks = j["initial_pipelines"];
+    if (ctrl_systemName == "fcpo") ctrl_fcpo_config = j["fcpo_parameters"];
 }
 
 void TaskDescription::from_json(const nlohmann::json &j, TaskDescription::TaskStruct &val) {
@@ -235,13 +236,11 @@ Controller::Controller(int argc, char **argv) {
         sql = "ALTER DEFAULT PRIVILEGES IN SCHEMA " + ctrl_metricsServerConfigs.schema + 
               " GRANT ALL PRIVILEGES ON TABLES TO controller;";
         pushSQL(*ctrl_metricsServerConn, sql);
-        sql = "GRANT USAGE ON SCHEMA " + ctrl_metricsServerConfigs.schema + " TO device_agent, container_agent;";
-        pushSQL(*ctrl_metricsServerConn, sql);
         sql = "GRANT SELECT, INSERT ON ALL TABLES IN SCHEMA " + ctrl_metricsServerConfigs.schema + " TO device_agent, container_agent;";
         pushSQL(*ctrl_metricsServerConn, sql);
-        sql = "GRANT CREATE ON SCHEMA " + ctrl_metricsServerConfigs.schema + " TO device_agent, container_agent;";
-        pushSQL(*ctrl_metricsServerConn, sql);
         sql = "ALTER DEFAULT PRIVILEGES IN SCHEMA " + ctrl_metricsServerConfigs.schema + " GRANT SELECT, INSERT ON TABLES TO device_agent, container_agent;";
+        pushSQL(*ctrl_metricsServerConn, sql);
+        sql = "GRANT USAGE, CREATE ON SCHEMA " + ctrl_metricsServerConfigs.schema + " TO device_agent, container_agent;";
         pushSQL(*ctrl_metricsServerConn, sql);
     }
 
@@ -264,24 +263,27 @@ Controller::Controller(int argc, char **argv) {
     NodeHandle *sink_node = new NodeHandle("sink", ctrl_sinkNodeIP,
                                            ControlCommands::NewStub(grpc::CreateChannel(
                                       absl::StrFormat("%s:%d", ctrl_sinkNodeIP, DEVICE_CONTROL_PORT + ctrl_port_offset), grpc::InsecureChannelCredentials())),
-                      new CompletionQueue(), SystemDeviceType::Server,
-                      DATA_BASE_PORT + ctrl_port_offset, {});
+                      new CompletionQueue(), SystemDeviceType::Server, DATA_BASE_PORT + ctrl_port_offset, {});
     devices.addDevice("sink", sink_node);
 
     if (ctrl_systemName == "fcpo") {
-        ctrl_fcpo_server = new FCPOServer(ctrl_systemName + "_" + ctrl_experimentName);
+        ctrl_fcpo_server = new FCPOServer(ctrl_systemName + "_" + ctrl_experimentName, ctrl_fcpo_config);
     }
 
     ctrl_nextSchedulingTime = std::chrono::system_clock::now();
 }
 
 Controller::~Controller() {
-    ctrl_fcpo_server->stop();
+    if (ctrl_systemName == "fcpo") ctrl_fcpo_server->stop();
     for (auto msvc: containers.getList()) {
         StopContainer(msvc, msvc->device_agent, true);
     }
 
     for (auto &device: devices.getList()) {
+        //skip Sink
+        if (device->name == "sink") {
+            continue;
+        }
         EmptyMessage request;
         EmptyMessage reply;
         ClientContext context;
@@ -304,10 +306,11 @@ Controller::~Controller() {
 // ============================================================================================================================================= //
 
 MemUsageType ContainerHandle::getExpectedTotalMemUsage() const {
-    if (device_agent->type == SystemDeviceType::Server) {
-        return pipelineModel->processProfiles.at("server").batchInfer[pipelineModel->batchSize].gpuMemUsage;
-    }
     std::string deviceTypeName = getDeviceTypeName(device_agent->type);
+    if (device_agent->type == SystemDeviceType::Virtual || device_agent->type == SystemDeviceType::Server
+                || device_agent->type == SystemDeviceType::OnPremise) {
+        return pipelineModel->processProfiles.at(deviceTypeName).batchInfer[pipelineModel->batchSize].gpuMemUsage;
+    }
     return (pipelineModel->processProfiles.at(deviceTypeName).batchInfer[pipelineModel->batchSize].gpuMemUsage +
             pipelineModel->processProfiles.at(deviceTypeName).batchInfer[pipelineModel->batchSize].rssMemUsage) / 1000;
 }
@@ -341,14 +344,16 @@ bool Controller::AddTask(const TaskDescription::TaskStruct &t) {
 }
 
 void Controller::initialiseGPU(NodeHandle *node, int numGPUs, std::vector<int> memLimits) {
-    if (node->type == SystemDeviceType::Server) {
+    if (node->type == SystemDeviceType::Virtual) {
+        GPUHandle *gpuNode = new GPUHandle{node->name, node->name, 0, memLimits[0] / 5, 1, node};
+        node->gpuHandles.emplace_back(gpuNode);
+    } else if (node->type == SystemDeviceType::Server) {
         for (uint8_t gpuIndex = 0; gpuIndex < numGPUs; gpuIndex++) {
             std::string gpuName = "gpu" + std::to_string(gpuIndex);
             GPUHandle *gpuNode = new GPUHandle{"3090", "server", gpuIndex, memLimits[gpuIndex] - 2000, NUM_LANES_PER_GPU, node};
             node->gpuHandles.emplace_back(gpuNode);
         }
     } else {
-        //MemUsageType memSize = node->type == SystemDeviceType::AGXXavier ? 30000 : 5000;
         GPUHandle *gpuNode = new GPUHandle{node->name, node->name, 0, memLimits[0] - 1500, 1, node};
         node->gpuHandles.emplace_back(gpuNode);
     }
@@ -1145,15 +1150,15 @@ void Controller::DeviseAdvertisementHandler::Proceed() {
         service->RequestAdvertiseToController(&ctx, &request, &responder, cq, cq, this);
     } else if (status == PROCESS) {
         new DeviseAdvertisementHandler(service, cq, controller);
-        std::string target_str = absl::StrFormat("%s:%d", request.ip_address(), DEVICE_CONTROL_PORT + controller->ctrl_port_offset);
+        std::string target_str = absl::StrFormat("%s:%d", request.ip_address(),
+                                                 DEVICE_CONTROL_PORT + controller->ctrl_port_offset + request.agent_port_offset());
         std::string deviceName = request.device_name();
         NodeHandle *node = new NodeHandle{deviceName,
                                      request.ip_address(),
                                           ControlCommands::NewStub(
                                              grpc::CreateChannel(target_str, grpc::InsecureChannelCredentials())),
-                                     new CompletionQueue(),
-                                     static_cast<SystemDeviceType>(request.device_type()),
-                                     DATA_BASE_PORT + controller->ctrl_port_offset, {}};
+                                     new CompletionQueue(),static_cast<SystemDeviceType>(request.device_type()),
+                                     DATA_BASE_PORT + controller->ctrl_port_offset + request.agent_port_offset(), {}};
         reply.set_name(controller->ctrl_systemName);
         reply.set_experiment(controller->ctrl_experimentName);
         status = FINISH;

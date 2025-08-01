@@ -220,8 +220,8 @@ json msvcconfigs::loadJson() {
             auto containerLibs = json::parse(file);
             std::string d = json_file["container"]["cont_taskName"].get<std::string>() + "_" +
                             json_file["container"]["cont_hostDeviceType"].get<std::string>();
-            json_file["container"]["cont_pipeline"][3]["path"] = containerLibs[d]["modelPath"];
-            json_file["profiling"]["profile_templateModelPath"] = containerLibs[d]["modelPath"];
+            // json_file["container"]["cont_pipeline"][3]["path"] = containerLibs[d]["modelPath"];
+            // json_file["profiling"]["profile_templateModelPath"] = containerLibs[d]["modelPath"];
             spdlog::trace("{0:s} finished loading Json Configs from file.", __func__);
             return json_file;
         } else {
@@ -279,6 +279,7 @@ ContainerAgent::ContainerAgent(const json& configs) {
     cont_experimentName = containerConfigs["cont_experimentName"].get<std::string>();
     cont_name = containerConfigs["cont_name"].get<std::string>();
     cont_pipeName = containerConfigs["cont_pipeName"].get<std::string>();
+    cont_pipeSLO = containerConfigs["cont_pipelineSLO"].get<int>();
     cont_taskName = containerConfigs["cont_taskName"].get<std::string>();
     cont_hostDevice = containerConfigs["cont_hostDevice"].get<std::string>();
     cont_hostDeviceType = containerConfigs["cont_hostDeviceType"].get<std::string>();
@@ -1049,7 +1050,8 @@ void ContainerAgent::collectRuntimeMetrics() {
                                           cont_request_arrival_rate / 250.0,
                                           cont_msvcsGroups["receiver"].msvcList[0]->msvc_OutQueue[0]->size(),
                                           cont_msvcsGroups["preprocessor"].msvcList[0]->msvc_OutQueue[0]->size(),
-                                          cont_msvcsGroups["inference"].msvcList[0]->msvc_OutQueue[0]->size());
+                                          cont_msvcsGroups["inference"].msvcList[0]->msvc_OutQueue[0]->size(),
+                                          cont_pipeSLO);
                 auto [targetRes, newBS, scaling] = cont_fcpo_agent->runStep();
                 spdlog::get("container_agent")->info(
                         "RL Decision Output: Resolution: {0:d}, Batch Size: {1:d}, Scaling: {2:d}", targetRes, newBS, scaling);
@@ -1267,7 +1269,7 @@ void ContainerAgent::updateArrivalRecords(ArrivalRecordType arrivalRecords, Runn
         std::vector<uint8_t> percentiles = {95};
         std::map<uint8_t, PercentilesArrivalRecord> percentilesRecord = records.findPercentileAll(percentiles);
 
-        if (percentilesRecord[95].transferDuration > ((1LL << 63) - 1)) { // 2^63-1 is the maximum value for BIGINT
+        if (percentilesRecord[95].transferDuration > LLONG_MAX) { // 2^63-1 is the maximum value for BIGINT
             spdlog::get("container_agent")->warn("{0:s} Transfer duration is too high: {1:d}us", cont_name, percentilesRecord[95].transferDuration);
             continue;
         }

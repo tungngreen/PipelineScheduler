@@ -156,7 +156,8 @@ inline std::vector<std::pair<uint8_t, uint16_t>> crop(
         // std::cout << "orig " << x1 << " " << y1 << " " << x2 << " " << y2 << std::endl;
 
         // Crop from the corresponding image
-        if ((y2 - y1) <= 0 || (x2 - x1) <= 0 || nmsed_scores[i] < confidenceThreshold) {
+        // Remove bounding boxes that are too small or have low confidence scores
+        if ((y2 - y1) <= (orig_h * 0.01) || (x2 - x1) <= (orig_w * 0.01) || nmsed_scores[i] < confidenceThreshold) {
             numInvalidDets++;
             // std::cout << "Invalid detection" << std::endl;
             continue;
@@ -440,7 +441,7 @@ void BaseBBoxCropper::cropping() {
                     }
 
                     for (uint8_t j = 0; j < numImagesInFrame; j++) {
-                        uint16_t imageIndexInBatch = currReq.req_concatInfo[i].firstImageIndex + j;
+                        // uint16_t imageIndexInBatch = currReq.req_concatInfo[i].firstImageIndex + j;
                         singleImageBBoxList.emplace_back(
                             BoundingBox<cv::cuda::GpuMat>{
                                 cv::cuda::GpuMat(64, 64, CV_8UC3),

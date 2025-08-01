@@ -89,9 +89,9 @@ def avg_memory(exp, algos=['ppp', 'dis', 'jlf', 'rim'], edge_device_count=0):
                 df['total_gpu_mem'] = df[
                     ['gpu_0_mem_usage', 'gpu_1_mem_usage', 'gpu_2_mem_usage', 'gpu_3_mem_usage']].sum(axis=1)
             else:
-                table_names = get_table_names(connection, full_schema, 'agx1_hw')
-                table_names.extend(get_table_names(connection, full_schema, 'nx1_hw'))
-                table_names.extend(get_table_names(connection, full_schema, 'full_orn1_hw'))
+                table_names = get_table_names(connection, full_schema, 'agx%_hw')
+                table_names.extend(get_table_names(connection, full_schema, 'nx%_hw'))
+                table_names.extend(get_table_names(connection, full_schema, 'orn%_hw'))
                 df = pd.DataFrame()
                 for table in table_names:
                     query = text(f"SELECT timestamps, mem_usage, gpu_0_mem_usage FROM {full_schema}.{table};")
@@ -106,6 +106,25 @@ def avg_memory(exp, algos=['ppp', 'dis', 'jlf', 'rim'], edge_device_count=0):
     print(memories)
     return memories
 
+def avg_edge_power(exp, algos=['fcpo', 'bce', 'ppp']):
+    engine = create_engine(conn_str)
+    powers = {}
+    df = pd.DataFrame()
+    for algo in algos:
+        full_schema = f"{exp}_{algo}"
+        with engine.connect() as connection:
+            table_names = get_table_names(connection, full_schema, 'agx%_hw')
+            table_names.extend(get_table_names(connection, full_schema, 'nx%_hw'))
+            table_names.extend(get_table_names(connection, full_schema, 'orn%_hw'))
+            df = pd.DataFrame()
+            for table in table_names:
+                query = text(f"SELECT timestamps, gpu_0_mem_usage, gpu_0_power_consumption FROM {full_schema}.{table};")
+                df_tmp = pd.read_sql(query, connection)
+                df = pd.concat([df, df_tmp], axis=0)
+            df = df.loc[(df[['gpu_0_mem_usage']] != 0).any(axis=1)]
+        powers[algo] = [df['gpu_0_power_consumption'].mean()]
+    print(powers)
+    return powers
 
 def full_memory(schema, buckets):
     engine = create_engine(conn_str)

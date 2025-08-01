@@ -305,11 +305,22 @@ NetworkProfile queryNetworkProfile(
     const NetworkEntryType &networkEntries,
     uint16_t systemFPS
 ) {
-    std::string senderHostAbbr = abbreviate(senderHost);
-    std::string receiverHostAbbr = abbreviate(receiverHost);
+    std::string senderHostAbbr, senderDeviceTypeAbbr, receiverHostAbbr, receiverDeviceTypeAbbr;
+    if (senderDeviceType == "virtual") {// Virtual device is always the server
+        senderHostAbbr = "serv";
+        senderDeviceTypeAbbr = "serv";
+    } else {
+        senderHostAbbr = abbreviate(senderHost);
+        senderDeviceTypeAbbr= abbreviate(senderDeviceType);
+    }
+    if (receiverDeviceType == "virtual") {// Virtual device is always the server
+        receiverHostAbbr = "serv";
+        receiverDeviceTypeAbbr = "serv";
+    } else {
+        receiverHostAbbr = abbreviate(receiverHost);
+        receiverDeviceTypeAbbr = abbreviate(receiverDeviceType);
+    }
 
-    std::string senderDeviceTypeAbbr = abbreviate(senderDeviceType);
-    std::string receiverDeviceTypeAbbr = abbreviate(receiverDeviceType);    
 
     std::string schemaName = abbreviate(experimentName + "_" + systemName);
     std::string tableName = abbreviate(experimentName + "_" + pipelineName + "_" + taskName + "_arr");
@@ -560,12 +571,16 @@ void queryPrePostLatency(
     const std::string &systemName,
     const std::string &pipelineName,
     const std::string &streamName,
-    const std::string &deviceName,
-    const std::string &deviceTypeName,
+    std::string &deviceName,
+    std::string &deviceTypeName,
     const std::string &modelName,
     ModelProfile &profile,
     const uint16_t systemFPS
 ) {
+    if (deviceTypeName == "virtual") { // Virtual device is always the server
+        deviceTypeName = "server";
+        deviceName = "server";
+    }
     std::string schemaName = abbreviate(experimentName + "_" + systemName);
     std::string modelNameAbbr = abbreviate(splitString(modelName, ".").front()); 
     std::string tableName = schemaName + "." + abbreviate(experimentName + "_" + pipelineName + "__" + modelNameAbbr + "__" + deviceName + "_proc");
@@ -662,12 +677,16 @@ void queryBatchInferLatency(
     const std::string &systemName,
     const std::string &pipelineName,
     const std::string &streamName,
-    const std::string &deviceName,
-    const std::string &deviceTypeName,
+    std::string &deviceName,
+    std::string &deviceTypeName,
     const std::string &modelName,
     ModelProfile &profile,
     const uint16_t systemFPS
 ) {
+    if (deviceTypeName == "virtual") { // Virtual device is always the server
+        deviceTypeName = "server";
+        deviceName = "server";
+    }
     std::string modelNameAbbr = abbreviate(splitString(modelName, ".").front());
     std::string schemaName = abbreviate(experimentName + "_" + systemName);
     std::string tableName = schemaName + "." + abbreviate(experimentName + "_" + pipelineName + "__" + modelNameAbbr + "__" + deviceName)  + "_batch";
@@ -714,11 +733,15 @@ BatchInferProfileListType queryBatchInferLatency(
     const std::string &systemName,
     const std::string &pipelineName,
     const std::string &streamName,
-    const std::string &deviceName,
-    const std::string &deviceTypeName,
+    std::string &deviceName,
+    std::string &deviceTypeName,
     const std::string &modelName,
     const uint16_t systemFPS
 ) {
+    if (deviceTypeName == "virtual") { // Virtual device is always the server
+        deviceTypeName = "server";
+        deviceName = "server";
+    }
     ModelProfile modelProfile;
     queryBatchInferLatency(
         metricsConn,
@@ -745,11 +768,14 @@ BatchInferProfileListType queryBatchInferLatency(
  */
 void queryResourceRequirements(
     pqxx::connection &metricsConn,
-    const std::string &deviceTypeName,
+    std::string &deviceTypeName,
     const std::string &modelName,
     ModelProfile &profile,
     const uint16_t systemFPS
 ) {
+    if (deviceTypeName == "virtual") { // Virtual device is always the server
+        deviceTypeName = "server";
+    }
     std::string modelNameAbbr = abbreviate(splitString(modelName, ".").front());
     std::string tableName = abbreviate("pf" + std::to_string(systemFPS) + "__" + modelNameAbbr + "__" + deviceTypeName + "_hw");
     std::string query = absl::StrFormat("SELECT batch_size, MAX(cpu_usage), MAX(mem_usage), MAX(rss_mem_usage), MAX(gpu_usage), MAX(gpu_mem_usage) "
@@ -790,11 +816,15 @@ ModelProfile queryModelProfile(
     const std::string &systemName,
     const std::string &pipelineName,
     const std::string &streamName,
-    const std::string &deviceName,
-    const std::string &deviceTypeName,
+    std::string &deviceName,
+    std::string &deviceTypeName,
     const std::string &modelName,
     uint16_t systemFPS
 ) {
+    if (deviceTypeName == "virtual") { // Virtual device is always the server
+        deviceTypeName = "server";
+        deviceName = "server";
+    }
     ModelProfile profile;
 
     // // Query batch inference profilectrl_systemName;
@@ -1157,7 +1187,23 @@ std::string abbreviate(const std::string &keyphrase, const std::string delimiter
         try {
             abbr += keywordAbbrs.at(word);
         } catch (const std::out_of_range &e) {
-            abbr += word.substr(0, 4);
+            std::string wordWithoutNumber = word;
+            std::string number = "";
+            try {
+                if (std::isdigit(word.back())) {
+                    size_t pos = word.find_last_not_of("0123456789");
+                    if (pos != std::string::npos) {
+                        wordWithoutNumber = word.substr(0, pos + 1);
+                        number = word.substr(pos + 1);
+                    }
+                    abbr += keywordAbbrs.at(wordWithoutNumber);
+                    abbr += number;
+                } else {
+                    abbr += word.substr(0, 4);
+                }
+            } catch (const std::out_of_range &e) {
+                abbr += word.substr(0, 4);
+            }
         }
         if (word != words.back()) {
             abbr += delimiter;
@@ -1195,50 +1241,15 @@ std::map<std::string, std::string> keywordAbbrs = {
     {"server", "serv"},
     {"onprem", "onp"},
     {"agxavier", "agx"},
-    {"agxavier1", "agx1"},
-    {"agxavier2", "agx2"},
-    {"agxavier3", "agx3"},
-    {"agxavier4", "agx4"},
-    {"agxavier5", "agx5"},
     {"orinagx", "oagx"},
-    {"orinagx1", "oagx1"},
-    {"orinagx2", "oagx2"},
     {"orinnx", "ornx"},
-    {"orinnx1", "ornx1"},
-    {"orinnx2", "ornx2"},
-    {"orinnx3", "ornx3"},
     {"orinano", "orn"},
-    {"orinano1", "orn1"},
-    {"orinano2", "orn2"},
-    {"orinano3", "orn3"},
     {"nxavier", "nx"},
-    {"nxavier1", "nx1"},
-    {"nxavier2", "nx2"},
-    {"nxavier3", "nx3"},
-    {"nxavier4", "nx4"},
-    {"nxavier5", "nx5"},
     {"datasource", "dsrc"},
     {"traffic", "trfc"},
-    {"traffic1", "trfc1"},
-    {"traffic10", "trfc10"},
-    {"traffic2", "trfc2"},
-    {"traffic20", "trfc20"},
-    {"traffic3", "trfc3"},
-    {"traffic30", "trfc30"},
-    {"traffic4", "trfc4"},
-    {"traffic40", "trfc40"},
-    {"traffic5", "trfc5"},
-    {"traffic50", "trfc50"},
-    {"traffic6", "trfc6"},
-    {"traffic60", "trfc60"},
-    {"traffic7", "trfc7"},
-    {"traffic70", "trfc70"},
     {"building", "bldg"},
     {"people", "ppl"},
-    {"people1", "ppl1"},
-    {"people2", "ppl2"},
-    {"people3", "ppl3"},
-    {"people4", "ppl4"},
+    {"indoor", "ind"},
     {"merged", "mrgd"},
     {"mergedtraffic", "mrgdtrfc"},
     {"mergedpeople", "mrgdppl"},
@@ -1271,29 +1282,37 @@ std::map<std::string, std::string> keywordAbbrs = {
 };
 
 std::map<SystemDeviceType, std::string> SystemDeviceTypeList = {
+    {Virtual, "virtual"},
     {Server, "server"},
     {OnPremise, "onprem"},
-    {NXXavier, "nxavier"},
+    {OrinAGX, "orinagx"},
+    {OrinNX, "orinnx"},
+    {OrinNano, "orinano"},
     {AGXXavier, "agxavier"},
-    {OrinNano, "orinano"}
+    {NXXavier, "nxavier"},
+    {NanoXavier, "nanoxavier"},
 };
 
 // Reverse map for SystemDeviceTypeList
 std::map<std::string, SystemDeviceType> SystemDeviceTypeReverseList = {
+    {"virtual", Virtual},
+    {"virt", Virtual},
     {"server", Server},
     {"serv", Server},
     {"onprem", OnPremise},
     {"onp", OnPremise},
-    {"nxavier", NXXavier},
-    {"nx", NXXavier},
-    {"agxavier", AGXXavier},
-    {"agx", AGXXavier},
-    {"orinano", OrinNano},
-    {"orn", OrinNano},
+    {"orinagx", OrinAGX},
+    {"oagx", OrinAGX},
     {"orinnx", OrinNX},
     {"ornx", OrinNX},
-    {"orinagx", OrinAGX},
-    {"oagx", OrinAGX}
+    {"orinano", OrinNano},
+    {"orn", OrinNano},
+    {"agxavier", AGXXavier},
+    {"agx", AGXXavier},
+    {"nxavier", NXXavier},
+    {"nx", NXXavier},
+    {"nanoxavier", NanoXavier},
+    {"naxa", NanoXavier}
 };
 
 std::map<ModelType, std::string> ModelTypeList = {

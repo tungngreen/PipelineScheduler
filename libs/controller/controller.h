@@ -1110,6 +1110,7 @@ private:
 
     ContainerLibType ctrl_containerLib;
     DeviceInfoType ctrl_sysDeviceInfo = {
+        {Virtual, "virtual"},
         {Server, "server"},
         {OnPremise, "onprem"},
         {OrinAGX, "orinagx"},
@@ -1166,6 +1167,7 @@ private:
     Tasks ctrl_mergedPipelines;
 
     FCPOServer *ctrl_fcpo_server;
+    json ctrl_fcpo_config;
 };
 
 

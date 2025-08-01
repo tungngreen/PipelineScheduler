@@ -123,18 +123,6 @@ void FCPOAgent::federatedUpdate(const double loss) {
     torch::save(model, oss);
     request.set_network(oss.str());
     oss.str("");
-    torch::save(torch::stack(experiences.get_states()).to(precision), oss);
-    request.set_states(oss.str());
-    oss.str("");
-    torch::save(torch::tensor(experiences.get_resolution()).to(precision), oss);
-    request.set_resolution_actions(oss.str());
-    oss.str("");
-    torch::save(torch::tensor(experiences.get_batching()).to(precision), oss);
-    request.set_batching_actions(oss.str());
-    oss.str("");
-    torch::save(torch::tensor(experiences.get_scaling()).to(precision), oss);
-    request.set_scaling_actions(oss.str());
-    reset();
     EmptyMessage reply;
     ClientContext context;
     Status status;
@@ -147,6 +135,8 @@ void FCPOAgent::federatedUpdate(const double loss) {
     if (!status.ok()){
         spdlog::get("container_agent")->error("Federated update failed: {}", status.error_message());
         federated_steps_counter = 1; // 1 means that we are starting local updates again until the next federation
+    } else {
+        federatedStartTime = std::chrono::high_resolution_clock::now();
     }
 }
 
@@ -155,6 +145,23 @@ void FCPOAgent::federatedUpdateCallback(FlData &response) {
     std::istringstream iss(response.network());
     std::unique_lock<std::mutex> lock(model_mutex);
     torch::load(model, iss);
+
+    model->train();
+    optimizer->zero_grad();
+    auto [policy1_output, policy2_output, policy3_output, value] = model->forward(torch::stack(experiences.get_states()).to(precision));
+
+    auto policy1_loss = torch::nll_loss(policy1_output, torch::tensor(experiences.get_resolution()).to(precision));
+    auto policy2_loss = torch::nll_loss(policy2_output, torch::tensor(experiences.get_batching()).to(precision));
+    auto policy3_loss = torch::nll_loss(policy3_output, torch::tensor(experiences.get_scaling()).to(precision));
+
+    auto loss = policy1_loss + policy2_loss + policy3_loss;
+    value.detach();
+    loss.to(precision).backward();
+    optimizer->step();
+
+    uint64_t latency = std::chrono::duration_cast<std::chrono::microseconds>(
+            std::chrono::high_resolution_clock::now() - federatedStartTime).count();
+    out << "federatedAggregation," << latency << "," << federated_steps_counter << "," << steps_counter << std::endl;
     steps_counter = 0;
     federated_steps_counter = 1; // 1 means that we are starting local updates again until the next federation
     if (update_steps < 300) update_steps += update_steps_inc; // Increase the number of steps for the next updates every time we finish federation
@@ -175,9 +182,9 @@ void FCPOAgent::rewardCallback(double throughput, double drops, double latency_p
 }
 
 void FCPOAgent::setState(double curr_resolution, double curr_batch, double curr_scaling,  double arrival,
-                         double pre_queue_size, double inf_queue_size, double post_queue_size) {
+                         double pre_queue_size, double inf_queue_size, double post_queue_size, double pipelineSLO) {
     state = torch::tensor({curr_resolution / resolution_size, curr_batch / max_batch, curr_scaling / scaling_size,
-                           arrival, pre_queue_size / 100.0, inf_queue_size / 100.0, post_queue_size / 100.0}, precision);
+                           arrival, pre_queue_size / 100.0, inf_queue_size / 100.0, post_queue_size / 100.0, pipelineSLO / 100000.0}, precision);
 }
 
 void FCPOAgent::selectAction() {
@@ -242,7 +249,7 @@ std::tuple<int, int, int> FCPOAgent::runStep() {
 }
 
 
-FCPOServer::FCPOServer(std::string run_name, uint state_size, torch::Dtype precision)
+FCPOServer::FCPOServer(std::string run_name, nlohmann::json parameters, uint state_size, torch::Dtype precision)
         : precision(precision), state_size(state_size) {
     path = "../models/fcpo_learning/" + run_name;
     std::filesystem::create_directories(std::filesystem::path(path));
@@ -256,19 +263,19 @@ FCPOServer::FCPOServer(std::string run_name, uint state_size, torch::Dtype preci
     model->to(precision);
     optimizer = std::make_unique<torch::optim::AdamW>(model->parameters(), torch::optim::AdamWOptions(1e-3));
 
-    lambda = 0.1;
-    gamma = 0.1;
-    clip_epsilon = 0.9;
-    penalty_weight = 0.2;
+    lambda = parameters["lambda"];
+    gamma = parameters["gamma"];
+    clip_epsilon = parameters["clip_epsilon"];
+    penalty_weight = parameters["penalty_weight"];
 
-    theta = 1.1;
-    sigma = 10.0;
-    phi = 2.0;
+    theta = parameters["theta"];
+    sigma = parameters["sigma"];
+    phi = parameters["phi"];
 
-    update_steps = 100;
-    update_step_incs = 10;
-    federated_steps = 10;
-    seed = 42;
+    update_steps = parameters["update_steps"];
+    update_step_incs = parameters["update_step_incs"];
+    federated_steps = parameters["federated_steps"];
+    seed = parameters["seed"];
 
     federated_clients = {};
     run = true;
@@ -339,36 +346,14 @@ void FCPOServer::proceed() {
             param /= static_cast<int64_t>(participants.size() + 1);
         }
 
-//        for (auto& action_head : action_heads_by_size) {
-//            for (auto &[key, value]: action_head) {
-//                aggregate parameters of the same size
-//            }
-//        }
+        for (auto& action_head : action_heads_by_size) {
+            for (auto &[key, value]: action_head) {
+                action_head[key] = value / static_cast<int64_t>(action_head.size());
+            }
+        }
 
-        T states, resolution_actions, batching_actions, scaling_actions;
         for (auto client: participants) {
             for (int i = 0; i <= 5; i++) client.model->parameters()[i] = aggregated_shared_params[i].clone();
-            client.model->train();
-            optimizer->zero_grad();
-            std::istringstream iss(client.data.states());
-            torch::load(states, iss);
-            auto [policy1_output, policy2_output, policy3_output, value] = client.model->forward(states.to(precision));
-
-            iss.str(client.data.resolution_actions());
-            torch::load(resolution_actions, iss);
-            auto policy1_loss = torch::nll_loss(policy1_output, resolution_actions.to(torch::kLong));
-            iss.str(client.data.batching_actions());
-            torch::load(batching_actions, iss);
-            auto policy2_loss = torch::nll_loss(policy2_output, batching_actions.to(torch::kLong));
-            iss.str(client.data.scaling_actions());
-            torch::load(scaling_actions, iss);
-            auto policy3_loss = torch::nll_loss(policy3_output, scaling_actions.to(torch::kLong));
-
-            auto loss = policy1_loss + policy2_loss + policy3_loss;
-            value.detach();
-            loss.to(precision).backward();
-            optimizer->step();
-
             returnFLModel(client);
         }
 

@@ -8,8 +8,8 @@ from natsort import natsorted
 from objectcount import objectcount
 from run_log_analyzes import full_analysis
 from final_figures import create_figures
-from rl_analyzes import reward_plot, perPipeline_performance, overall_performance_timeseries, system_overhead, \
-    limited_network_performance, continual_learning_performance
+from rl_analyzes import reward_plot, overall_performance_timeseries, system_overhead, reduced_slo, \
+    limited_network_performance, continual_learning_performance, hyperparameter_sensitivity, warm_start_performance
 
 
 def batch(files):
@@ -143,9 +143,12 @@ if __name__ == '__main__':
             os.makedirs(os.path.join(args.directory, 'processed_logs'))
         reward_plot(args.directory)
         overall_performance_timeseries(args.directory, 'fcpo_main', ['FCPO', 'BCE', 'Dis', 'OInf']) # main
-        #overall_performance_timeseries(args.directory, 'fcpo_results', ['FCPO', 'reduced', 'w/o loc']) # ablation
+        overall_performance_timeseries(args.directory, 'fcpo_results', ['FCPO', 'reduced', 'w/o loc']) # ablation
         #limited_network_performance(args.directory)
-        #continual_learning_performance(args.directory)
-        #system_overhead(os.path.join(args.directory, 'fcpo_overhead'))
+        continual_learning_performance(args.directory)
+        warm_start_performance(args.directory)
+        reduced_slo(args.directory)
+        system_overhead(os.path.join(args.directory, 'fcpo_overhead'))
+        hyperparameter_sensitivity(args.directory)
 
 

@@ -1,0 +1,14 @@
+#!/usr/bin/expect -f
+
+# Get config path from CLI
+set config [lindex $argv 0]
+spawn ../build/Controller --ctrl_configPath $config
+# Wait 1 Minute
+sleep 60
+
+# Now send yes/init after agents have started
+send "yes\r"
+sleep 1
+send "init\r"
+expect eof
+

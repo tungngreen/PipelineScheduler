@@ -24,6 +24,9 @@ void Sender::loadConfigs(const json &jsonConfigs, bool isConstructing) {
 
     if (stubs.size() > 1) {
         multipleStubs = true;
+        if (dnstreamMicroserviceList.front().portions.size() == 0){
+            dnstreamMicroserviceList.front().portions.push_back(1.0f);
+        }
     } else {
         multipleStubs = false;
     }
@@ -42,6 +45,9 @@ void Sender::reloadDnstreams() {
     }
     if (stubs.size() > 1) {
         multipleStubs = true;
+        if (dnstreamMicroserviceList.front().portions.size() == 0){
+            dnstreamMicroserviceList.front().portions.push_back(1.0f);
+        }
     } else {
         multipleStubs = false;
     }
@@ -305,7 +311,7 @@ std::string RemoteCPUSender::SendData(std::vector<RequestData<LocalCPUReqDataTyp
     std::unique_ptr<ClientAsyncResponseReader<EmptyMessage>> rpc;
     if (!multipleStubs) {
         rpc = (stubs.first()->AsyncSerializedDataTransfer(&context, request, &cq));
-    } else if (dnstreamMicroserviceList.front().portions[0] == 1.0) {
+    } else if (dnstreamMicroserviceList.front().portions[0] == 1.0f) {
         rpc = (stubs.random()->AsyncSerializedDataTransfer(&context, request, &cq));
     } else {
         rpc = (stubs.next()->AsyncSerializedDataTransfer(&context, request, &cq));
