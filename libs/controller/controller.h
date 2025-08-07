@@ -1096,7 +1096,7 @@ private:
     //         std::map<ModelType, int> &batch_sizes, std::map<ModelType, int> &estimated_infer_times, int nObjects);
 
     bool running;
-    ClockType startTime;
+    ClockType startTime = std::chrono::system_clock::time_point();
     std::string ctrl_experimentName;
     std::string ctrl_systemName;
     std::vector<TaskDescription::TaskStruct> initialTasks;

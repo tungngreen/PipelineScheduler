@@ -138,7 +138,7 @@ void Controller::queryingProfiles(TaskHandle *task) {
             model->arrivalProfiles.d2dNetworkProfile[std::make_pair(pair.first, pair.second)] = test;
         }
 
-        for (const auto &deviceName : model->possibleDevices) {
+        for (auto &deviceName : model->possibleDevices) {
             std::string deviceTypeName = getDeviceTypeName(deviceList.at(deviceName)->type);
             containerName = model->name + "_" + deviceTypeName;
             ModelProfile profile = queryModelProfile(
@@ -245,11 +245,16 @@ void Controller::Scheduling() {
         estimatePipelineTiming();
         ctrl_scheduledPipelines = ctrl_mergedPipelines;
         ApplyScheduling();
+
         ctrl_controlTimings.nextRescalingTime = ctrl_controlTimings.currSchedulingTime + std::chrono::seconds(ctrl_controlTimings.rescalingIntervalSec);
         schedulingSW.stop();
-
         ClockType nextTime = std::min(ctrl_controlTimings.nextSchedulingTime, ctrl_controlTimings.nextRescalingTime);
         uint64_t sleepTime = std::chrono::duration_cast<TimePrecisionType>(nextTime - std::chrono::system_clock::now()).count();
+        if (startTime == std::chrono::system_clock::time_point()) startTime = std::chrono::system_clock::now();
+        if (std::chrono::duration_cast<std::chrono::minutes>(std::chrono::system_clock::now() - startTime).count() > ctrl_runtime) {
+            running = false;
+            break;
+        }
         std::this_thread::sleep_for(std::chrono::microseconds(sleepTime));
     }
 }

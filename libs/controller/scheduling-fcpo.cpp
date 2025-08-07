@@ -163,71 +163,64 @@ void Controller::queryingProfiles(TaskHandle *task) {
                 }
             )->first;
         }
-
-        // ModelArrivalProfile profile = queryModelArrivalProfile(
-        //     *ctrl_metricsServerConn,
-        //     ctrl_experimentName,
-        //     ctrl_systemName,
-        //     t.name,
-        //     t.source,
-        //     ctrl_containerLib[containerName].taskName,
-        //     ctrl_containerLib[containerName].modelName,
-        //     possibleDeviceList,
-        //     possibleNetworkEntryPairs
-        // );
-        // std::cout << "sdfsdfasdf" << std::endl;
     }
 }
 
 void Controller::Scheduling() {
-    while (!isPipelineInitialised) {
-        std::this_thread::sleep_for(std::chrono::seconds(1));
-    }
-    Stopwatch schedulingSW;
-    schedulingSW.start();
-    startTime = std::chrono::system_clock::now();
-    ctrl_controlTimings.currSchedulingTime = startTime;
-
-    ctrl_unscheduledPipelines = ctrl_savedUnscheduledPipelines;
-    auto taskList = ctrl_unscheduledPipelines.getMap();
-    ctrl_controlTimings.nextSchedulingTime = ctrl_controlTimings.currSchedulingTime + std::chrono::seconds(ctrl_controlTimings.schedulingIntervalSec);
-
-    for (auto &[taskName, taskHandle]: taskList) {
-        queryingProfiles(taskHandle);
-        crossDeviceWorkloadDistributor(taskHandle, taskHandle->tk_slo / 2);
-        shiftModelToEdge(taskHandle->tk_pipelineModels, taskHandle->tk_pipelineModels.front(), taskHandle->tk_slo, taskHandle->tk_pipelineModels.front()->device);
-        for (auto &model: taskHandle->tk_pipelineModels) {
-            model->name = taskName + "_" + model->name;
-        }
-        estimateModelTiming(taskHandle->tk_pipelineModels.front(), 0);
-        taskHandle->tk_newlyAdded = false;
-    }
-
-    mergePipelines();
-
-    auto mergedTasks = ctrl_mergedPipelines.getMap();
-    for (auto &[taskName, taskHandle]: mergedTasks) {
-        for (auto &model: taskHandle->tk_pipelineModels) {
-            for (auto i = 0; i < model->numReplicas; i++) {
-                model->cudaDevices.push_back(0); // Add dummy cuda device value to create a container manifestation
-                // model->manifestations.push_back(TranslateToContainer(model, devices.list[model->device], 0));
-                // model->manifestations.back()->task = taskHandle;
-            }
-            if (model->name.find("sink") != std::string::npos) {
-                model->device = "sink";
-            }
-        }
-    }
-
-    estimatePipelineTiming();
-    ctrl_scheduledPipelines = ctrl_mergedPipelines;
-    ApplyScheduling();
-    ctrl_controlTimings.nextRescalingTime = ctrl_controlTimings.currSchedulingTime + std::chrono::seconds(ctrl_controlTimings.rescalingIntervalSec);
-    schedulingSW.stop();
-    ClockType nextTime = std::min(ctrl_controlTimings.nextSchedulingTime, ctrl_controlTimings.nextRescalingTime);
-    uint64_t sleepTime = std::chrono::duration_cast<TimePrecisionType>(nextTime - std::chrono::system_clock::now()).count();
-    startTime = std::chrono::system_clock::now();
     while (running) {
+        Stopwatch schedulingSW;
+        schedulingSW.start();
+        // Check if it is the next scheduling period
+        ctrl_controlTimings.currSchedulingTime = std::chrono::system_clock::now();
+        if (ctrl_controlTimings.currSchedulingTime < ctrl_nextSchedulingTime) {
+            std::this_thread::sleep_for(
+                    std::chrono::seconds(
+                            std::chrono::duration_cast<std::chrono::seconds>(ctrl_nextSchedulingTime - ctrl_controlTimings.currSchedulingTime).count()
+                    )
+            );
+            continue;
+        }
+
+        ctrl_unscheduledPipelines = ctrl_savedUnscheduledPipelines;
+        auto taskList = ctrl_unscheduledPipelines.getMap();
+        if (!isPipelineInitialised) {
+            continue;
+        }
+        ctrl_controlTimings.nextSchedulingTime = ctrl_controlTimings.currSchedulingTime + std::chrono::seconds(ctrl_controlTimings.schedulingIntervalSec);
+
+        for (auto &[taskName, taskHandle]: taskList) {
+            queryingProfiles(taskHandle);
+            crossDeviceWorkloadDistributor(taskHandle, taskHandle->tk_slo / 2);
+            shiftModelToEdge(taskHandle->tk_pipelineModels, taskHandle->tk_pipelineModels.front(), taskHandle->tk_slo, taskHandle->tk_pipelineModels.front()->device);
+            for (auto &model: taskHandle->tk_pipelineModels) {
+                model->name = taskName + "_" + model->name;
+            }
+            estimateModelTiming(taskHandle->tk_pipelineModels.front(), 0);
+            taskHandle->tk_newlyAdded = false;
+        }
+
+        mergePipelines();
+
+        auto mergedTasks = ctrl_mergedPipelines.getMap();
+        for (auto &[taskName, taskHandle]: mergedTasks) {
+            for (auto &model: taskHandle->tk_pipelineModels) {
+                for (auto i = 0; i < model->numReplicas; i++) {
+                    model->cudaDevices.push_back(0); // Add dummy cuda device value to create a container manifestation
+                }
+                if (model->name.find("sink") != std::string::npos) {
+                    model->device = "sink";
+                }
+            }
+        }
+
+        estimatePipelineTiming();
+        ctrl_scheduledPipelines = ctrl_mergedPipelines;
+        ApplyScheduling();
+
+        ctrl_controlTimings.nextRescalingTime = ctrl_controlTimings.currSchedulingTime + std::chrono::seconds(ctrl_controlTimings.rescalingIntervalSec);
+        schedulingSW.stop();
+        uint64_t sleepTime = std::chrono::duration_cast<TimePrecisionType>(ctrl_controlTimings.nextSchedulingTime - std::chrono::system_clock::now()).count();
+        if (startTime == std::chrono::system_clock::time_point()) startTime = std::chrono::system_clock::now();
         if (std::chrono::duration_cast<std::chrono::minutes>(std::chrono::system_clock::now() - startTime).count() > ctrl_runtime) {
             running = false;
             break;
@@ -237,142 +230,11 @@ void Controller::Scheduling() {
     delete this;
 }
 
-void Controller::ScaleUp(PipelineModel *model, uint8_t numIncReps) {
-    if ((uint64_t) std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now() -
-                                   model->lastScaleTime).count() < ctrl_controlTimings.scaleUpIntervalThresholdSec) {
-        spdlog::get("container_agent")->info("The model {0:s} has been scaled up recently."
-                                             "Skipping the scaling up process to avoid uncessary waste.", model->name);
-        return;
-    }
-    model->numReplicas += numIncReps;
-    std::vector<ContainerHandle*> currContainers = model->task->tk_subTasks[model->name];
-    uint16_t numCurrContainers = currContainers.size();
-    model->lastScaleTime = std::chrono::system_clock::now();
-    for (uint16_t i = numCurrContainers; i < model->numReplicas; i++) {
-        ContainerHandle *newContainer = TranslateToContainer(model, devices.getDevice(model->device), i);
-        if (newContainer == nullptr) {
-            spdlog::get("container_agent")->error("Failed to create container for model {0:s} of pipeline {1:s}", model->name, model->task->tk_name);
-            continue;
-        }
-        newContainer->pipelineModel = model;
-        for (auto &downstream : model->downstreams) {
-            for (auto &downstreamContainer : downstream.first->task->tk_subTasks[downstream.first->name]) {
-                downstreamContainer->upstreams.push_back(newContainer);
-                newContainer->downstreams.push_back(downstreamContainer);
-            }
-        }
-        for (auto &upstream : model->upstreams) {
-            for (auto &upstreamContainer : upstream.first->task->tk_subTasks[upstream.first->name]) {
-                upstreamContainer->downstreams.push_back(newContainer);
-                newContainer->upstreams.push_back(upstreamContainer);
-            }
-        }
-        containerColocationTemporalScheduling(newContainer);
-        containers.addContainer(newContainer->name, newContainer);
-        StartContainer(newContainer);
-        for (auto &upstream : model->upstreams) {
-            for (auto &upstreamContainer : upstream.first->task->tk_subTasks[upstream.first->name]) {
-                AdjustUpstream(newContainer->recv_port, upstreamContainer, newContainer->device_agent,
-                               model->name, AdjustUpstreamMode::Add);
-            }
-        }
-    }
-    model->lastScaleTime = std::chrono::system_clock::now();
-}
+void Controller::ScaleUp(PipelineModel *model, uint8_t numIncReps) {}
 
-void Controller::ScaleDown(PipelineModel *model, uint8_t numDecReps) {
+void Controller::ScaleDown(PipelineModel *model, uint8_t numDecReps) {}
 
-    if ((uint64_t) std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now() -
-                                   model->lastScaleTime).count() < ctrl_controlTimings.scaleDownIntervalThresholdSec) {
-        spdlog::get("container_agent")->info("The model {0:s} has been scaled up recently."
-                                             "Skipping the scaling down process to avoid THRASHING.", model->name);
-        return;
-    }
-    model->numReplicas -= numDecReps;
-    std::vector<ContainerHandle*> currContainers = model->task->tk_subTasks[model->name];
-    uint16_t numCurrContainers = currContainers.size();
-    for (uint16_t i = model->numReplicas; i < numCurrContainers; i++) {
-        for (auto &upstream : model->upstreams) {
-            for (auto &upstreamContainer : upstream.first->task->tk_subTasks[upstream.first->name]) {
-                AdjustUpstream(currContainers[i]->recv_port, upstreamContainer, currContainers[i]->device_agent,
-                               model->name, AdjustUpstreamMode::Remove);
-            }
-        }
-        StopContainer(currContainers[i], currContainers[i]->device_agent);
-        auto reclaimed = reclaimGPUPortion(currContainers[i]->executionPortion);
-        if (!reclaimed) {
-            spdlog::get("container_agent")->error("Failed to reclaim portion for container {0:s}", currContainers[i]->name);
-            return;
-        }
-        containers.removeContainer(currContainers[i]->name);
-    }
-    model->lastScaleTime = std::chrono::system_clock::now();
-}
-
-void Controller::Rescaling() {
-    auto taskList = ctrl_scheduledPipelines.getMap();
-    // std::mt19937 gen(100);
-    // std::uniform_int_distribution<int> dist(0, 2);
-
-
-    for (auto &[taskName, taskHandle]: taskList) {
-        std::string source = taskHandle->tk_source.substr(taskHandle->tk_source.find_last_of('/') + 1);
-        for (auto &model: taskHandle->tk_pipelineModels) {
-            if (model->name.find("datasource") != std::string::npos || model->name.find("dsrc") != std::string::npos
-                || model->name.find("sink") != std::string::npos) {
-                continue;
-            }
-            std::string taskName = splitString(model->name, "_").back();
-            auto ratesAndCoeffVars = queryArrivalRateAndCoeffVar(
-                *ctrl_metricsServerConn,
-                ctrl_experimentName,
-                ctrl_systemName,
-                taskHandle->tk_name,
-                source,
-                taskName,
-                ctrl_containerLib[taskName + "_" + model->deviceTypeName].modelName,
-                // TODO: Change back once we have profilings in every fps
-                //ctrl_systemFPS
-                15,
-                {15, 30, 60}
-            );
-            model->arrivalProfiles.arrivalRates = ratesAndCoeffVars.first;
-            model->arrivalProfiles.coeffVar = ratesAndCoeffVars.second;
-
-            auto candidates = model->task->tk_subTasks[model->name];
-
-            auto numIncReps = incNumReplicas(model);
-
-            // // testing scaling up
-            // if (model->device != "server") {
-            //     continue;
-            // }
-            // auto numIncReps = dist(gen);
-            // // testing done
-
-            if (numIncReps > 0) {
-                ScaleUp(model, numIncReps);
-                spdlog::get("container_agent")->info("Rescaling tried increasing number of replicas of model {0:s} of pipeline {1:s} by {2:d}", model->name, taskHandle->tk_name, numIncReps);
-                continue;
-            }
-
-            // //testing
-            // if (numIncReps) {
-            //     model->numReplicas -= numIncReps;
-            //     ScaleDown(model);
-            // }
-            // //testing done
-
-            auto numDecReps = decNumReplicas(model);
-            if (numDecReps > 0) {
-                ScaleDown(model, numDecReps);
-                spdlog::get("container_agent")->info("Rescaling tried decreasing number of replicas of model {0:s} of pipeline {1:s} by {2:d}", model->name, taskHandle->tk_name, numDecReps);
-            }
-
-        }
-    }
-    ctrl_pastScheduledPipelines = ctrl_scheduledPipelines;
-}
+void Controller::Rescaling() {}
 
 /**
  * @brief insert the newly created free portion into the sorted list of free portions
