@@ -91,6 +91,19 @@ elseif (SYSTEM_NAME STREQUAL "RIM")
                 controller.cpp
                 scheduling-rim.cpp
         )
+elseif (SYSTEM_NAME STREQUAL "TUTTI")
+        set(
+                HEADER_FILES
+                controller.h
+                scheduling-tuti.h
+        )
+
+        # All source files and private header files go here.
+        set(
+                SOURCE_FILES
+                controller.cpp
+                scheduling-tuti.cpp
+        )
 endif()
 
 # Here we define the library.
