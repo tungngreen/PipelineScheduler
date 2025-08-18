@@ -490,7 +490,12 @@ typedef std::map<SystemDeviceType, std::string> DeviceInfoType;
 enum PipelineType {
     Traffic,
     Indoor,
-    Building_Security
+    Building_Security,
+    Surveillance_Robot,
+    Surveillance_Campus,
+    Factory_Robot,
+    Factory_CCTV,
+    Smart_Glasses
 };
 
 enum MODEL_DATA_TYPE {

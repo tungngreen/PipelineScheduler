@@ -37,6 +37,7 @@ if(SYSTEM_NAME STREQUAL "PPP")
         set(
                 SOURCE_FILES
                 controller.cpp
+                pipelines.cpp
                 scheduling-ppp.cpp
         )
 elseif (SYSTEM_NAME STREQUAL "FCPO")
@@ -50,6 +51,7 @@ elseif (SYSTEM_NAME STREQUAL "FCPO")
         set(
                 SOURCE_FILES
                 controller.cpp
+                pipelines.cpp
                 scheduling-fcpo.cpp
         )
 elseif (SYSTEM_NAME STREQUAL "JLF")
@@ -63,6 +65,7 @@ elseif (SYSTEM_NAME STREQUAL "JLF")
         set(
                 SOURCE_FILES
                 controller.cpp
+                pipelines.cpp
                 scheduling-jlf.cpp
         )
 elseif (SYSTEM_NAME STREQUAL "DIS")
@@ -76,6 +79,7 @@ elseif (SYSTEM_NAME STREQUAL "DIS")
         set(
                 SOURCE_FILES
                 controller.cpp
+                pipelines.cpp
                 scheduling-dis.cpp
         )
 elseif (SYSTEM_NAME STREQUAL "RIM")
@@ -89,6 +93,7 @@ elseif (SYSTEM_NAME STREQUAL "RIM")
         set(
                 SOURCE_FILES
                 controller.cpp
+                pipelines.cpp
                 scheduling-rim.cpp
         )
 elseif (SYSTEM_NAME STREQUAL "TUTTI")
@@ -102,6 +107,7 @@ elseif (SYSTEM_NAME STREQUAL "TUTTI")
         set(
                 SOURCE_FILES
                 controller.cpp
+                pipelines.cpp
                 scheduling-tuti.cpp
         )
 endif()
