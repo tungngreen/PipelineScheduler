@@ -49,7 +49,7 @@ public:
     ExperienceBuffer(size_t capacity)
         :  timestamps(capacity), states(capacity), log_probs(capacity), values(capacity),
           resolutions(capacity), batchings(capacity), scalings(capacity), rewards(capacity),
-          capacity(capacity), current_index(0), await_reward(false), is_full(false) {}
+          capacity(capacity), current_index(0), await_reward(false), valid_history(false), is_full(false) {}
 
     void add(const T& state, const T& log_prob, const T& value,
              int resolution_action, int batching_action, int scaling_action) {

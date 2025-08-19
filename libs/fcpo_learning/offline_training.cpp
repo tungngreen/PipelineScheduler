@@ -121,9 +121,8 @@ int main(int argc, char **argv) {
             delete bcedge;
         }
 
-
-    } else if (algorithm == "fcpo") { // only used for testing the convergence in simulation to tune hyperparameters
-        FCPOAgent *fcpo = new FCPOAgent(algorithm, 7, 2, 16, 2, nullptr, nullptr, {}, 1, torch::kF32, steps,
+    } else if (algorithm == "fcpo") { // only used for testing the training
+        auto *fcpo = new FCPOAgent(algorithm, 7, 2, 16, 2, nullptr, nullptr, {}, 1, torch::kF32, steps,
                                         0, epochs + 2, .95, .99, .75, .15);
         for (int i = 0; i < epochs; i++) {
             int last_resolution = 0, last_batch_size = 0, last_threading = 0;
@@ -131,7 +130,8 @@ int main(int argc, char **argv) {
                 double arrival = 30.0;
                 auto device = deviceTypes[rand() % deviceTypes.size()];
                 auto model = modelNames[device][0];
-                fcpo->setState(last_resolution, last_batch_size, last_threading, arrival, 0.0, 0.0, 0.0, slo);
+                fcpo->setState(last_resolution, last_batch_size, last_threading, arrival, 0.0, 0.0, 0.0, slo,
+                               profiles[device][model.first].batchInfer[last_batch_size].gpuMemUsage);
                 std::tie(last_resolution, last_batch_size, last_threading) = fcpo->runStep();
                 double avg_latency = (double) (profiles[device][model.first].batchInfer[last_batch_size].p95prepLat +
                                                profiles[device][model.first].batchInfer[last_batch_size].p95inferLat * last_batch_size +
@@ -141,7 +141,10 @@ int main(int argc, char **argv) {
             }
         }
 
-
+    } else if (algorithm == "edgevision") {
+        // TBD
+        std::cerr << "EdgeVision training is not implemented yet." << std::endl;
+        return 1;
     } else {
         std::cerr << "Invalid algorithm: " << algorithm << std::endl;
         return 1;
