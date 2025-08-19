@@ -292,4 +292,7 @@ else()
     add_executable(RL_OfflineTraining libs/fcpo_learning/offline_training.cpp)
     target_link_libraries(RL_OfflineTraining fcpo_learning absl::flags absl::flags_parse)
 
+    add_executable(BandwidthPredictor_OfflineTraining libs/controller/bandwidth_predictor/main.cpp)
+    target_link_libraries(BandwidthPredictor_OfflineTraining controller)
+
 endif()

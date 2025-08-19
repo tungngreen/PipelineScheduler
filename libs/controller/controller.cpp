@@ -1262,11 +1262,24 @@ NetworkEntryType Controller::initNetworkCheck(NodeHandle &node, uint32_t minPack
     entries = aggregateNetworkEntries(entries);
     network_check_buffer[node.name].clear();
     spdlog::get("container_agent")->info("Finished network check for device {}.", node.name);
+    // find the closest latency between min and max packet size
+    float latency;
+    for (auto &entry: entries) {
+        if (entry.first >= (minPacketSize + maxPacketSize) / 2) {
+            latency = entry.second;
+            break;
+        }
+    }
     std::lock_guard lock(node.nodeHandleMutex);
     node.initialNetworkCheck = true;
     if (entries.empty()) entries = {std::pair<uint32_t, uint64_t>{1, 1}};
     node.latestNetworkEntries["server"] = entries;
     node.lastNetworkCheckTime = std::chrono::system_clock::now();
+    if (node.transmissionLatencyHistory.size() > ctrl_bandwidth_predictor.getWindowSize()) {
+        node.transmissionLatencyHistory.erase(node.transmissionLatencyHistory.begin());
+    }
+    node.transmissionLatencyHistory.push_back(latency / 1000.0f); // convert to ms
+    node.transmissionLatencyPrediction = ctrl_bandwidth_predictor.predict(node.transmissionLatencyHistory);
     node.networkCheckMutex.unlock();
     return entries;
 };

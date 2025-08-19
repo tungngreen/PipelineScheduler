@@ -12,6 +12,7 @@
 #include "absl/flags/flag.h"
 #include <random>
 #include "fcpo_learning.h"
+#include "bandwidth_predictor/bandwidth_predictor.h"
 
 using grpc::Status;
 using grpc::CompletionQueue;
@@ -127,6 +128,9 @@ struct NodeHandle {
     std::map<std::string, ContainerHandle *> containers;
     // The latest network entries to determine the network conditions and latencies of transferring data
     std::map<std::string, NetworkEntryType> latestNetworkEntries = {};
+    // Transmission Latency History is used for bandwidth prediction to forcast network conditions
+    std::vector<float> transmissionLatencyHistory;
+    float transmissionLatencyPrediction;
     // GPU Handle;
     std::vector<GPUHandle*> gpuHandles;
     //
@@ -1168,6 +1172,8 @@ private:
 
     FCPOServer *ctrl_fcpo_server;
     json ctrl_fcpo_config;
+
+    BandwidthPredictor ctrl_bandwidth_predictor;
 };
 
 

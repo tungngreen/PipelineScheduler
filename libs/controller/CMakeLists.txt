@@ -24,90 +24,82 @@ if (CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
             FORCE)
 endif (CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
 
+# Only public header files go here.
+set(HEADER_FILES
+        controller.h
+        bandwidth_predictor/bandwidth_predictor.h
+)
+# All source files and private header files go here.
+set(SOURCE_FILES
+        controller.cpp
+        pipelines.cpp
+        bandwidth_predictor/bandwidth_predictor.cpp
+)
+
+
 message ("Building controller for system: ${SYSTEM_NAME}")
 if(SYSTEM_NAME STREQUAL "PPP")
-# Only public header files go here.
-        set(
-                HEADER_FILES
-                controller.h
+        set(HEADER_FILES
+                ${HEADER_FILES}
                 scheduling-ppp.h
         )
-
-        # All source files and private header files go here.
-        set(
-                SOURCE_FILES
-                controller.cpp
-                pipelines.cpp
+        set(SOURCE_FILES
+                ${SOURCE_FILES}
                 scheduling-ppp.cpp
         )
 elseif (SYSTEM_NAME STREQUAL "FCPO")
-        set(
-                HEADER_FILES
-                controller.h
+        set(HEADER_FILES
+                ${HEADER_FILES}
                 scheduling-fcpo.h
         )
 
         # All source files and private header files go here.
-        set(
-                SOURCE_FILES
-                controller.cpp
-                pipelines.cpp
+        set(SOURCE_FILES
+                ${SOURCE_FILES}
                 scheduling-fcpo.cpp
         )
 elseif (SYSTEM_NAME STREQUAL "JLF")
-        set(
-                HEADER_FILES
-                controller.h
+        set(HEADER_FILES
+                ${HEADER_FILES}
                 scheduling-jlf.h
         )
 
         # All source files and private header files go here.
-        set(
-                SOURCE_FILES
-                controller.cpp
-                pipelines.cpp
+        set(SOURCE_FILES
+                ${SOURCE_FILES}
                 scheduling-jlf.cpp
         )
 elseif (SYSTEM_NAME STREQUAL "DIS")
-        set(
-                HEADER_FILES
-                controller.h
+        set(HEADER_FILES
+                ${HEADER_FILES}
                 scheduling-dis.h
         )
 
         # All source files and private header files go here.
-        set(
-                SOURCE_FILES
-                controller.cpp
-                pipelines.cpp
+        set(SOURCE_FILES
+                ${SOURCE_FILES}
                 scheduling-dis.cpp
         )
 elseif (SYSTEM_NAME STREQUAL "RIM")
-        set(
-                HEADER_FILES
-                controller.h
+        set(HEADER_FILES
+                ${HEADER_FILES}
                 scheduling-rim.h
         )
 
         # All source files and private header files go here.
-        set(
-                SOURCE_FILES
-                controller.cpp
-                pipelines.cpp
+        set(SOURCE_FILES
+                ${SOURCE_FILES}
                 scheduling-rim.cpp
         )
 elseif (SYSTEM_NAME STREQUAL "TUTTI")
-        set(
-                HEADER_FILES
-                controller.h
+        set(HEADER_FILES
+                ${HEADER_FILES}
                 scheduling-tuti.h
         )
 
         # All source files and private header files go here.
-        set(
-                SOURCE_FILES
-                controller.cpp
-                pipelines.cpp
+        set(SOURCE_FILES
+                ${SOURCE_FILES}
                 scheduling-tuti.cpp
         )
 endif()
