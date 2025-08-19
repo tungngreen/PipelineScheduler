@@ -414,6 +414,7 @@
         "theta": 1.1,
         "sigma": 10.0,
         "phi": 2.0,
+        "rho": 1.0,
         "precision": "float",
         "update_steps": 150,
         "update_step_incs": 10,

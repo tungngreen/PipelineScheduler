@@ -237,10 +237,11 @@ struct SinglePolicyNet: torch::nn::Module {
 class FCPOAgent {
 public:
     FCPOAgent(std::string& cont_name, uint state_size, uint resolution_size, uint max_batch, uint scaling_size,
-             CompletionQueue *cq, std::shared_ptr<InDeviceMessages::Stub> stub, torch::Dtype precision = torch::kF64,
-             uint update_steps = 60, uint update_steps_inc = 5, uint federated_steps = 5, double lambda = 0.95,
-             double gamma = 0.99, double clip_epsilon = 0.2, double penalty_weight = 0.1, double theta = 1.1,
-             double sigma = 10.0, double phi = 2.0, int seed = 42);
+             CompletionQueue *cq, std::shared_ptr<InDeviceMessages::Stub> stub, BatchInferProfileListType profile,
+             int base_batch, torch::Dtype precision = torch::kF64, uint update_steps = 60, uint update_steps_inc = 5,
+             uint federated_steps = 5, double lambda = 0.95, double gamma = 0.99, double clip_epsilon = 0.2,
+             double penalty_weight = 0.1, double theta = 1.0, double sigma = 10.0, double phi = 2.0, double rho = 1.0,
+             int seed = 42);
 
     ~FCPOAgent() {
         torch::save(model, path + "/latest_model.pt");
@@ -248,9 +249,9 @@ public:
     }
 
     std::tuple<int, int, int> runStep();
-    void rewardCallback(double throughput, double drops, double latency_penalty, double oversize_penalty);
+    void rewardCallback(double throughput, double latency_penalty, double oversize_penalty, double memory_use);
     void setState(double curr_resolution, double curr_batch, double curr_scaling,  double arrival, double pre_queue_size,
-                  double inf_queue_size, double post_queue_size, double pipelineSLO);
+                  double inf_queue_size, double post_queue_size, double slo, double memory_use);
     void federatedUpdateCallback(FlData &response);
 
 private:
@@ -270,10 +271,14 @@ private:
     std::unique_ptr<torch::optim::Optimizer> optimizer;
     torch::Dtype precision;
     T state, log_prob, value;
+    double last_slo;
     int resolution, batching, scaling;
     ExperienceBuffer experiences;
 
     bool first = true;
+    bool penalty = true;
+    BatchInferProfileListType batchInferProfileList;
+
     std::ofstream out;
     std::string path;
     std::string cont_name;
@@ -292,10 +297,12 @@ private:
     double theta;
     double sigma;
     double phi;
+    double rho;
 
     uint state_size;
     uint resolution_size;
     uint max_batch;
+    int base_batch;
     uint scaling_size;
 
     uint steps_counter = 0;
@@ -308,7 +315,7 @@ private:
 
 class FCPOServer {
 public:
-    FCPOServer(std::string run_name, nlohmann::json parameters, uint state_size = 8, torch::Dtype precision = torch::kF32);
+    FCPOServer(std::string run_name, nlohmann::json parameters, uint state_size = 9, torch::Dtype precision = torch::kF32);
     ~FCPOServer() {
         torch::save(model, path + "/latest_model.pt");
         out.close();
@@ -337,6 +344,7 @@ public:
                 {"theta", theta},
                 {"sigma", sigma},
                 {"phi", phi},
+                {"rho", rho},
                 {"precision", boost::algorithm::to_lower_copy(p)},
                 {"update_steps", update_steps},
                 {"update_step_incs", update_step_incs},
@@ -379,6 +387,7 @@ private:
     double theta;
     double sigma;
     double phi;
+    double rho;
 
 
     // Parameters for Learning Loop

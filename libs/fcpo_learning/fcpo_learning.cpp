@@ -1,13 +1,15 @@
 #include "fcpo_learning.h"
 
 FCPOAgent::FCPOAgent(std::string& cont_name, uint state_size, uint resolution_size, uint max_batch,  uint scaling_size,
-                     CompletionQueue *cq, std::shared_ptr<InDeviceMessages::Stub> stub, torch::Dtype precision,
-                     uint update_steps, uint update_steps_inc, uint federated_steps, double lambda, double gamma,
-                     double clip_epsilon, double penalty_weight, double theta, double sigma, double phi, int seed)
-        : precision(precision), cont_name(cont_name), cq(cq), stub(stub), lambda(lambda), gamma(gamma),
-          clip_epsilon(clip_epsilon), penalty_weight(penalty_weight), theta(theta), sigma(sigma), phi(phi),
-          state_size(state_size), resolution_size(resolution_size), max_batch(max_batch), scaling_size(scaling_size),
-          update_steps(update_steps), update_steps_inc(update_steps_inc), federated_steps(federated_steps) {
+                     CompletionQueue *cq, std::shared_ptr<InDeviceMessages::Stub> stub,
+                     BatchInferProfileListType profile, int base_batch, torch::Dtype precision, uint update_steps,
+                     uint update_steps_inc, uint federated_steps, double lambda, double gamma, double clip_epsilon,
+                     double penalty_weight, double theta, double sigma, double phi, double rho, int seed)
+        : precision(precision), batchInferProfileList(profile), cont_name(cont_name), cq(cq), stub(stub), lambda(lambda),
+          gamma(gamma), clip_epsilon(clip_epsilon), penalty_weight(penalty_weight), theta(theta), sigma(sigma), phi(phi),
+          rho(rho), state_size(state_size), resolution_size(resolution_size), max_batch(max_batch),
+          base_batch(base_batch), scaling_size(scaling_size), update_steps(update_steps),
+          update_steps_inc(update_steps_inc), federated_steps(federated_steps) {
     path = "../models/fcpo_learning/" + cont_name;
     std::filesystem::create_directories(std::filesystem::path(path));
     out.open(path + "/latest_log_" + getTimestampString() + ".csv");
@@ -168,13 +170,15 @@ void FCPOAgent::federatedUpdateCallback(FlData &response) {
     reset();
 }
 
-void FCPOAgent::rewardCallback(double throughput, double drops, double latency_penalty, double oversize_penalty) {
+void FCPOAgent::rewardCallback(double throughput, double latency_penalty, double oversize_penalty, double memory_use) {
     if (update_steps > 0 ) {
         if (first) { // First reward is not valid and needs to be discarded
             first = false;
             return;
         }
-        double reward = (theta * throughput - sigma * latency_penalty - phi * std::pow(oversize_penalty, 2)) / 2.0;
+        double reward = (theta * throughput - sigma * latency_penalty - phi * std::pow(oversize_penalty, 2)
+                - rho * memory_use / (double) batchInferProfileList[max_batch].gpuMemUsage) / 2.0;
+        if (penalty) reward = pow(reward, 3);
         reward = std::max(-1.0, std::min(1.0, reward)); // Clip reward to [-1, 1]
         experiences.add_reward(reward);
         cumu_reward += reward;
@@ -182,29 +186,40 @@ void FCPOAgent::rewardCallback(double throughput, double drops, double latency_p
 }
 
 void FCPOAgent::setState(double curr_resolution, double curr_batch, double curr_scaling,  double arrival,
-                         double pre_queue_size, double inf_queue_size, double post_queue_size, double pipelineSLO) {
-    state = torch::tensor({curr_resolution / resolution_size, curr_batch / max_batch, curr_scaling / scaling_size,
-                           arrival, pre_queue_size / 100.0, inf_queue_size / 100.0, post_queue_size / 100.0, pipelineSLO / 100000.0}, precision);
+                         double pre_queue_size, double inf_queue_size, double post_queue_size, double slo,
+                         double memory_use) {
+    last_slo = slo;
+    state = torch::tensor({curr_resolution / resolution_size, curr_batch / max_batch,
+                           curr_scaling / scaling_size, arrival, pre_queue_size / 100.0, inf_queue_size / 100.0,
+                           post_queue_size / 100.0, slo / 100000.0,
+                           memory_use / (double) batchInferProfileList[max_batch].gpuMemUsage}, precision);
 }
 
 void FCPOAgent::selectAction() {
     std::unique_lock<std::mutex> lock(model_mutex);
     auto [policy1, policy2, policy3, val] = model->forward(state);
-    T action_dist = torch::multinomial(policy1, 1);  // Sample from policy (discrete distribution)
-    resolution = action_dist.item<int>();  // Convert tensor to int action
+    T action_dist = torch::multinomial(policy1, 1);
+    resolution = action_dist.item<int>();
     action_dist = torch::multinomial(policy2, 1);
     batching = action_dist.item<int>();
     action_dist = torch::multinomial(policy3, 1);
     scaling = action_dist.item<int>();
-    if (update_steps > 0 ) {
-        log_prob = torch::log(policy1[resolution]) + torch::log(policy2[batching]) + torch::log(policy3[scaling]);
-        experiences.add(state, log_prob, val, resolution, batching, scaling);
-    }
     // code if using SinglePolicyNet
     // auto [policy, val] = model->forward(state);
     // T action_dist = torch::multinomial(policy, 1);  // Sample from policy (discrete distribution)
     // std::tie(resolution, batching, scaling) = model->interpret_action(action_dist.item<int>(), max_batch, scaling_size);
     // log_prob = torch::log(policy[action_dist.item<int>()]);
+
+    // ensure that the action is within the valid range of the given SLO
+    if (batchInferProfileList[batching].p95inferLat > last_slo) {
+        penalty = true;
+        batching = std::max(batching, base_batch);
+    }
+    if (update_steps > 0 ) {
+        log_prob = torch::log(policy1[resolution]) + torch::log(policy2[batching]) + torch::log(policy3[scaling]);
+        // log_prob = torch::log(policy[action_dist.item<int>()]);
+        experiences.add(state, log_prob, val, resolution, batching, scaling);
+    }
 }
 
 T FCPOAgent::computeCumuRewards() const {

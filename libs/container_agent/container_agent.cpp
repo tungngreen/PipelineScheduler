@@ -280,6 +280,7 @@ ContainerAgent::ContainerAgent(const json& configs) {
     cont_name = containerConfigs["cont_name"].get<std::string>();
     cont_pipeName = containerConfigs["cont_pipeName"].get<std::string>();
     cont_pipeSLO = containerConfigs["cont_pipelineSLO"].get<int>();
+    cont_modelSLO = cont_pipeSLO - containerConfigs["cont_timeBudgetLeft"].get<int>();
     cont_taskName = containerConfigs["cont_taskName"].get<std::string>();
     cont_hostDevice = containerConfigs["cont_hostDevice"].get<std::string>();
     cont_hostDeviceType = containerConfigs["cont_hostDeviceType"].get<std::string>();
@@ -577,10 +578,13 @@ ContainerAgent::ContainerAgent(const json& configs) {
         nlohmann::json rl_conf = configs["fcpo"];
         cont_fcpo_agent = new FCPOAgent(cont_name, rl_conf["state_size"], rl_conf["resolution_size"],
                                         rl_conf["batch_size"], rl_conf["threads_size"], sender_cq, stub,
-                                        getTorchDtype(rl_conf["precision"]), rl_conf["update_steps"],
-                                        rl_conf["update_step_incs"], rl_conf["federated_steps"], rl_conf["lambda"],
-                                        rl_conf["gamma"], rl_conf["clip_epsilon"], rl_conf["penalty_weight"], rl_conf["theta"],
-                                        rl_conf["sigma"],rl_conf["phi"], rl_conf["seed"]);
+                                        cont_batchInferProfileList,
+                                        cont_msvcsGroups["batcher"].msvcList[0]->msvc_idealBatchSize,
+                                        getTorchDtype(rl_conf["precision"]),
+                                        rl_conf["update_steps"], rl_conf["update_step_incs"],
+                                        rl_conf["federated_steps"], rl_conf["lambda"], rl_conf["gamma"],
+                                        rl_conf["clip_epsilon"], rl_conf["penalty_weight"], rl_conf["theta"],
+                                        rl_conf["sigma"] ,rl_conf["phi"], rl_conf["rho"] , rl_conf["seed"]);
     }
 
     std::thread receiver(&ContainerAgent::HandleRecvRpcs, this);
@@ -1028,30 +1032,32 @@ void ContainerAgent::collectRuntimeMetrics() {
                     latencyEWMA += post->getLatencyEWMA();
                 }
                 cont_ewma_latency = latencyEWMA / cont_msvcsGroups["postprocessor"].msvcList.size();
+                double batch_size = cont_msvcsGroups["batcher"].msvcList[0]->msvc_idealBatchSize;
 
                 if (cont_request_arrival_rate == 0 || std::isnan(cont_request_arrival_rate)) {
-                    cont_fcpo_agent->rewardCallback(0.0, 0.0, 0.0,
-                                                    (double) cont_msvcsGroups["batcher"].msvcList[0]->msvc_idealBatchSize / 10.0);
+                    cont_fcpo_agent->rewardCallback(0.0, 0.0,
+                                                    (double) batch_size / 10.0,
+                                                    (double) cont_batchInferProfileList[batch_size].gpuMemUsage / 1000.0);
                     cont_request_arrival_rate = 0;
                 } else {
                     cont_request_arrival_rate = std::max(0.1, cont_request_arrival_rate); // prevent negative values in the case of many drops or no requests
                     cont_fcpo_agent->rewardCallback((double) aggExecutedBatchSize / cont_request_arrival_rate,
-                                                    queueDrops / 100.0,
                                                     cont_ewma_latency / TIME_PRECISION_TO_SEC,
-                                                    (double) cont_msvcsGroups["batcher"].msvcList[0]->msvc_idealBatchSize /
-                                                    cont_request_arrival_rate);
+                                                    batch_size / cont_request_arrival_rate,
+                                                    (double) cont_batchInferProfileList[batch_size].gpuMemUsage / 1000.0);
                 }
                 spdlog::get("container_agent")->info(
                         "RL Decision Input: {0:d} miniBatches, {1:f} request rate, {2:f} latency, {3:f} aggExecutedBatchSize",
                         miniBatchCount, cont_request_arrival_rate, cont_ewma_latency / TIME_PRECISION_TO_SEC, aggExecutedBatchSize);
                 cont_fcpo_agent->setState(cont_msvcsGroups["preprocessor"].msvcList[0]->msvc_concat.numImgs,
-                                          cont_msvcsGroups["batcher"].msvcList[0]->msvc_idealBatchSize,
+                                          batch_size,
                                           cont_threadingAction,
                                           cont_request_arrival_rate / 250.0,
                                           cont_msvcsGroups["receiver"].msvcList[0]->msvc_OutQueue[0]->size(),
                                           cont_msvcsGroups["preprocessor"].msvcList[0]->msvc_OutQueue[0]->size(),
                                           cont_msvcsGroups["inference"].msvcList[0]->msvc_OutQueue[0]->size(),
-                                          cont_pipeSLO);
+                                          cont_modelSLO,
+                                          (double) cont_batchInferProfileList[batch_size].gpuMemUsage);
                 auto [targetRes, newBS, scaling] = cont_fcpo_agent->runStep();
                 spdlog::get("container_agent")->info(
                         "RL Decision Output: Resolution: {0:d}, Batch Size: {1:d}, Scaling: {2:d}", targetRes, newBS, scaling);

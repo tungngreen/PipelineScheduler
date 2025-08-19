@@ -394,6 +394,7 @@ protected:
     std::string cont_name;
     std::string cont_pipeName;
     int cont_pipeSLO;
+    int cont_modelSLO;
     std::string cont_taskName;
     // Name of the host where the container is running
     std::string cont_hostDevice;
