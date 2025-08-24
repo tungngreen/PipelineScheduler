@@ -260,7 +260,7 @@ std::tuple<int, int, int> FCPOAgent::runStep() {
             update();
         }
     }
-    return std::make_tuple(timeout + 1, batching + 1, scaling);
+    return std::make_tuple((timeout + 1) % (timeout_size), batching + 1, scaling);
 }
 
 

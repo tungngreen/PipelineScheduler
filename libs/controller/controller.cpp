@@ -875,11 +875,7 @@ void Controller::StartContainer(ContainerHandle *container, bool easy_allocation
             if (ctrl_systemName == "fcpo") {
                 start_config["fcpo"] = ctrl_fcpo_server->getConfig();
                 std::string deviceTypeName = getDeviceTypeName(container->device_agent->type);
-                if (container->model_file.find("yolov5") != std::string::npos) {
-                    start_config["fcpo"]["resolution_size"] =
-                            (deviceTypeName == "server" || deviceTypeName == "agx") ? 4 : 2;
-                }
-                start_config["fcpo"]["resolution_size"] = 1;
+                start_config["fcpo"]["timeout_size"] = (deviceTypeName == "server") ? 5 : 3;
                 start_config["fcpo"]["batch_size"] = container->pipelineModel->processProfiles[deviceTypeName].maxBatchSize;
                 start_config["fcpo"]["threads_size"] = (deviceTypeName == "server") ? 4 : 2;
             }

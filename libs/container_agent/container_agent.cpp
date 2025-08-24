@@ -576,7 +576,7 @@ ContainerAgent::ContainerAgent(const json& configs) {
     }
     if (cont_systemName == "fcpo" && !isDataSource) {
         nlohmann::json rl_conf = configs["fcpo"];
-        cont_fcpo_agent = new FCPOAgent(cont_name, rl_conf["state_size"], rl_conf["resolution_size"],
+        cont_fcpo_agent = new FCPOAgent(cont_name, rl_conf["state_size"], rl_conf["timeout_size"],
                                         rl_conf["batch_size"], rl_conf["threads_size"], sender_cq, stub,
                                         cont_batchInferProfileList,
                                         cont_msvcsGroups["batcher"].msvcList[0]->msvc_idealBatchSize,
@@ -1058,10 +1058,10 @@ void ContainerAgent::collectRuntimeMetrics() {
                                           cont_msvcsGroups["inference"].msvcList[0]->msvc_OutQueue[0]->size(),
                                           cont_modelSLO,
                                           (double) cont_batchInferProfileList[batch_size].gpuMemUsage);
-                auto [targetRes, newBS, scaling] = cont_fcpo_agent->runStep();
+                auto [targetTO, newBS, scaling] = cont_fcpo_agent->runStep();
                 spdlog::get("container_agent")->info(
-                        "RL Decision Output: Resolution: {0:d}, Batch Size: {1:d}, Scaling: {2:d}", targetRes, newBS, scaling);
-                applyResolution(targetRes);
+                        "RL Decision Output: Resolution: {0:d}, Batch Size: {1:d}, Scaling: {2:d}", targetTO, newBS, scaling);
+                applyBatchingTimeout(targetTO);
                 applyBatchSize(newBS);
                 applyMultiThreading(scaling);
 
@@ -1232,10 +1232,7 @@ void ContainerAgent::applyBatchSize(int batchSize) {
 
 void ContainerAgent::applyBatchingTimeout(int timeoutChoice) {
     for (auto batcher : cont_msvcsGroups["batcher"].msvcList) {
-        batcher->msvc_idealBatchSize = batchSize;
-    }
-    for (auto infer : cont_msvcsGroups["inference"].msvcList) {
-        infer->msvc_idealBatchSize = batchSize;
+        batcher->msvc_batchWaitLimit = std::pow(BATCH_WAIT_BASE_MICROSEC, timeoutChoice); // in microseconds
     }
 };
 

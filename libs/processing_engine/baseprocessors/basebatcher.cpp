@@ -212,8 +212,8 @@ inline bool BaseBatcher::isTimeToBatch() {
             updateCycleTiming();
             return true;
         } else {
-            timeOutByLastReq = std::min(timeOutByLastReq, msvc_batchWaitLimit - lastReqWaitTime);
-            msvc_nextMustBatchTime = std::min(timeNow + TimePrecisionType(timeOutByLastReq), msvc_nextMustBatchTime);
+            if (timeOutByLastReq > msvc_batchWaitLimit - lastReqWaitTime)
+                msvc_nextMustBatchTime = std::min(timeNow + TimePrecisionType( msvc_batchWaitLimit - lastReqWaitTime), msvc_nextMustBatchTime);
         }
     }
 
