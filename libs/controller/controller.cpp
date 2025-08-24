@@ -93,8 +93,8 @@ void Controller::readInitialObjectCount(const std::string &path) {
         maxCarRate = std::max(maxCarRate, ctrl_systemFPS * 1.f);
         if (streamName.find("traffic") != std::string::npos) {
             stream->insert({"yolov5n", ctrl_systemFPS});
-
             stream->insert({"retina1face", std::ceil(maxPersonRate)});
+            stream->insert({"movenet", std::ceil(maxPersonRate)});
             stream->insert({"arcface", std::ceil(maxPersonRate * 0.6)});
             stream->insert({"carbrand", std::ceil(maxCarRate)});
             stream->insert({"platedet", std::ceil(maxCarRate)});
@@ -104,12 +104,27 @@ void Controller::readInitialObjectCount(const std::string &path) {
             stream->insert({"age", std::ceil(maxPersonRate) * 0.6});
             stream->insert({"gender", std::ceil(maxPersonRate) * 0.6});
             stream->insert({"movenet", std::ceil(maxPersonRate)});
+            stream->insert({"platedet", std::ceil(maxCarRate)});
         } else if (streamName.find("indoor") != std::string::npos) {
             stream->insert({"retinamtface", ctrl_systemFPS});
             stream->insert({"arcface", std::ceil(maxPersonRate)});
             stream->insert({"age", std::ceil(maxPersonRate)});
             stream->insert({"gender", std::ceil(maxPersonRate)});
             stream->insert({"emotionnet", std::ceil(maxPersonRate)});
+        } else if (streamName.find("surveillance_robot") != std::string::npos) {
+            stream->insert({"yolov5n", ctrl_systemFPS});
+            stream->insert({"arcface", std::ceil(maxPersonRate)});
+            stream->insert({"age", std::ceil(maxPersonRate)});
+            stream->insert({"gender", std::ceil(maxPersonRate)});
+        } else if (streamName.find("factory_robot") != std::string::npos) {
+            stream->insert({"yolov5n", ctrl_systemFPS});
+            stream->insert({"platedet", std::ceil(maxCarRate)});
+            stream->insert({"carbrand", std::ceil(maxCarRate + maxPersonRate)});
+        } else if (streamName.find("factory") != std::string::npos) {
+            stream->insert({"yolov5n", ctrl_systemFPS});
+            stream->insert({"retina1face", std::ceil(maxPersonRate)});
+            stream->insert({"movenet", std::ceil(maxPersonRate)});
+            stream->insert({"arcface", std::ceil(maxPersonRate * 0.6)});
         }
     }
 }
@@ -783,7 +798,11 @@ void Controller::StartContainer(ContainerHandle *container, bool easy_allocation
         }
         if (model == ModelType::DataSource) {
             base_config[0]["msvc_dataShape"] = {container->dimensions};
-            base_config[0]["msvc_idealBatchSize"] = ctrl_systemFPS;
+            if (container->pipelineModel->datasourceName[0].find("spot") != std::string::npos) {
+                base_config[0]["msvc_idealBatchSize"] = 7; // spot data only available in 7 fps
+            } else {
+                base_config[0]["msvc_idealBatchSize"] = ctrl_systemFPS;
+            }
         } else {
             if (model == ModelType::Yolov5nDsrc || model == ModelType::RetinaMtfaceDsrc) {
                 base_config[0]["msvc_dataShape"] = {container->dimensions};

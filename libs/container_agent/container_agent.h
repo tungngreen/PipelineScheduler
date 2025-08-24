@@ -213,9 +213,11 @@ protected:
 
     void collectRuntimeMetrics();
 
-    void applyResolution(int resolutionConfig);
+    void applyFramePacking(int resolutionConfig);
 
     void applyBatchSize(int batchSize);
+
+    void applyBatchingTimeout(int timeoutChoice);
 
     void applyMultiThreading(int multiThreadingConfig);
 

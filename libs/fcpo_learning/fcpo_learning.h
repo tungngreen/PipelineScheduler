@@ -48,11 +48,11 @@ public:
 
     ExperienceBuffer(size_t capacity)
         :  timestamps(capacity), states(capacity), log_probs(capacity), values(capacity),
-          resolutions(capacity), batchings(capacity), scalings(capacity), rewards(capacity),
+          timeouts(capacity), batchings(capacity), scalings(capacity), rewards(capacity),
           capacity(capacity), current_index(0), await_reward(false), valid_history(false), is_full(false) {}
 
     void add(const T& state, const T& log_prob, const T& value,
-             int resolution_action, int batching_action, int scaling_action) {
+             int timeout_action, int batching_action, int scaling_action) {
         if (is_full) {
             double distance = distance_metric(state, states[current_index]);
 
@@ -71,7 +71,7 @@ public:
 
         log_probs[current_index] = log_prob;
         values[current_index] = value;
-        resolutions[current_index] = resolution_action;
+        timeouts[current_index] = timeout_action;
         batchings[current_index] = batching_action;
         scalings[current_index] = scaling_action;
         valid_history = false;
@@ -105,9 +105,9 @@ public:
         return {values.begin(), values.begin() + current_index};
     }
 
-    [[nodiscard]] std::vector<int> get_resolution() const {
-        if (is_full) return resolutions;
-        return {resolutions.begin(), resolutions.begin() + current_index};
+    [[nodiscard]] std::vector<int> get_timeout() const {
+        if (is_full) return timeouts;
+        return {timeouts.begin(), timeouts.begin() + current_index};
     }
 
     [[nodiscard]] std::vector<int> get_batching() const {
@@ -154,7 +154,7 @@ private:
     std::vector<ClockType> timestamps;
     std::vector<T> states, log_probs, values;
     T historical_states, covariance_inv;
-    std::vector<int> resolutions, batchings, scalings;
+    std::vector<int> timeouts, batchings, scalings;
     std::vector<double> rewards;
 
     size_t capacity;
@@ -212,20 +212,20 @@ struct SinglePolicyNet: torch::nn::Module {
         return std::make_tuple(policy_output, value);
     }
 
-    T combine_actions(std::vector<int> resolution, std::vector<int> batching, std::vector<int> scaling, int action2_size, int action3_size) {
-        T action = torch::zeros({static_cast<long>(resolution.size()), 1});
-        for (unsigned int i = 0; i < resolution.size(); i++) {
-            action[i] = resolution[i] * action2_size * action3_size + batching[i] * action3_size + scaling[i];
+    T combine_actions(std::vector<int> timeout, std::vector<int> batching, std::vector<int> scaling, int action2_size, int action3_size) {
+        T action = torch::zeros({static_cast<long>(timeout.size()), 1});
+        for (unsigned int i = 0; i < timeout.size(); i++) {
+            action[i] = timeout[i] * action2_size * action3_size + batching[i] * action3_size + scaling[i];
         }
         return action;
     }
 
     std::tuple<int, int, int> interpret_action(int action, int action2_size, int action3_size) {
-        int resolution = action / (action2_size * action3_size);
+        int timeout = action / (action2_size * action3_size);
         int remainder = action % (action2_size * action3_size);
         int batching = remainder / action3_size;
         int scaling = remainder % action3_size;
-        return std::make_tuple(resolution, batching, scaling);
+        return std::make_tuple(timeout, batching, scaling);
     }
 
     torch::nn::Linear shared_layer1{nullptr};
@@ -236,7 +236,7 @@ struct SinglePolicyNet: torch::nn::Module {
 
 class FCPOAgent {
 public:
-    FCPOAgent(std::string& cont_name, uint state_size, uint resolution_size, uint max_batch, uint scaling_size,
+    FCPOAgent(std::string& cont_name, uint state_size, uint timeout_size, uint max_batch, uint scaling_size,
              CompletionQueue *cq, std::shared_ptr<InDeviceMessages::Stub> stub, BatchInferProfileListType profile,
              int base_batch, torch::Dtype precision = torch::kF64, uint update_steps = 60, uint update_steps_inc = 5,
              uint federated_steps = 5, double lambda = 0.95, double gamma = 0.99, double clip_epsilon = 0.2,
@@ -250,7 +250,7 @@ public:
 
     std::tuple<int, int, int> runStep();
     void rewardCallback(double throughput, double latency_penalty, double oversize_penalty, double memory_use);
-    void setState(double curr_resolution, double curr_batch, double curr_scaling,  double arrival, double pre_queue_size,
+    void setState(double curr_timeout, double curr_batch, double curr_scaling,  double arrival, double pre_queue_size,
                   double inf_queue_size, double post_queue_size, double slo, double memory_use);
     void federatedUpdateCallback(FlData &response);
 
@@ -272,7 +272,7 @@ private:
     torch::Dtype precision;
     T state, log_prob, value;
     double last_slo;
-    int resolution, batching, scaling;
+    int timeout, batching, scaling;
     ExperienceBuffer experiences;
 
     bool first = true;
@@ -300,7 +300,7 @@ private:
     double rho;
 
     uint state_size;
-    uint resolution_size;
+    uint timeout_size;
     uint max_batch;
     int base_batch;
     uint scaling_size;

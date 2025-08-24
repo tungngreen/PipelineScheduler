@@ -67,13 +67,13 @@ message FlData {
   string name = 1;
   string device_name = 2;
   uint32 state_size = 3;
-  uint32 resolution_size = 4;
+  uint32 timeout_size = 4;
   uint32 max_batch = 5;
   uint32 threading_size = 6;
   double latest_loss = 7;
   bytes network = 8;
   optional bytes states = 9;
-  optional bytes resolution_actions = 10;
+  optional bytes timeout_actions = 10;
   optional bytes batching_actions = 11;
   optional bytes scaling_actions = 12;
 }

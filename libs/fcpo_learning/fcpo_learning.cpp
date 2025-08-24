@@ -1,20 +1,20 @@
 #include "fcpo_learning.h"
 
-FCPOAgent::FCPOAgent(std::string& cont_name, uint state_size, uint resolution_size, uint max_batch,  uint scaling_size,
+FCPOAgent::FCPOAgent(std::string& cont_name, uint state_size, uint timeout_size, uint max_batch,  uint scaling_size,
                      CompletionQueue *cq, std::shared_ptr<InDeviceMessages::Stub> stub,
                      BatchInferProfileListType profile, int base_batch, torch::Dtype precision, uint update_steps,
                      uint update_steps_inc, uint federated_steps, double lambda, double gamma, double clip_epsilon,
                      double penalty_weight, double theta, double sigma, double phi, double rho, int seed)
         : precision(precision), batchInferProfileList(profile), cont_name(cont_name), cq(cq), stub(stub), lambda(lambda),
           gamma(gamma), clip_epsilon(clip_epsilon), penalty_weight(penalty_weight), theta(theta), sigma(sigma), phi(phi),
-          rho(rho), state_size(state_size), resolution_size(resolution_size), max_batch(max_batch),
+          rho(rho), state_size(state_size), timeout_size(timeout_size), max_batch(max_batch),
           base_batch(base_batch), scaling_size(scaling_size), update_steps(update_steps),
           update_steps_inc(update_steps_inc), federated_steps(federated_steps) {
     path = "../models/fcpo_learning/" + cont_name;
     std::filesystem::create_directories(std::filesystem::path(path));
     out.open(path + "/latest_log_" + getTimestampString() + ".csv");
 
-    model = std::make_shared<MultiPolicyNet>(state_size, resolution_size, max_batch, scaling_size);
+    model = std::make_shared<MultiPolicyNet>(state_size, timeout_size, max_batch, scaling_size);
     std::string model_save = path + "/latest_model.pt";
     if (std::filesystem::exists(model_save)) {
         torch::load(model, model_save);
@@ -50,7 +50,7 @@ void FCPOAgent::update() {
 
     auto [policy1, policy2, policy3, val] = model->forward(torch::stack(experiences.get_states()));
     T action1_probs = torch::softmax(policy1, -1);
-    T action1_log_probs = torch::log(action1_probs.gather(-1, torch::tensor(experiences.get_resolution()).reshape({-1, 1})).squeeze(-1));
+    T action1_log_probs = torch::log(action1_probs.gather(-1, torch::tensor(experiences.get_timeout()).reshape({-1, 1})).squeeze(-1));
     T action2_probs = torch::softmax(policy2, -1);
     T action2_log_probs = torch::log(action2_probs.gather(-1, torch::tensor(experiences.get_batching()).reshape({-1, 1})).squeeze(-1));
     T action3_probs = torch::softmax(policy3, -1);
@@ -58,7 +58,7 @@ void FCPOAgent::update() {
     T new_log_probs = (1 * action1_log_probs + 1 * action2_log_probs + 1 * action3_log_probs).squeeze(-1);
     // code if using SinglePolicyNet
     // auto [policy, val] = model->forward(torch::stack(experiences.get_states()));
-    // T actions = model->combine_actions(experiences.get_resolution(), experiences.get_batching(), experiences.get_scaling(), max_batch, scaling_size).to(torch::kInt64);
+    // T actions = model->combine_actions(experiences.get_timeout(), experiences.get_batching(), experiences.get_scaling(), max_batch, scaling_size).to(torch::kInt64);
     // T new_log_probs = torch::log(policy.gather(-1, actions.reshape({-1, 1})).squeeze(-1));
 
     T ratio = torch::exp(new_log_probs - torch::stack(experiences.get_log_probs()));
@@ -78,7 +78,7 @@ void FCPOAgent::update() {
         policy_loss = 10 * torch::mean(policy_loss_1 + policy_loss_2);
 
         value_loss = torch::mse_loss(val.squeeze(), computeCumuRewards());
-        T policy1_penalty = penalty_weight * torch::mean(torch::tensor(experiences.get_resolution()).to(precision));
+        T policy1_penalty = penalty_weight * torch::mean(torch::tensor(experiences.get_timeout()).to(precision));
         T policy3_penalty = penalty_weight * torch::mean(torch::tensor(experiences.get_scaling()).to(precision));
         spdlog::get("container_agent")->info("RL Agent Policy Loss: {}, Value Loss: {}, Policy1 Penalty: {}, Policy3 Penalty: {}",
                                              policy_loss.item<double>(), value_loss.item<double>(), policy1_penalty.item<double>(), policy3_penalty.item<double>());
@@ -118,7 +118,7 @@ void FCPOAgent::federatedUpdate(const double loss) {
     std::ostringstream oss;
     request.set_name(cont_name);
     request.set_state_size(state_size);
-    request.set_resolution_size(resolution_size);
+    request.set_timeout_size(timeout_size);
     request.set_max_batch(max_batch);
     request.set_threading_size(scaling_size);
     request.set_latest_loss(loss);
@@ -152,7 +152,7 @@ void FCPOAgent::federatedUpdateCallback(FlData &response) {
     optimizer->zero_grad();
     auto [policy1_output, policy2_output, policy3_output, value] = model->forward(torch::stack(experiences.get_states()).to(precision));
 
-    auto policy1_loss = torch::nll_loss(policy1_output, torch::tensor(experiences.get_resolution()).to(precision));
+    auto policy1_loss = torch::nll_loss(policy1_output, torch::tensor(experiences.get_timeout()).to(precision));
     auto policy2_loss = torch::nll_loss(policy2_output, torch::tensor(experiences.get_batching()).to(precision));
     auto policy3_loss = torch::nll_loss(policy3_output, torch::tensor(experiences.get_scaling()).to(precision));
 
@@ -185,11 +185,11 @@ void FCPOAgent::rewardCallback(double throughput, double latency_penalty, double
     }
 }
 
-void FCPOAgent::setState(double curr_resolution, double curr_batch, double curr_scaling,  double arrival,
+void FCPOAgent::setState(double curr_timeout, double curr_batch, double curr_scaling,  double arrival,
                          double pre_queue_size, double inf_queue_size, double post_queue_size, double slo,
                          double memory_use) {
     last_slo = slo;
-    state = torch::tensor({curr_resolution / resolution_size, curr_batch / max_batch,
+    state = torch::tensor({curr_timeout / timeout_size, curr_batch / max_batch,
                            curr_scaling / scaling_size, arrival, pre_queue_size / 100.0, inf_queue_size / 100.0,
                            post_queue_size / 100.0, slo / 100000.0,
                            memory_use / (double) batchInferProfileList[max_batch].gpuMemUsage}, precision);
@@ -199,7 +199,7 @@ void FCPOAgent::selectAction() {
     std::unique_lock<std::mutex> lock(model_mutex);
     auto [policy1, policy2, policy3, val] = model->forward(state);
     T action_dist = torch::multinomial(policy1, 1);
-    resolution = action_dist.item<int>();
+    timeout = action_dist.item<int>();
     action_dist = torch::multinomial(policy2, 1);
     batching = action_dist.item<int>();
     action_dist = torch::multinomial(policy3, 1);
@@ -207,7 +207,7 @@ void FCPOAgent::selectAction() {
     // code if using SinglePolicyNet
     // auto [policy, val] = model->forward(state);
     // T action_dist = torch::multinomial(policy, 1);  // Sample from policy (discrete distribution)
-    // std::tie(resolution, batching, scaling) = model->interpret_action(action_dist.item<int>(), max_batch, scaling_size);
+    // std::tie(timeout, batching, scaling) = model->interpret_action(action_dist.item<int>(), max_batch, scaling_size);
     // log_prob = torch::log(policy[action_dist.item<int>()]);
 
     // ensure that the action is within the valid range of the given SLO
@@ -216,9 +216,9 @@ void FCPOAgent::selectAction() {
         batching = std::max(batching, base_batch);
     }
     if (update_steps > 0 ) {
-        log_prob = torch::log(policy1[resolution]) + torch::log(policy2[batching]) + torch::log(policy3[scaling]);
+        log_prob = torch::log(policy1[timeout]) + torch::log(policy2[batching]) + torch::log(policy3[scaling]);
         // log_prob = torch::log(policy[action_dist.item<int>()]);
-        experiences.add(state, log_prob, val, resolution, batching, scaling);
+        experiences.add(state, log_prob, val, timeout, batching, scaling);
     }
 }
 
@@ -253,14 +253,14 @@ std::tuple<int, int, int> FCPOAgent::runStep() {
 
     if (update_steps > 0 ) steps_counter++;
     sw.stop();
-    out << "step," << sw.elapsed_microseconds() << "," << federated_steps_counter << "," << steps_counter << "," << cumu_reward  << "," << resolution << "," << batching << "," << scaling << std::endl;
+    out << "step," << sw.elapsed_microseconds() << "," << federated_steps_counter << "," << steps_counter << "," << cumu_reward  << "," << timeout << "," << batching << "," << scaling << std::endl;
 
     if (update_steps > 0 ) {
         if (steps_counter % update_steps == 0) {
             update();
         }
     }
-    return std::make_tuple(resolution + 1, batching + 1, scaling);
+    return std::make_tuple(timeout + 1, batching + 1, scaling);
 }
 
 
@@ -301,7 +301,7 @@ FCPOServer::FCPOServer(std::string run_name, nlohmann::json parameters, uint sta
 bool FCPOServer::addClient(FlData &request, std::shared_ptr<ControlCommands::Stub> stub, CompletionQueue *cq) {
     std::istringstream iss(request.network());
     federated_clients.push_back({request,
-                                 std::make_shared<MultiPolicyNet>(request.state_size(), request.resolution_size(),
+                                 std::make_shared<MultiPolicyNet>(request.state_size(), request.timeout_size(),
                                                                   request.max_batch(), request.threading_size()),
                                  stub, cq});
     try {

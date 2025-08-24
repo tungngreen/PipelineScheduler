@@ -1235,6 +1235,8 @@ protected:
     // Maximum batch size, only used during profiling
     BatchSizeType msvc_maxBatchSize;
 
+    uint64_t msvc_batchWaitLimit = 0; //microseconds
+
     //
     bool msvc_profWarmupCompleted = false;
 

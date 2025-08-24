@@ -1212,7 +1212,7 @@ void ContainerAgent::collectRuntimeMetrics() {
     stopAllMicroservices();
 }
 
-void ContainerAgent::applyResolution(int resolutionConfig) {
+void ContainerAgent::applyFramePacking(int resolutionConfig) {
     for (auto preproc : cont_msvcsGroups["preprocessor"].msvcList) {
         if (preproc->msvc_concat.numImgs != resolutionConfig){
             preproc->flushBuffers();
@@ -1222,6 +1222,15 @@ void ContainerAgent::applyResolution(int resolutionConfig) {
 }
 
 void ContainerAgent::applyBatchSize(int batchSize) {
+    for (auto batcher : cont_msvcsGroups["batcher"].msvcList) {
+        batcher->msvc_idealBatchSize = batchSize;
+    }
+    for (auto infer : cont_msvcsGroups["inference"].msvcList) {
+        infer->msvc_idealBatchSize = batchSize;
+    }
+};
+
+void ContainerAgent::applyBatchingTimeout(int timeoutChoice) {
     for (auto batcher : cont_msvcsGroups["batcher"].msvcList) {
         batcher->msvc_idealBatchSize = batchSize;
     }

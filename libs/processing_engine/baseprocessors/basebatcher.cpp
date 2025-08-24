@@ -204,6 +204,19 @@ inline bool BaseBatcher::isTimeToBatch() {
                             msvc_batchInferProfileList.at(msvc_onBufferBatchSize).p95prepLat * 1.2;
     timeOutByLastReq = std::max((uint64_t) 0, timeOutByLastReq);
     msvc_nextMustBatchTime = timeNow + TimePrecisionType(timeOutByLastReq);
+
+    if (msvc_batchWaitLimit > 0) {
+        if (lastReqWaitTime > msvc_batchWaitLimit) {
+            spdlog::get("container_agent")->warn("{0:s} has waited for {1:d} microseconds, which is more than the batch wait limit of {2:d} microseconds. Batching now.",
+                                                 msvc_name, lastReqWaitTime, msvc_batchWaitLimit);
+            updateCycleTiming();
+            return true;
+        } else {
+            timeOutByLastReq = std::min(timeOutByLastReq, msvc_batchWaitLimit - lastReqWaitTime);
+            msvc_nextMustBatchTime = std::min(timeNow + TimePrecisionType(timeOutByLastReq), msvc_nextMustBatchTime);
+        }
+    }
+
     // Ideal batch size is calculated based on the profiles so its always confined to the cycle,
     // So we ground must batch time to the ideal batch time to make sure it is so as well.
     if (msvc_nextMustBatchTime > msvc_nextIdealBatchTime) {

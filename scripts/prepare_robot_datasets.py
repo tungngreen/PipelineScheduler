@@ -137,17 +137,17 @@ def extract_images_to_video(input_dir, output_file):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(
         description='Extracts video from a ROS bag file or all bag files in a directory.')
-    parser.add_argument('--dataset', type=str, default='', help='Name of the dataset to process. [TorWIC, TorWIC-SLAM, SCAND]')
+    parser.add_argument('--dataset', type=str, default='', help='Name of the dataset to process. [TorWIC, images, SCAND]')
     parser.add_argument('--bag_file', type=str, help='Path to the input ROS bag file.')
     parser.add_argument('--input_dir', type=str, help='Path to a directory containing ROS bag files, or directories with images.')
     parser.add_argument('--output_dir', type=str, default=None, help='Directory to save output MP4 files (used with --bag_dir).')
     parser.add_argument('--output_file', type=str, help='Path for the output MP4 video file (used with --bag_file).')
     args = parser.parse_args()
 
-    if args.dataset not in ['TorWIC', 'TorWIC-SLAM', 'SCAND']:
-        print("Error: Invalid dataset name. Please use 'TorWIC', 'TorWIC-SLAM', or 'SCAND'.")
+    if args.dataset not in ['TorWIC', 'images', 'SCAND']:
+        print("Error: Invalid dataset name. Please use 'TorWIC', 'images', or 'SCAND'.")
         exit(1)
-    if args.dataset == 'TorWIC-SLAM':
+    if args.dataset == 'images':
         if args.input_dir:
             if not os.path.isdir(args.input_dir):
                 print(f"Error: The directory '{args.input_dir}' does not exist.")
@@ -157,13 +157,27 @@ if __name__ == '__main__':
                 for exp_name in os.listdir(args.input_dir):
                     if not os.path.isdir(os.path.join(args.input_dir, exp_name)):
                         continue
-                    for direction in ['image_left', 'image_right']:
-                        dir_path = os.path.join(args.input_dir, exp_name, direction)
-                        output_file = os.path.join(output_dir, exp_name + '_' + direction + '.mp4')
+                    if 'MTMMC' in args.input_dir:
+                        for cam_name in os.listdir(os.path.join(args.input_dir, exp_name)):
+                            if not os.path.isdir(os.path.join(args.input_dir, exp_name, cam_name)):
+                                continue
+                            dir_path = os.path.join(args.input_dir, exp_name, cam_name, 'rgb')
+                            output_file = os.path.join(output_dir, exp_name + '_' + cam_name + '.mp4')
+                            print(f"Processing {exp_name} / {cam_name} -> {output_file}")
+                            extract_images_to_video(dir_path, output_file)
+                    elif not os.path.isdir(os.path.join(args.input_dir, exp_name, 'image_left')):
+                        dir_path = os.path.join(args.input_dir, exp_name)
+                        output_file = os.path.join(output_dir, exp_name + '.mp4')
                         print(f"Processing {exp_name} -> {output_file}")
                         extract_images_to_video(dir_path, output_file)
+                    else:
+                        for direction in ['image_left', 'image_right']:
+                            dir_path = os.path.join(args.input_dir, exp_name, direction)
+                            output_file = os.path.join(output_dir, exp_name + '_' + direction + '.mp4')
+                            print(f"Processing {exp_name} -> {output_file}")
+                            extract_images_to_video(dir_path, output_file)
         else:
-            print("Error: You must provide --input_dir to use TorWIC-SLAM.")
+            print("Error: You must provide --input_dir to use images.")
     elif args.dataset == 'SCAND' or args.dataset == 'TorWIC':
         if args.input_dir:
             if not os.path.isdir(args.input_dir):
