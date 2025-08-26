@@ -361,6 +361,7 @@
         "cont_numWarmUpBatches": 15,
         "cont_allocationMode": 1,
         "cont_batchMode": 0,
+        "cont_batchTimeout": 0,
         "cont_dropMode": 0,
         "cont_pipelineSLO": 100000,
         "cont_timeBudgetLeft": 70000,

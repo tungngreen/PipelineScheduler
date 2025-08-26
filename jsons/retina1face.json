@@ -1,7 +1,7 @@
 {
     "container" : {
-        "cont_experimentName": "prof",
-        "cont_systemName": "fcpo",
+        "cont_experimentName": "th0",
+        "cont_systemName": "ppp",
         "cont_pipeName": "traffic",
         "cont_taskName": "retina1face",
         "cont_hostDevice": "server",
@@ -45,7 +45,7 @@
                         "nb_classOfInterest": -2,
                         "nb_commMethod": 2,
                         "nb_link": [
-                            "0.0.0.0:55014"
+                            "0.0.0.0:55011"
                         ],
                         "nb_maxQueueSize": 100,
                         "nb_name": "yolov5",
@@ -133,7 +133,7 @@
             {
                 "msvc_name": "batcher",
                 "msvc_numInstances": 1,
-                "msvc_idealBatchSize": 2,
+                "msvc_idealBatchSize": 4,
                 "msvc_dnstreamMicroservices": [
                     {
                         "nb_classOfInterest": -1,
@@ -186,7 +186,7 @@
             {
                 "msvc_name": "inference",
                 "msvc_numInstances": 1,
-                "msvc_idealBatchSize": 2,
+                "msvc_idealBatchSize": 4,
                 "msvc_dnstreamMicroservices": [
                     {
                         "nb_classOfInterest": -1,
@@ -335,7 +335,7 @@
                         "nb_classOfInterest": -1,
                         "nb_commMethod": 2,
                         "nb_link": [
-                            "143.248.57.132:55055"
+                            "localhost:55015"
                         ],
                         "nb_maxQueueSize": 100,
                         "nb_name": "dummy_receiver_0",
@@ -381,7 +381,8 @@
         "cont_metricServerConfigs": "../jsons/metricsserver.json",
         "cont_numWarmUpBatches": 15,
         "cont_allocationMode": 1,
-        "cont_batchMode": 0,
+        "cont_batchMode": 1,
+        "cont_batchTimeout": 0,
         "cont_dropMode": 0,
         "cont_pipelineSLO": 100000,
         "cont_timeBudgetLeft": 70000,

@@ -98,7 +98,6 @@ void manageJsonConfigs(json &configs) {
         } else if (static_cast<RUNMODE>(runmode) == RUNMODE::DEPLOYMENT) {
             (*containerConfigs)["cont_maxBatchSize"] = maxModelBatchSize;
         }
-
         containerConfigs->at("cont_pipeline")[4]["msvc_concat"] = containerConfigs->at("cont_pipeline")[1]["msvc_concat"];
     }
 
@@ -108,6 +107,7 @@ void manageJsonConfigs(json &configs) {
         containerConfigs->at("cont_pipeline")[i]["msvc_localDutyCycle"] = containerConfigs->at("cont_localDutyCycle");
         containerConfigs->at("cont_pipeline")[i]["msvc_cycleStartTime"] = containerConfigs->at("cont_cycleStartTime");
         containerConfigs->at("cont_pipeline")[i]["msvc_batchMode"] = containerConfigs->at("cont_batchMode");
+        containerConfigs->at("cont_pipeline")[i]["msvc_batchTimeout"] = containerConfigs->at("cont_batchTimeout");
         containerConfigs->at("cont_pipeline")[i]["msvc_dropMode"] = containerConfigs->at("cont_dropMode");
         containerConfigs->at("cont_pipeline")[i]["msvc_timeBudgetLeft"] = containerConfigs->at("cont_timeBudgetLeft");
         containerConfigs->at("cont_pipeline")[i]["msvc_pipelineSLO"] = containerConfigs->at("cont_pipelineSLO");

@@ -1,7 +1,7 @@
 {
     "container": {
-        "cont_experimentName": "rl1",
-        "cont_systemName": "fcpo",
+        "cont_experimentName": "th0",
+        "cont_systemName": "ppp",
         "cont_pipeName": "traffic",
         "cont_taskName": "yolov5",
         "cont_hostDevice": "server",
@@ -9,58 +9,57 @@
         "cont_name": "yolov5_0",
         "cont_pipeline": [
             {
-                "msvc_name": "receiver",
-                "msvc_numInstances": 1,
-                "msvc_idealBatchSize": 1,
-                "msvc_dnstreamMicroservices": [
-                    {
-                        "nb_classOfInterest": -1,
-                        "nb_commMethod": 4,
-                        "nb_link": [
-                            ""
-                        ],
-                        "nb_maxQueueSize": 100,
-                        "nb_name": "preprocessor",
-                        "nb_expectedShape": [
-                            [
-                                -1,
-                                -1,
-                                -1
-                            ]
-                        ],
-                        "nb_portions": []
-                    }
-                ],
-                "msvc_dataShape": [
+              "msvc_name": "data_reader",
+              "msvc_numInstances": 1,
+              "msvc_idealBatchSize": 30,
+              "msvc_dnstreamMicroservices": [
+                {
+                  "nb_classOfInterest": -1,
+                  "nb_commMethod": 4,
+                  "nb_link": [
+                    ""
+                  ],
+                  "nb_maxQueueSize": 100,
+                  "nb_name": "preprocessor",
+                  "nb_expectedShape": [
                     [
-                        3,
-                        1280,
-                        720
+                      0,
+                      0,
+                      0
                     ]
-                ],
-                "msvc_pipelineSLO": 999999,
-                "msvc_type": 0,
-                "msvc_upstreamMicroservices": [
-                    {
-                        "nb_classOfInterest": -2,
-                        "nb_commMethod": 2,
-                        "nb_link": [
-                            "0.0.0.0:55011"
-                        ],
-                        "nb_maxQueueSize": 100,
-                        "nb_name": "datasource",
-                        "nb_expectedShape": [
-                            [
-                                -1,
-                                -1,
-                                -1
-                            ]
-                        ],
-                        "nb_portions": []
-                    }
-                ],
-                "msvc_maxQueueSize": 100,
-                "=========================================Here ends the common part of the microservice configuration": "The following are the specific configurations for each microservice."
+                  ],
+                  "nb_portions": []
+                }
+              ],
+              "msvc_dataShape": [
+                [
+                  -1,
+                  -1,
+                  -1
+                ]
+              ],
+              "msvc_pipelineSLO": 999999,
+              "msvc_type": 500,
+              "msvc_upstreamMicroservices": [
+                {
+                  "nb_classOfInterest": -2,
+                  "nb_commMethod": 4,
+                  "nb_link": [
+                    "../data/preview/batch_test.mp4"
+                  ],
+                  "nb_maxQueueSize": 100,
+                  "nb_name": "video_source",
+                  "nb_expectedShape": [
+                    [
+                      0,
+                      0,
+                      0
+                    ]
+                  ],
+                  "nb_portions": []
+                }
+              ],
+              "msvc_maxQueueSize": 100
             },
             {
                 "msvc_name": "preprocessor",
@@ -269,13 +268,13 @@
                 "msvc_idealBatchSize": 1,
                 "msvc_dnstreamMicroservices": [
                     {
-                        "nb_classOfInterest": 2,
+                        "nb_classOfInterest": 0,
                         "nb_commMethod": 4,
                         "nb_link": [
                             ""
                         ],
                         "nb_maxQueueSize": 100,
-                        "nb_name": "sender",
+                        "nb_name": "sender1",
                         "nb_expectedShape": [
                             [
                                 0,
@@ -283,6 +282,38 @@
                             ]
                         ],
                         "nb_portions": []
+                    },
+                    {
+                      "nb_classOfInterest": 2,
+                      "nb_commMethod": 4,
+                      "nb_link": [
+                        ""
+                      ],
+                      "nb_maxQueueSize": 100,
+                      "nb_name": "sender2",
+                      "nb_expectedShape": [
+                        [
+                          0,
+                          0
+                        ]
+                      ],
+                      "nb_portions": []
+                    },
+                    {
+                      "nb_classOfInterest": 2,
+                      "nb_commMethod": 4,
+                      "nb_link": [
+                        ""
+                      ],
+                      "nb_maxQueueSize": 100,
+                      "nb_name": "sender3",
+                      "nb_expectedShape": [
+                        [
+                          0,
+                          0
+                        ]
+                      ],
+                      "nb_portions": []
                     }
                 ],
                 "msvc_dataShape": [
@@ -327,7 +358,7 @@
                 "msvc_augment": false
             },
             {
-                "msvc_name": "sender",
+                "msvc_name": "sender1",
                 "msvc_numInstances": 1,
                 "msvc_idealBatchSize": 20,
                 "msvc_dnstreamMicroservices": [
@@ -335,7 +366,7 @@
                         "nb_classOfInterest": -1,
                         "nb_commMethod": 2,
                         "nb_link": [
-                            "localhost:55012"
+                            "localhost:55011"
                         ],
                         "nb_maxQueueSize": 100,
                         "nb_name": "name",
@@ -376,12 +407,115 @@
                 ],
                 "msvc_maxQueueSize": 100,
                 "=========================================Here ends the common part of the microservice configuration": "The following are the specific configurations for each microservice."
-            }
+            },
+          {
+            "msvc_name": "sender2",
+            "msvc_numInstances": 1,
+            "msvc_idealBatchSize": 20,
+            "msvc_dnstreamMicroservices": [
+              {
+                "nb_classOfInterest": -1,
+                "nb_commMethod": 2,
+                "nb_link": [
+                  "localhost:55012"
+                ],
+                "nb_maxQueueSize": 100,
+                "nb_name": "name",
+                "nb_expectedShape": [
+                  [
+                    -1,
+                    -1
+                  ]
+                ],
+                "nb_portions": []
+              }
+            ],
+            "msvc_dataShape": [
+              [
+                0,
+                0
+              ]
+            ],
+            "msvc_pipelineSLO": 999999,
+            "msvc_type": 4002,
+            "msvc_upstreamMicroservices": [
+              {
+                "nb_classOfInterest": -2,
+                "nb_commMethod": 4,
+                "nb_link": [
+                  ""
+                ],
+                "nb_maxQueueSize": 100,
+                "nb_name": "postprocessor",
+                "nb_expectedShape": [
+                  [
+                    -1,
+                    -1
+                  ]
+                ],
+                "nb_portions": []
+              }
+            ],
+            "msvc_maxQueueSize": 100,
+            "=========================================Here ends the common part of the microservice configuration": "The following are the specific configurations for each microservice."
+          },
+          {
+            "msvc_name": "sender3",
+            "msvc_numInstances": 1,
+            "msvc_idealBatchSize": 20,
+            "msvc_dnstreamMicroservices": [
+              {
+                "nb_classOfInterest": -1,
+                "nb_commMethod": 2,
+                "nb_link": [
+                  "localhost:55013"
+                ],
+                "nb_maxQueueSize": 100,
+                "nb_name": "name",
+                "nb_expectedShape": [
+                  [
+                    -1,
+                    -1
+                  ]
+                ],
+                "nb_portions": []
+              }
+            ],
+            "msvc_dataShape": [
+              [
+                0,
+                0
+              ]
+            ],
+            "msvc_pipelineSLO": 999999,
+            "msvc_type": 4002,
+            "msvc_upstreamMicroservices": [
+              {
+                "nb_classOfInterest": -2,
+                "nb_commMethod": 4,
+                "nb_link": [
+                  ""
+                ],
+                "nb_maxQueueSize": 100,
+                "nb_name": "postprocessor",
+                "nb_expectedShape": [
+                  [
+                    -1,
+                    -1
+                  ]
+                ],
+                "nb_portions": []
+              }
+            ],
+            "msvc_maxQueueSize": 100,
+            "=========================================Here ends the common part of the microservice configuration": "The following are the specific configurations for each microservice."
+          }
         ],
         "cont_metricServerConfigs": "../jsons/metricsserver.json",
         "cont_numWarmUpBatches": 15,
         "cont_allocationMode": 1,
-        "cont_batchMode": 0,
+        "cont_batchMode": 1,
+        "cont_batchTimeout": 0,
         "cont_dropMode": 0,
         "cont_pipelineSLO": 100000,
         "cont_timeBudgetLeft": 70000,

@@ -24,7 +24,7 @@ struct TPADataShape {
 };
 
 // ========== Model ==========
-struct TPALSTMImpl : torch::nn::Module {
+struct TPALSTM : torch::nn::Module {
     TPAArgs A;
     TPADataShape D;
 
@@ -56,7 +56,7 @@ struct TPALSTMImpl : torch::nn::Module {
     torch::Tensor final_matrix;         // [B, original_columns, H]
 
     // actor
-    TPALSTMImpl(const TPAArgs& args, const TPADataShape& data)
+    TPALSTM(const TPAArgs& args, const TPADataShape& data)
             : A(args), D(data), window_length(args.window), hidR(args.hidRNN), H(args.hidden_state_features),
               hidC(args.hidCNN), hidS(args.hidSkip), Ck(args.CNN_kernel), skip(args.skip),
               pt((args.window - args.CNN_kernel) / (args.skip == 0 ? 1 : args.skip)),
@@ -119,7 +119,6 @@ struct TPALSTMImpl : torch::nn::Module {
     // forward: input x -> [B, T, F]
     torch::Tensor forward(torch::Tensor input);
 };
-TORCH_MODULE(TPALSTM);
 
 class BandwidthPredictor {
 public:
@@ -134,7 +133,7 @@ public:
 
 private:
     TPAArgs args;
-    TPALSTM model = nullptr;
+    std::shared_ptr<TPALSTM> model;
 };
 
 #endif //PIPEPLUSPLUS_BANDWIDTH_PREDICTOR_H

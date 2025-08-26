@@ -1,6 +1,6 @@
 #include "bandwidth_predictor.h"
 
-torch::Tensor TPALSTMImpl::forward(torch::Tensor input) {
+torch::Tensor TPALSTM::forward(torch::Tensor input) {
     // (Optional) mimic .cuda() in Python if requested
     if (A.cuda && input.device().is_cpu()) {
         input = input.to(torch::kCUDA);
@@ -106,6 +106,9 @@ BandwidthPredictor::BandwidthPredictor() {
     std::string model_save = "../models/bandwidth_prediction";
     std::filesystem::create_directories(std::filesystem::path(model_save));
     model_save += "/latest_model.pt";
+    TPADataShape shape = {1};
+    model = std::make_shared<TPALSTM>(args, shape);
+    model->to(torch::kCUDA);
     if (std::filesystem::exists(model_save)) {
         torch::load(model, model_save);
     } else {

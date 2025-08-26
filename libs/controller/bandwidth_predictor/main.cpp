@@ -109,7 +109,7 @@ int main(int argc, char** argv) {
         .num_layers_lstm = num_layers,
     };
     TPADataShape shape = {input_size};
-    auto model = std::make_shared<TPALSTMImpl>(args, shape);
+    auto model = std::make_shared<TPALSTM>(args, shape);
     model->to(torch::kF32);
 
     torch::optim::Adam optimizer(model->parameters(), torch::optim::AdamOptions(learning_rate));

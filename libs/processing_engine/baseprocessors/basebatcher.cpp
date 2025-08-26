@@ -67,7 +67,7 @@ void BaseBatcher::updateCycleTiming() {
             std::chrono::high_resolution_clock::now() - msvc_cycleStartTime).count() / msvc_localDutyCycle;
     }
 
-    if (msvc_BATCH_MODE != BATCH_MODE::FIXED) {
+    if (msvc_BATCH_MODE == BATCH_MODE::OURS) {
 
         // The time when the last cycle started
         ClockType lastCycleStartTime = msvc_cycleStartTime + TimePrecisionType((int) numCyclesSince * msvc_localDutyCycle);
@@ -150,29 +150,44 @@ inline void BaseBatcher::executeBatching(BatchTimeType &genTime, RequestSLOType 
 inline bool BaseBatcher::isTimeToBatch() {
     // timeout for the pop() function
     timeout = 100000;
-    if ((msvc_RUNMODE == RUNMODE::PROFILING || 
-         msvc_BATCH_MODE == BATCH_MODE::FIXED) && 
-        msvc_onBufferBatchSize >= msvc_idealBatchSize) {
-        return true;
-    }
 
-    // OURS BATCH MODE
-    if (msvc_BATCH_MODE != BATCH_MODE::OURS) {
-        return false;
-    }
-    //First of all, whenever the batch is full, then it's time to batch
+    //First of all, whenever the batch is full, then it's never time to batch
     if (msvc_onBufferBatchSize == 0) {
         return false;
-    // If the batch is empty, then it doesn't really matter if it's time to batch or not
-    } else if (msvc_onBufferBatchSize >= msvc_idealBatchSize) {
+    }
+    // If the batch is full, then it doesn't really matter if it's time to batch or not
+    if (msvc_onBufferBatchSize >= msvc_idealBatchSize) {
         spdlog::get("container_agent")->trace("{0:s} got the ideal batch.", msvc_name);
         updateCycleTiming();
         return true;
     }
+    // Then return false if the batching strategy should not be Adaptive
+    if (msvc_RUNMODE == RUNMODE::PROFILING || msvc_BATCH_MODE == BATCH_MODE::FIXED) {
+        return false;
+    }
+
+    auto timeNow = std::chrono::high_resolution_clock::now();
+    uint64_t lastReqWaitTime = std::chrono::duration_cast<TimePrecisionType>(
+            timeNow - oldestReqTime).count();
+
+    // OURS BATCH MODE
+    if (msvc_BATCH_MODE == BATCH_MODE::DYNAMIC) {
+        if (msvc_onBufferBatchSize >= msvc_idealBatchSize) return true;
+        if (msvc_batchWaitLimit > 0) {
+            if (lastReqWaitTime > msvc_batchWaitLimit) {
+                spdlog::get("container_agent")->warn("{0:s} has waited for {1:d} microseconds, which is more than the batch wait limit of {2:d} microseconds. Batching now.",
+                                                     msvc_name, lastReqWaitTime, msvc_batchWaitLimit);
+                return true;
+            } else {
+                timeout = msvc_batchWaitLimit - lastReqWaitTime;
+            }
+        }
+        return false;
+    }
+
     // nextIdealBatchTime assumes that the batch is filled with the ideal batch size
     // nextMustBatchTime is to make sure that the oldest request in the buffer is not late
     // If either of the two times is less than the current time, then it's time to batch
-    auto timeNow = std::chrono::high_resolution_clock::now();
     if (timeNow > msvc_nextMustBatchTime) {
         spdlog::get("container_agent")->trace("{0:s} must batch.", msvc_name);
         updateCycleTiming();
@@ -188,9 +203,6 @@ inline bool BaseBatcher::isTimeToBatch() {
     timeout = std::chrono::duration_cast<TimePrecisionType>(
         msvc_nextIdealBatchTime - timeNow).count();
     timeout = std::max(timeout, (uint64_t)0);
-    
-    uint64_t lastReqWaitTime = std::chrono::duration_cast<TimePrecisionType>(
-            timeNow - oldestReqTime).count();
 
     // This is the timeout till the moment the oldest request has to be processed
     // 1.2 is to make sure the request is not late
