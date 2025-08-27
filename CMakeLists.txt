@@ -178,15 +178,14 @@ add_subdirectory(libs/utils/protobufprotocols)
 add_subdirectory(libs/fcpo_learning)
 add_subdirectory(libs/controller)
 add_subdirectory(libs/communicator)
+add_subdirectory(libs/device_agent)
+add_subdirectory(libs/device_agent/sink_agent)
 
 
-if (ON_HOST STREQUAL "ON")
+if (ON_HOST STREQUAL "ON" OR ON_HOST STREQUAL "BOTH")
     message(STATUS "Building for host======================================")
 
-    add_subdirectory(libs/device_agent)
-    add_subdirectory(libs/device_agent/sink_agent)
-
-    if (DEVICE_ARCH STREQUAL "amd64")
+     if (DEVICE_ARCH STREQUAL "amd64")
         add_executable(Controller libs/controller/main.cpp)
         target_link_libraries(Controller controller)
 
@@ -202,8 +201,9 @@ if (ON_HOST STREQUAL "ON")
 
     add_executable(SinkAgent libs/device_agent/sink_agent/main.cpp)
     target_link_libraries(SinkAgent sink_agent)
+endif()
 
-else()
+if (ON_HOST STREQUAL "BOTH" OR (NOT (ON_HOST STREQUAL "ON")))
     # Specify the path to TensorRT root dir
     if (NOT TensorRT_DIR)
         set(TensorRT_DIR /TensorRT/)
@@ -217,6 +217,7 @@ else()
         message("Using TensorRT 8 for Cuda 11 Systems")
         add_subdirectory(libs/processing_engine/trtengine)
     endif()
+
     add_subdirectory(libs/utils/onnx2trt)
     add_subdirectory(libs/processing_engine/baseprocessors)
     add_subdirectory(libs/container_agent)
@@ -230,8 +231,6 @@ else()
     add_subdirectory(libs/workloads/gender)
     add_subdirectory(libs/workloads/age)
     add_subdirectory(libs/workloads/carbrand)
-    add_subdirectory(libs/device_agent)
-    add_subdirectory(libs/device_agent/sink_agent)
 
     add_library(PipePlusPlusSink
         libs/processing_engine/data_sink/main.cpp)
