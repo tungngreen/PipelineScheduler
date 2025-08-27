@@ -720,12 +720,12 @@ bool ContainerAgent::addPreprocessor(uint8_t totalNumInstances) {
     bool ready = false;
     while (!ready) {
         ready = true;
-        for (auto &msvc: newMsvcList) {
-            if (!msvc->checkReady()) {
+        for (auto &m: newMsvcList) {
+            if (!m->checkReady()) {
                 ready = false;
                 break;
             } else {
-                msvc->unpauseThread();
+                m->unpauseThread();
             }
         }
     }
@@ -765,7 +765,7 @@ bool ContainerAgent::addPostprocessor(uint8_t totalNumInstances) {
                                              cont_msvcsGroups["postprocessor"].msvcList.size(), totalNumInstances);
         return false;
     }
-    Microservice *msvc;
+    Microservice * msvc;
     std::vector<Microservice *> newMsvcList;
     for (uint8_t i = 0; i < numNewInstances; i++) {
         if (cont_msvcsGroups["postprocessor"].msvcList[0]->msvc_type == MicroserviceType::PostprocessorBBoxCropper) {
@@ -800,12 +800,12 @@ bool ContainerAgent::addPostprocessor(uint8_t totalNumInstances) {
     bool ready = false;
     while (!ready) {
         ready = true;
-        for (auto &msvc: newMsvcList) {
-            if (!msvc->checkReady()) {
+        for (auto &m: newMsvcList) {
+            if (!m->checkReady()) {
                 ready = false;
                 break;
             } else {
-                msvc->unpauseThread();
+                m->unpauseThread();
             }
         }
     }

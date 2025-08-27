@@ -14,24 +14,23 @@ GPULane::GPULane(GPUHandle *gpu, NodeHandle *device, uint16_t laneNum) : gpuHand
     portionList.list = {};
 }
 
-bool GPUPortion::assignContainer(ContainerHandle *container) {
+bool GPUPortion::assignContainer(ContainerHandle *cont) {
     if (this->container != nullptr) {
         spdlog::get("console")->error("Portion already assigned to container {0:s}", this->container->name);
         return false;
     }
-    container->executionPortion = this;
-    this->container = container;
-    start = container->startTime;
-    end = container->endTime;
+    cont->executionPortion = this;
+    this->container = cont;
+    start = cont->startTime;
+    end = cont->endTime;
 
-    spdlog::get("container_agent")->info("Portion assigned to container {0:s}", container->name);
+    spdlog::get("container_agent")->info("Portion assigned to container {0:s}", cont->name);
     return true;
 }
 
 bool GPULane::removePortion(GPUPortion *portion) {
     if (portion->lane != this) {
         throw std::runtime_error("Lane %d cannot remove portion %s, which does not belong to it." + portion->container->name + std::to_string(laneNum));
-        return false;
     }
     if (portion->prevInLane != nullptr) {
         portion->prevInLane->nextInLane = portion->nextInLane;
@@ -129,7 +128,7 @@ bool GPUHandle::removeContainer(ContainerHandle *container) {
 }
 
 
-// ============================================================= Con/Desstructors ============================================================= //
+// ============================================================= Con/Destructors ============================================================= //
 // ============================================================================================================================================ //
 // ============================================================================================================================================ //
 // ============================================================================================================================================ //
@@ -174,7 +173,7 @@ Controller::Controller(int argc, char **argv) {
     std::string sql = "SELECT schema_name FROM information_schema.schemata WHERE schema_name = '" + ctrl_metricsServerConfigs.schema + "';";
     pqxx::result res = pullSQL(*ctrl_metricsServerConn, sql);
     if (res.empty()) {
-        std::string sql = "CREATE SCHEMA IF NOT EXISTS " + ctrl_metricsServerConfigs.schema + ";";
+        sql = "CREATE SCHEMA IF NOT EXISTS " + ctrl_metricsServerConfigs.schema + ";";
         pushSQL(*ctrl_metricsServerConn, sql);
         sql = "ALTER DEFAULT PRIVILEGES IN SCHEMA " + ctrl_metricsServerConfigs.schema + 
               " GRANT ALL PRIVILEGES ON TABLES TO controller;";
@@ -444,8 +443,8 @@ void Controller::ApplyScheduling() {
     // Rearranging the upstreams and downstreams for containers;
     for (auto pipe: ctrl_scheduledPipelines.getList()) {
         for (auto &model: pipe->tk_pipelineModels) {
-            // If its a datasource, we dont have to do it now
-            // datasource doesnt have upstreams
+            // If it's a datasource, we don't have to do it now
+            // datasource doesn't have upstreams
             // and the downstreams will be set later
             if (model->name.find("datasource") != std::string::npos) {
                 continue;
@@ -698,8 +697,7 @@ void Controller::StartContainer(ContainerHandle *container, bool easy_allocation
         start_config["container"]["cont_localDutyCycle"] = container->localDutyCycle;
         start_config["container"]["cont_cycleStartTime"] = std::chrono::duration_cast<TimePrecisionType>(container->cycleStartTime.time_since_epoch()).count();
 
-        if (container->model != DataSource &&
-            container->model != Sink) {
+        if (container->model != DataSource) {
             std::vector<uint32_t> modelProfile;
             for (auto &[batchSize, profile]: container->pipelineModel->processProfiles.at(ctrl_sysDeviceInfo[container->device_agent->type]).batchInfer) {
                 modelProfile.push_back(batchSize);
@@ -1049,8 +1047,8 @@ void Controller::calculateQueueSizes(ContainerHandle &container, const ModelType
     QueueLengthType preprocess_inQueueSize = std::max((QueueLengthType) std::ceil(preprocess_rho * preprocess_rho / (2 * (1 - preprocess_rho))), minimumQueueSize);
     float preprocess_thrpt = std::min(preprocessRate, container.arrival_rate);
 
-    // Preprocessor to Inferencer
-    // Utilization of inferencer
+    // Preprocessor to Inference
+    // Utilization of inference
     float infer_rho = preprocess_thrpt / container.batch_size / inferRate;
     QueueLengthType infer_inQueueSize = std::max((QueueLengthType) std::ceil(infer_rho * infer_rho / (2 * (1 - infer_rho))), minimumQueueSize);
     float infer_thrpt = std::min(inferRate, preprocess_thrpt / container.batch_size); // batch per second

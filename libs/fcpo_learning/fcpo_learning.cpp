@@ -150,14 +150,14 @@ void FCPOAgent::federatedUpdateCallback(FlData &response) {
 
     model->train();
     optimizer->zero_grad();
-    auto [policy1_output, policy2_output, policy3_output, value] = model->forward(torch::stack(experiences.get_states()).to(precision));
+    auto [policy1_output, policy2_output, policy3_output, value_estimated] = model->forward(torch::stack(experiences.get_states()).to(precision));
 
     auto policy1_loss = torch::nll_loss(policy1_output, torch::tensor(experiences.get_timeout()).to(precision));
     auto policy2_loss = torch::nll_loss(policy2_output, torch::tensor(experiences.get_batching()).to(precision));
     auto policy3_loss = torch::nll_loss(policy3_output, torch::tensor(experiences.get_scaling()).to(precision));
 
     auto loss = policy1_loss + policy2_loss + policy3_loss;
-    value.detach();
+    value_estimated.detach();
     loss.to(precision).backward();
     optimizer->step();
 

@@ -43,7 +43,6 @@ const std::unordered_map<std::string, torch::Dtype> DTYPE_MAP = {
 
 class ExperienceBuffer {
 public:
-
     ExperienceBuffer() = default;
 
     ExperienceBuffer(size_t capacity)
@@ -132,7 +131,7 @@ public:
 
 private:
 
-    double distance_metric(const T& state, const T& log_probs) {
+    double distance_metric(const T& state, const T& log_prob) {
         if (!valid_history) {
             historical_states = torch::stack(states);
             T mean = historical_states.mean(0);
@@ -146,7 +145,7 @@ private:
         T diff = historical_states - state;
         T mahalanobis_distances = torch::sqrt((diff.matmul(covariance_inv).mul(diff)).sum(1));
 
-        T kl_divergences = torch::kl_div(log_probs, torch::stack(log_probs), torch::Reduction::None);
+        T kl_divergences = torch::kl_div(log_prob, torch::stack(log_probs), torch::Reduction::None);
 
         return 0.5 * mahalanobis_distances.mean().item<double>() + 0.5 * kl_divergences.mean().item<double>();
     }

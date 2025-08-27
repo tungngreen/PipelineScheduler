@@ -186,11 +186,23 @@ if (ON_HOST STREQUAL "ON")
     add_subdirectory(libs/device_agent)
     add_subdirectory(libs/device_agent/sink_agent)
 
+    if (DEVICE_ARCH STREQUAL "amd64")
+        add_executable(Controller libs/controller/main.cpp)
+        target_link_libraries(Controller controller)
+
+        add_executable(RL_OfflineTraining libs/fcpo_learning/offline_training.cpp)
+        target_link_libraries(RL_OfflineTraining fcpo_learning absl::flags absl::flags_parse)
+
+        add_executable(BandwidthPredictor_OfflineTraining libs/controller/bandwidth_predictor/main.cpp)
+        target_link_libraries(BandwidthPredictor_OfflineTraining controller)
+    endif()
+
     add_executable(DeviceAgent libs/device_agent/main.cpp)
     target_link_libraries(DeviceAgent device_agent)
 
     add_executable(SinkAgent libs/device_agent/sink_agent/main.cpp)
     target_link_libraries(SinkAgent sink_agent)
+
 else()
     # Specify the path to TensorRT root dir
     if (NOT TensorRT_DIR)
@@ -247,15 +259,6 @@ else()
     add_executable(runSink libs/processing_engine/data_sink/main.cpp)
     target_link_libraries(runSink PipePlusPlusSink)
 
-    add_executable(DeviceAgent libs/device_agent/main.cpp)
-    target_link_libraries(DeviceAgent device_agent)
-
-    add_executable(SinkAgent libs/device_agent/sink_agent/main.cpp)
-    target_link_libraries(SinkAgent sink_agent)
-
-    add_executable(Controller libs/controller/main.cpp)
-    target_link_libraries(Controller controller)
-
     add_executable(Container_DataSource libs/workloads/data_source/main.cpp)
     target_link_libraries(Container_DataSource data_source)
 
@@ -288,11 +291,4 @@ else()
 
     add_executable(Container_CarBrand libs/workloads/carbrand/carbrand.cpp)
     target_link_libraries(Container_CarBrand carbrand)
-
-    add_executable(RL_OfflineTraining libs/fcpo_learning/offline_training.cpp)
-    target_link_libraries(RL_OfflineTraining fcpo_learning absl::flags absl::flags_parse)
-
-    add_executable(BandwidthPredictor_OfflineTraining libs/controller/bandwidth_predictor/main.cpp)
-    target_link_libraries(BandwidthPredictor_OfflineTraining controller)
-
 endif()

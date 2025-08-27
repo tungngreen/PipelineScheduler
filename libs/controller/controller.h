@@ -89,7 +89,7 @@ struct GPUPortion {
     GPUPortion(std::uint64_t start, std::uint64_t end, ContainerHandle *container, GPULane *lane)
         : start(start), end(end), container(container), lane(lane) {}
 
-    bool assignContainer(ContainerHandle *container);
+    bool assignContainer(ContainerHandle *cont);
 };
 
 struct GPUHandle {
