@@ -14,55 +14,55 @@
   "scale_down_interval_threshold_sec": 240,
   "initial_pipelines": [
     {
-      "pipeline_name": "surveillance_robot_jackal1",
+      "pipeline_name": "surveillancerobotjackal1",
       "pipeline_target_slo": 200000,
       "pipeline_type": 3,
       "video_source": "../data/surveillance_robot_jackal1.mp4",
       "pipeline_source_device": "agxavier1"
     }, {
-      "pipeline_name": "surveillance_robot_jackal2",
+      "pipeline_name": "surveillancerobotjackal2",
       "pipeline_target_slo": 200000,
       "pipeline_type": 3,
       "video_source": "../data/surveillance_robot_jackal2.mp4",
       "pipeline_source_device": "agxavier1"
     }, {
-      "pipeline_name": "surveillance_robot_spot1",
+      "pipeline_name": "surveillancerobotspot1",
       "pipeline_target_slo": 200000,
       "pipeline_type": 3,
       "video_source": "../data/surveillance_robot_spot1.mp4",
       "pipeline_source_device": "agxavier2"
     }, {
-      "pipeline_name": "surveillance_robot_spot4",
+      "pipeline_name": "surveillancerobotspot4",
       "pipeline_target_slo": 200000,
       "pipeline_type": 3,
       "video_source": "../data/surveillance_robot_spot4.mp4",
       "pipeline_source_device": "agxavier2"
     }, {
-      "pipeline_name": "surveillance_robot_spot2",
+      "pipeline_name": "surveillancerobotspot2",
       "pipeline_target_slo": 200000,
       "pipeline_type": 3,
       "video_source": "../data/surveillance_robot_spot2.mp4",
       "pipeline_source_device": "agxavier3"
     }, {
-      "pipeline_name": "surveillance_robot_spot4",
+      "pipeline_name": "surveillancerobotspot4",
       "pipeline_target_slo": 200000,
       "pipeline_type": 3,
       "video_source": "../data/surveillance_robot_spot3.mp4",
       "pipeline_source_device": "agxavier3"
     }, {
-      "pipeline_name": "campus_drone1",
+      "pipeline_name": "campusdrone1",
       "pipeline_target_slo": 200000,
       "pipeline_type": 4,
       "video_source": "../data/campus_drone1.mp4",
       "pipeline_source_device": "orinano1"
     }, {
-      "pipeline_name": "campus_drone2",
+      "pipeline_name": "campusdrone2",
       "pipeline_target_slo": 200000,
       "pipeline_type": 4,
       "video_source": "../data/campus_drone2.mp4",
       "pipeline_source_device": "orinano2"
     }, {
-      "pipeline_name": "campus_drone3",
+      "pipeline_name": "campusdrone3",
       "pipeline_target_slo": 200000,
       "pipeline_type": 4,
       "video_source": "../data/campus_drone3.mp4",
