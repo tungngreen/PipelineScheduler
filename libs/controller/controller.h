@@ -953,7 +953,7 @@ private:
     uint8_t decNumReplicas(const PipelineModel *model);
 
     void calculateQueueSizes(ContainerHandle &model, const ModelType modelType);
-    uint64_t calculateQueuingLatency(const float &arrival_rate, const float &preprocess_rate);
+    uint64_t calculateQueuingLatency(float &arrival_rate, const float &preprocess_rate);
 
     void queryingProfiles(TaskHandle *task);
 

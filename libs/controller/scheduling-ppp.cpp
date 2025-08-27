@@ -962,16 +962,6 @@ TaskHandle* Controller::mergePipelines(const std::string& taskName) {
 
     auto unscheduledTasks = ctrl_unscheduledPipelines.getMap();
 
-    PipelineType tk_type;
-    for (const auto& task : unscheduledTasks) {
-        if (task.first.find(taskName) == std::string::npos) {
-            continue;
-        }
-        tk_type = task.second->tk_type;
-        break;
-    }
-
-
     TaskHandle* mergedPipeline = new TaskHandle{};
     bool found;
     for (const auto& task : unscheduledTasks) {
@@ -981,6 +971,7 @@ TaskHandle* Controller::mergePipelines(const std::string& taskName) {
         found = true;
         // Initialize the merged pipeline with one of the added tasks in the task type
         *mergedPipeline = *task.second;
+        break;
     }
     if (!found) {
         spdlog::info("No task with type {0:s} has been added", taskName);
@@ -1539,7 +1530,8 @@ uint8_t Controller::decNumReplicas(const PipelineModel *model) {
  * @param preprocess_rate 
  * @return uint64_t 
  */
-uint64_t Controller::calculateQueuingLatency(const float &arrival_rate, const float &preprocess_rate) {
+uint64_t Controller::calculateQueuingLatency(float &arrival_rate, const float &preprocess_rate) {
+    if (arrival_rate == 0) arrival_rate = 1;
     float rho = arrival_rate / preprocess_rate;
     if (rho > 1) {
         return 999999999;
