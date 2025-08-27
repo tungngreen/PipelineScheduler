@@ -1,5 +1,9 @@
 #include "controller.h"
 
+std::vector<std::string> Controller::getPipelineNames() {
+    return {"traffic", "people", "indoor", "surveillancerobot", "campusdrone", "factoryrobot", "factorycctv"};
+}
+
 PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, const std::string &startDevice, const std::string &pipelineName, const std::string &streamName) {
     std::string sourceName = streamName;
     if (ctrl_initialRequestRates.find(sourceName) == ctrl_initialRequestRates.end()) {
@@ -1020,9 +1024,9 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
 
             if (ctrl_systemName == "jlf") {
                 arcface->possibleDevices = {"server"};
-                return {datasource, yolov5n, yolov5n320, yolov5n512, yolov5s, arcface, activity, sink};
+                return {datasource, yolov5n, yolov5n320, yolov5n512, yolov5s, retina1face, arcface, activity, sink};
             }
-            return {datasource, yolov5n, arcface, activity, sink};
+            return {datasource, yolov5n, retina1face, arcface, activity, sink};
         }
         case PipelineType::Smart_Glasses: {
             auto *datasource = new PipelineModel{startDevice, "datasource", ModelType::DataSource, {}, true, {}, {}};

@@ -76,7 +76,7 @@ struct Request {
      * we may have a path that looks like this `[edge|YOLOv5_01|5|10|8|212072][server|retinaface_02|09|2|2|2343]`
      */
 
-    RequestPathType req_travelPath;
+    RequestPathType req_travelPath = {};
 
     // Batch size
     BatchSizeType req_batchSize = 0;

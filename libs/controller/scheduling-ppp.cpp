@@ -1011,7 +1011,7 @@ TaskHandle* Controller::mergePipelines(const std::string& taskName) {
                 for (auto &candidate : mergedPipeline->tk_pipelineModels) {
                     if (candidate->device == task.second->tk_pipelineModels[i]->device) {
                         if (candidate->type == task.second->tk_pipelineModels[i]->type) {
-                            bool merged = mergeModels(candidate, task.second->tk_pipelineModels.at(i), task.second->tk_pipelineModels[i]->device);
+                            mergeModels(candidate, task.second->tk_pipelineModels.at(i), task.second->tk_pipelineModels[i]->device);
                             task.second->tk_pipelineModels.at(i)->merged = true;
                             task.second->tk_pipelineModels.at(i)->toBeRun = false;
                             candidate_found = true;
@@ -1028,7 +1028,7 @@ TaskHandle* Controller::mergePipelines(const std::string& taskName) {
                 continue;
             }
             // We attempt to merge to model i of this unscheduled task into the model i of the merged pipeline
-            bool merged = mergeModels(mergedPipeline->tk_pipelineModels[i], task.second->tk_pipelineModels.at(i), task.second->tk_pipelineModels[i]->device);
+            mergeModels(mergedPipeline->tk_pipelineModels[i], task.second->tk_pipelineModels.at(i), task.second->tk_pipelineModels[i]->device);
             task.second->tk_pipelineModels.at(i)->merged = true;
             task.second->tk_pipelineModels.at(i)->toBeRun = false;
         }
@@ -1038,7 +1038,7 @@ TaskHandle* Controller::mergePipelines(const std::string& taskName) {
         if (model->toBeRun) {
             continue;
         }
-        for (auto &oldDownstream : model->downstreams) {
+        for (auto oldDownstream : model->downstreams) {
             std::string oldDnstreamModelName = splitString(oldDownstream.first->name, "_").back();
             for (auto &newDownstream : mergedPipeline->tk_pipelineModels) {
                 std::string newDownstreamModelName = splitString(newDownstream->name, "_").back();
@@ -1083,7 +1083,7 @@ TaskHandle* Controller::mergePipelines(const std::string& taskName) {
 }
 
 void Controller::mergePipelines() {
-    std::vector<std::string> toMerge = {"traffic", "people", "indoor"};
+    std::vector<std::string> toMerge = getPipelineNames();
     TaskHandle* mergedPipeline;
 
     for (const auto &taskName : toMerge) {

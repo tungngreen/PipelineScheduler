@@ -892,7 +892,7 @@ TaskHandle* Controller::mergePipelines(const std::string& taskName) {
         if (model->toBeRun) {
             continue;
         }
-        for (auto &oldDownstream : model->downstreams) {
+        for (auto oldDownstream : model->downstreams) {
             std::string oldDnstreamModelName = splitString(oldDownstream.first->name, "_").back();
             for (auto &newDownstream : mergedPipeline->tk_pipelineModels) {
                 std::string newDownstreamModelName = splitString(newDownstream->name, "_").back();
@@ -937,7 +937,7 @@ TaskHandle* Controller::mergePipelines(const std::string& taskName) {
 }
 
 void Controller::mergePipelines() {
-    std::vector<std::string> toMerge = {"traffic", "people", "indoor"};
+    std::vector<std::string> toMerge = getPipelineNames();
     TaskHandle* mergedPipeline;
 
     for (const auto &taskName : toMerge) {

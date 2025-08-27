@@ -984,6 +984,8 @@ private:
 
     void basicGPUScheduling(std::vector<ContainerHandle *> new_containers);
 
+    std::vector<std::string> getPipelineNames();
+
     PipelineModelListType getModelsByPipelineType(PipelineType type, const std::string &startDevice, const std::string &pipelineName = "", const std::string &streamName = "");
 
     void checkNetworkConditions();
