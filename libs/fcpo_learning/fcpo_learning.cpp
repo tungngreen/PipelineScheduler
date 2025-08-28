@@ -14,7 +14,7 @@ FCPOAgent::FCPOAgent(std::string& cont_name, uint state_size, uint timeout_size,
     std::filesystem::create_directories(std::filesystem::path(path));
     out.open(path + "/latest_log_" + getTimestampString() + ".csv");
 
-    model = std::make_shared<MultiPolicyNet>(state_size, timeout_size, max_batch, scaling_size);
+    model = std::make_shared<MultiPolicyNet>(state_size, max_batch, timeout_size, scaling_size);
     std::string model_save = path + "/latest_model.pt";
     if (std::filesystem::exists(model_save)) {
         torch::load(model, model_save);
@@ -189,19 +189,24 @@ void FCPOAgent::setState(double curr_timeout, double curr_batch, double curr_sca
                          double pre_queue_size, double inf_queue_size, double post_queue_size, double slo,
                          double memory_use) {
     last_slo = slo;
-    state = torch::tensor({curr_timeout / timeout_size, curr_batch / max_batch,
+    double maxMemory;
+    if (batchInferProfileList.empty())
+        maxMemory = memory_use * 2.0 + 1;
+    else
+        maxMemory = (double) batchInferProfileList[max_batch].gpuMemUsage + 1.0;
+    state = torch::tensor({curr_batch / max_batch, curr_timeout / timeout_size,
                            curr_scaling / scaling_size, arrival, pre_queue_size / 100.0, inf_queue_size / 100.0,
                            post_queue_size / 100.0, slo / 100000.0,
-                           memory_use / (double) batchInferProfileList[max_batch].gpuMemUsage}, precision);
+                           memory_use / maxMemory}, precision);
 }
 
 void FCPOAgent::selectAction() {
     std::unique_lock<std::mutex> lock(model_mutex);
     auto [policy1, policy2, policy3, val] = model->forward(state);
     T action_dist = torch::multinomial(policy1, 1);
-    timeout = action_dist.item<int>();
-    action_dist = torch::multinomial(policy2, 1);
     batching = action_dist.item<int>();
+    action_dist = torch::multinomial(policy2, 1);
+    timeout = action_dist.item<int>();
     action_dist = torch::multinomial(policy3, 1);
     scaling = action_dist.item<int>();
     // code if using SinglePolicyNet
@@ -216,7 +221,7 @@ void FCPOAgent::selectAction() {
         batching = std::max(batching, base_batch);
     }
     if (update_steps > 0 ) {
-        log_prob = torch::log(policy1[timeout]) + torch::log(policy2[batching]) + torch::log(policy3[scaling]);
+        log_prob = torch::log(policy1[batching]) + torch::log(policy2[timeout]) + torch::log(policy3[scaling]);
         // log_prob = torch::log(policy[action_dist.item<int>()]);
         experiences.add(state, log_prob, val, timeout, batching, scaling);
     }

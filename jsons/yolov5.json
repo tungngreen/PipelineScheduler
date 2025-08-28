@@ -1,7 +1,7 @@
 {
     "container": {
         "cont_experimentName": "th0",
-        "cont_systemName": "ppp",
+        "cont_systemName": "fcpo",
         "cont_pipeName": "traffic",
         "cont_taskName": "yolov5",
         "cont_hostDevice": "server",
@@ -404,8 +404,8 @@
         "profile_numProfileReqs": 1800
     },
     "fcpo": {
-        "state_size": 7,
-        "resolution_size": 4,
+        "state_size": 9,
+        "timeout_size": 4,
         "batch_size": 16,
         "threads_size": 4,
         "lambda": 0.2,

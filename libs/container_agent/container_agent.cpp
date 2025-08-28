@@ -1048,7 +1048,7 @@ void ContainerAgent::collectRuntimeMetrics() {
                 }
                 spdlog::get("container_agent")->info(
                         "RL Decision Input: {0:d} miniBatches, {1:f} request rate, {2:f} latency, {3:f} aggExecutedBatchSize",
-                        miniBatchCount, cont_request_arrival_rate, cont_ewma_latency / TIME_PRECISION_TO_SEC, aggExecutedBatchSize);
+                        miniBatchCount, cont_request_arrival_rate, (double) cont_ewma_latency / TIME_PRECISION_TO_SEC, aggExecutedBatchSize);
                 cont_fcpo_agent->setState(cont_msvcsGroups["preprocessor"].msvcList[0]->msvc_concat.numImgs,
                                           batch_size,
                                           cont_threadingAction,
