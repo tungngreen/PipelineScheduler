@@ -31,6 +31,9 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
                     {{datasource, -1}}
             };
             yolov5n->possibleDevices = {startDevice, "server"};
+            if (ctrl_systemName == "tuti") {
+                yolov5n->possibleDevices = {"server"};
+            }
             datasource->downstreams.push_back({yolov5n, -1});
 
             PipelineModel *yolov5n320 = nullptr;
@@ -306,6 +309,9 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
                     {{datasource, -1}}
             };
             yolov5n->possibleDevices = {startDevice, "server"};
+            if (ctrl_systemName == "tuti") {
+                yolov5n->possibleDevices = {"server"};
+            }
             datasource->downstreams.push_back({yolov5n, -1});
 
             PipelineModel *yolov5n320 = nullptr;
@@ -474,6 +480,9 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
                     {{datasource, -1}}
             };
             yolov5n->possibleDevices = {startDevice, "server"};
+            if (ctrl_systemName == "tuti") {
+                yolov5n->possibleDevices = {"server"};
+            }
             datasource->downstreams.push_back({yolov5n, -1});
 
             PipelineModel *yolov5n320 = nullptr;
@@ -628,6 +637,9 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
                     {{datasource, -1}}
             };
             yolov5n->possibleDevices = {startDevice, "server"};
+            if (ctrl_systemName == "tuti") {
+                yolov5n->possibleDevices = {"server"};
+            }
             datasource->downstreams.push_back({yolov5n, -1});
 
             PipelineModel *yolov5n320 = nullptr;
@@ -762,6 +774,9 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
                     {{datasource, -1}}
             };
             yolov5n->possibleDevices = {startDevice, "server"};
+            if (ctrl_systemName == "tuti") {
+                yolov5n->possibleDevices = {"server"};
+            }
             datasource->downstreams.push_back({yolov5n, -1});
 
             PipelineModel *yolov5n320 = nullptr;
@@ -894,6 +909,9 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
                     {{datasource, -1}}
             };
             yolov5n->possibleDevices = {startDevice, "server"};
+            if (ctrl_systemName == "tuti") {
+                yolov5n->possibleDevices = {"server"};
+            }
             datasource->downstreams.push_back({yolov5n, -1});
 
             PipelineModel *yolov5n320 = nullptr;

@@ -325,23 +325,23 @@ void Controller::basicGPUScheduling(std::vector<ContainerHandle *> new_container
         std::vector<GPUHandle *> gpus = device.second->gpuHandles;
         for (auto &container: scheduledContainers[device.first]) {
             MemUsageType containerMemUsage = container->getExpectedTotalMemUsage();
-            MemUsageType smallestGap  = std::numeric_limits<MemUsageType>::max();
-            int8_t smallestGapIndex = -1;
+            MemUsageType biggestGap  = std::numeric_limits<MemUsageType>::min();
+            int8_t targetGapIndex = -1;
             for (auto &gpu: gpus) {
                 MemUsageType gap = gpu->memLimit - gpu->currentMemUsage - containerMemUsage;
-                if (gap < 0) {
+                if (gap < 500) {
                     continue;
                 }
-                if (gap < smallestGap) {
-                    smallestGap = gap;
-                    smallestGapIndex = gpu->number;
+                if (gap > biggestGap) {
+                    biggestGap = gap;
+                    targetGapIndex = gpu->number;
                 }
             }
-            if (smallestGapIndex == -1) {
+            if (targetGapIndex == -1) {
                 spdlog::get("container_agent")->error("No GPU available for container {}", container->name);
                 continue;
             }
-            gpus[smallestGapIndex]->addContainer(container);
+            gpus[targetGapIndex]->addContainer(container);
         }
 
     }
@@ -370,7 +370,9 @@ void Controller::ApplyScheduling() {
      */
     for (auto &[pipeName, pipe]: ctrl_scheduledPipelines.getMap()) {
         for (auto &model: pipe->tk_pipelineModels) {
-            if (ctrl_systemName != "ppp" && ctrl_systemName != "jlf" && ctrl_systemName != "fcpo" && ctrl_systemName != "bce") {
+            if (ctrl_systemName == "tuti" && model->name.find("datasource") == std::string::npos && model->name.find("sink") == std::string::npos) {
+                model->numReplicas = 3;
+            } else if (ctrl_systemName != "ppp" && ctrl_systemName != "jlf" && ctrl_systemName != "fcpo" && ctrl_systemName != "bce") {
                 model->cudaDevices.emplace_back(0);
                 model->numReplicas = 1;
             }
@@ -687,7 +689,7 @@ void Controller::StartContainer(ContainerHandle *container, bool easy_allocation
             //TODO: set back to 2 after OURs working again with batcher
             start_config["container"]["cont_batchMode"] = 0;
         }
-        if (ctrl_systemName == "ppp" || ctrl_systemName == "fcpo" || ctrl_systemName == "bce" || ctrl_systemName == "jlf") {
+        if (ctrl_systemName == "ppp" || ctrl_systemName == "jlf") {
             start_config["container"]["cont_dropMode"] = 1;
         }
         start_config["container"]["cont_pipelineSLO"] = container->task->tk_slo;

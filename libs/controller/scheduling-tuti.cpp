@@ -141,6 +141,8 @@ void Controller::Scheduling() {
         }
     }
 
+
+
     ctrl_scheduledPipelines = ctrl_unscheduledPipelines;
 
     ApplyScheduling();
@@ -214,7 +216,7 @@ void Controller::estimateModelNetworkLatency(PipelineModel *currModel) {
  * @param preprocess_rate
  * @return uint64_t
  */
-uint64_t Controller::calculateQueuingLatency(const float &arrival_rate, const float &preprocess_rate) {
+uint64_t Controller::calculateQueuingLatency(float &arrival_rate, const float &preprocess_rate) {
     float rho = arrival_rate / preprocess_rate;
     float averageQueueLength = rho * rho / (1 - rho);
     return (uint64_t) (averageQueueLength / arrival_rate * 1000000);
