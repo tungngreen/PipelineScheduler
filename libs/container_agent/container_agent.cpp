@@ -1042,7 +1042,7 @@ void ContainerAgent::collectRuntimeMetrics() {
                 } else {
                     cont_request_arrival_rate = std::max(0.1, cont_request_arrival_rate); // prevent negative values in the case of many drops or no requests
                     cont_fcpo_agent->rewardCallback((double) aggExecutedBatchSize / cont_request_arrival_rate,
-                                                    cont_ewma_latency / TIME_PRECISION_TO_SEC,
+                                                    (double) cont_ewma_latency / TIME_PRECISION_TO_SEC,
                                                     batch_size / cont_request_arrival_rate,
                                                     (double) cont_batchInferProfileList[batch_size].gpuMemUsage / 1000.0);
                 }
@@ -1060,7 +1060,7 @@ void ContainerAgent::collectRuntimeMetrics() {
                                           (double) cont_batchInferProfileList[batch_size].gpuMemUsage);
                 auto [targetTO, newBS, scaling] = cont_fcpo_agent->runStep();
                 spdlog::get("container_agent")->info(
-                        "RL Decision Output: Resolution: {0:d}, Batch Size: {1:d}, Scaling: {2:d}", targetTO, newBS, scaling);
+                        "RL Decision Output: Timout: {0:d}, Batch Size: {1:d}, Scaling: {2:d}", targetTO, newBS, scaling);
                 applyBatchingTimeout(targetTO);
                 applyBatchSize(newBS);
                 applyMultiThreading(scaling);

@@ -50,9 +50,9 @@ void FCPOAgent::update() {
 
     auto [policy1, policy2, policy3, val] = model->forward(torch::stack(experiences.get_states()));
     T action1_probs = torch::softmax(policy1, -1);
-    T action1_log_probs = torch::log(action1_probs.gather(-1, torch::tensor(experiences.get_timeout()).reshape({-1, 1})).squeeze(-1));
+    T action1_log_probs = torch::log(action1_probs.gather(-1, torch::tensor(experiences.get_batching()).reshape({-1, 1})).squeeze(-1));
     T action2_probs = torch::softmax(policy2, -1);
-    T action2_log_probs = torch::log(action2_probs.gather(-1, torch::tensor(experiences.get_batching()).reshape({-1, 1})).squeeze(-1));
+    T action2_log_probs = torch::log(action2_probs.gather(-1, torch::tensor(experiences.get_timeout()).reshape({-1, 1})).squeeze(-1));
     T action3_probs = torch::softmax(policy3, -1);
     T action3_log_probs = torch::log(action3_probs.gather(-1, torch::tensor(experiences.get_scaling()).reshape({-1, 1})).squeeze(-1));
     T new_log_probs = (1 * action1_log_probs + 1 * action2_log_probs + 1 * action3_log_probs).squeeze(-1);
@@ -78,11 +78,9 @@ void FCPOAgent::update() {
         policy_loss = 10 * torch::mean(policy_loss_1 + policy_loss_2);
 
         value_loss = torch::mse_loss(val.squeeze(), computeCumuRewards());
-        T policy1_penalty = penalty_weight * torch::mean(torch::tensor(experiences.get_timeout()).to(precision));
-        T policy3_penalty = penalty_weight * torch::mean(torch::tensor(experiences.get_scaling()).to(precision));
-        spdlog::get("container_agent")->info("RL Agent Policy Loss: {}, Value Loss: {}, Policy1 Penalty: {}, Policy3 Penalty: {}",
-                                             policy_loss.item<double>(), value_loss.item<double>(), policy1_penalty.item<double>(), policy3_penalty.item<double>());
-        loss = (policy_loss + value_loss + policy1_penalty + policy3_penalty);
+        spdlog::get("container_agent")->info("RL Agent Policy Loss: {}, Value Loss: {}",
+                                             policy_loss.item<double>(), value_loss.item<double>());
+        loss = (policy_loss + value_loss);
     } catch (const std::exception& e) {
         spdlog::get("container_agent")->error("Error in loss computation: {}", e.what());
         reset();
@@ -177,7 +175,10 @@ void FCPOAgent::rewardCallback(double throughput, double latency_penalty, double
             return;
         }
         double reward = (theta * throughput - sigma * latency_penalty - phi * std::pow(oversize_penalty, 2)
-                - rho * memory_use / (double) batchInferProfileList[max_batch].gpuMemUsage) / 2.0;
+                - rho * (memory_use / (double) (batchInferProfileList[max_batch].gpuMemUsage + 1))) / 2.0;
+        spdlog::get("container_agent")->trace("RL Agent Reward: throughput: {}, latency_penalty: {}, oversize_penalty: {}, memory_use: {}, profile_max_memory: {}, reward: {}",
+                                             throughput, latency_penalty, oversize_penalty, memory_use,
+                                             batchInferProfileList[max_batch].gpuMemUsage, reward);
         if (penalty) reward = pow(reward, 3);
         reward = std::max(-1.0, std::min(1.0, reward)); // Clip reward to [-1, 1]
         experiences.add_reward(reward);
@@ -194,6 +195,8 @@ void FCPOAgent::setState(double curr_timeout, double curr_batch, double curr_sca
         maxMemory = memory_use * 2.0 + 1;
     else
         maxMemory = (double) batchInferProfileList[max_batch].gpuMemUsage + 1.0;
+    spdlog::get("container_agent")->trace("RL Agent State: curr_timeout: {}, curr_batch: {}, curr_scaling: {}, arrival: {}, pre_queue_size: {}, inf_queue_size: {}, post_queue_size: {}, slo: {}, memory_use: {}, maxMemory: {}",
+                                         curr_timeout, curr_batch, curr_scaling, arrival, pre_queue_size, inf_queue_size, post_queue_size, slo, memory_use, maxMemory);
     state = torch::tensor({curr_batch / max_batch, curr_timeout / timeout_size,
                            curr_scaling / scaling_size, arrival, pre_queue_size / 100.0, inf_queue_size / 100.0,
                            post_queue_size / 100.0, slo / 100000.0,
