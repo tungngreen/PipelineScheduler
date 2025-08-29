@@ -264,7 +264,7 @@ bool ContainerAgent::readModelProfile(const json &profile) {
         BatchSizeType batch = profile[i].get<BatchSizeType>();
         cont_batchInferProfileList[batch].p95prepLat = profile[i + 1].get<BatchSizeType>();
         cont_batchInferProfileList[batch].p95inferLat = profile[i + 2].get<BatchSizeType>();
-        cont_batchInferProfileList[batch].p95inferLat = profile[i + 3].get<BatchSizeType>();
+        cont_batchInferProfileList[batch].p95postLat = profile[i + 3].get<BatchSizeType>();
 
         i += NUM_NUMBERS_PER_BATCH;
     } while (true);
@@ -567,6 +567,7 @@ ContainerAgent::ContainerAgent(const json& configs) {
     run = true;
     reportHwMetrics = false;
     profiler = nullptr;
+    readModelProfile(containerConfigs["cont_modelProfile"]);
     initiateMicroservices(configs);
 
     hasDataReader = cont_msvcsGroups["receiver"].msvcList[0]->msvc_type == MicroserviceType::DataReader;

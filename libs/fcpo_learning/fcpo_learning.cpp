@@ -34,6 +34,9 @@ FCPOAgent::FCPOAgent(std::string& cont_name, uint state_size, uint timeout_size,
     optimizer = std::make_unique<torch::optim::AdamW>(model->parameters(), torch::optim::AdamWOptions(1e-3));
 
     cumu_reward = 0.0;
+    last_batching = 0;
+    last_slo = 0.0;
+    steps_counter = 0;
     experiences = ExperienceBuffer(200);
 }
 
@@ -150,8 +153,8 @@ void FCPOAgent::federatedUpdateCallback(FlData &response) {
     optimizer->zero_grad();
     auto [policy1_output, policy2_output, policy3_output, value_estimated] = model->forward(torch::stack(experiences.get_states()).to(precision));
 
-    auto policy1_loss = torch::nll_loss(policy1_output, torch::tensor(experiences.get_timeout()).to(precision));
-    auto policy2_loss = torch::nll_loss(policy2_output, torch::tensor(experiences.get_batching()).to(precision));
+    auto policy1_loss = torch::nll_loss(policy1_output, torch::tensor(experiences.get_batching()).to(precision));
+    auto policy2_loss = torch::nll_loss(policy2_output, torch::tensor(experiences.get_timeout()).to(precision));
     auto policy3_loss = torch::nll_loss(policy3_output, torch::tensor(experiences.get_scaling()).to(precision));
 
     auto loss = policy1_loss + policy2_loss + policy3_loss;
@@ -168,19 +171,19 @@ void FCPOAgent::federatedUpdateCallback(FlData &response) {
     reset();
 }
 
-void FCPOAgent::rewardCallback(double throughput, double latency_penalty, double oversize_penalty, double memory_use) {
+void FCPOAgent::rewardCallback(double throughput, double latency, double oversize, double memory_use) {
     if (update_steps > 0 ) {
         if (first) { // First reward is not valid and needs to be discarded
             first = false;
             return;
         }
-        double reward = (theta * throughput - sigma * latency_penalty - phi * std::pow(oversize_penalty, 2)
+        double reward = (theta * throughput - sigma * latency - phi * std::pow(oversize, 2)
                 - rho * (memory_use / (double) (batchInferProfileList[max_batch].gpuMemUsage + 1))) / 2.0;
         spdlog::get("container_agent")->trace("RL Agent Reward: throughput: {}, latency_penalty: {}, oversize_penalty: {}, memory_use: {}, profile_max_memory: {}, reward: {}",
-                                             throughput, latency_penalty, oversize_penalty, memory_use,
+                                             throughput, latency, oversize, memory_use,
                                              batchInferProfileList[max_batch].gpuMemUsage, reward);
-        if (penalty) reward = pow(reward, 3);
         reward = std::max(-1.0, std::min(1.0, reward)); // Clip reward to [-1, 1]
+        if (penalty) reward -= 0.2;
         experiences.add_reward(reward);
         cumu_reward += reward;
     }
@@ -219,10 +222,11 @@ void FCPOAgent::selectAction() {
     // log_prob = torch::log(policy[action_dist.item<int>()]);
 
     // ensure that the action is within the valid range of the given SLO
-    if (batchInferProfileList[batching].p95inferLat > last_slo) {
+    if (batching > 0 && batchInferProfileList[batching].p95inferLat > last_slo) {
         penalty = true;
-        batching = std::max(batching, base_batch);
+        batching = std::max(last_batching, base_batch);
     }
+    last_batching = batching;
     if (update_steps > 0 ) {
         log_prob = torch::log(policy1[batching]) + torch::log(policy2[timeout]) + torch::log(policy3[scaling]);
         // log_prob = torch::log(policy[action_dist.item<int>()]);

@@ -89,11 +89,11 @@ struct BatchInferProfile {
     uint64_t p95prepLat = 0;
     uint64_t p95postLat = 0;
     
-    CpuUtilType cpuUtil;
-    MemUsageType memUsage;
-    MemUsageType rssMemUsage;
-    GpuUtilType gpuUtil;
-    GpuMemUsageType gpuMemUsage;
+    CpuUtilType cpuUtil = 0;
+    MemUsageType memUsage = 0;
+    MemUsageType rssMemUsage = 0;
+    GpuUtilType gpuUtil = 0;
+    GpuMemUsageType gpuMemUsage = 0;
 };
 
 typedef std::map<BatchSizeType, BatchInferProfile> BatchInferProfileListType;

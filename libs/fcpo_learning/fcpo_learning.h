@@ -271,7 +271,7 @@ private:
     torch::Dtype precision;
     T state, log_prob, value;
     double last_slo;
-    int timeout, batching, scaling;
+    int timeout, batching, last_batching, scaling;
     ExperienceBuffer experiences;
 
     bool first = true;
