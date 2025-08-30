@@ -7,7 +7,6 @@ ABSL_FLAG(uint16_t, ctrl_loggingMode, 0, "Logging mode of the controller. 0:stdo
 ABSL_FLAG(std::string, ctrl_logPath, "../logs", "Path to the log dir for the controller.");
 
 
-
 GPULane::GPULane(GPUHandle *gpu, NodeHandle *device, uint16_t laneNum) : gpuHandle(gpu), node(device), laneNum(laneNum) {
     dutyCycle = 0;
     portionList.head = nullptr;
@@ -685,11 +684,12 @@ void Controller::StartContainer(ContainerHandle *container, bool easy_allocation
         start_config["container"]["cont_hostDeviceType"] = ctrl_sysDeviceInfo[container->device_agent->type];
         start_config["container"]["cont_name"] = container->name;
         start_config["container"]["cont_allocationMode"] = easy_allocation ? 1 : 0;
-        if (ctrl_systemName == "ppp" || ctrl_systemName == "fcpo" || ctrl_systemName == "bce") {
+        if (ctrl_systemName == "ppp" || ctrl_systemName == "bce") {
             //TODO: set back to 2 after OURs working again with batcher
             start_config["container"]["cont_batchMode"] = 0;
-        }
-        if (ctrl_systemName == "ppp" || ctrl_systemName == "jlf") {
+        } if (ctrl_systemName == "fcpo") {
+            start_config["container"]["cont_batchMode"] = 1;
+        } if (ctrl_systemName == "ppp" || ctrl_systemName == "jlf") {
             start_config["container"]["cont_dropMode"] = 1;
         }
         start_config["container"]["cont_pipelineSLO"] = container->task->tk_slo;
@@ -803,7 +803,7 @@ void Controller::StartContainer(ContainerHandle *container, bool easy_allocation
             if (ctrl_systemName == "fcpo") {
                 start_config["fcpo"] = ctrl_fcpo_server->getConfig();
                 std::string deviceTypeName = getDeviceTypeName(container->device_agent->type);
-                start_config["fcpo"]["timeout_size"] = (deviceTypeName == "server") ? 5 : 3;
+                start_config["fcpo"]["timeout_size"] = (deviceTypeName == "server") ? 3 : 2;
                 start_config["fcpo"]["batch_size"] = container->pipelineModel->processProfiles[deviceTypeName].maxBatchSize;
                 start_config["fcpo"]["threads_size"] = (deviceTypeName == "server") ? 4 : 2;
             }

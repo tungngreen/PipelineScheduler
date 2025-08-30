@@ -36,6 +36,7 @@ model_profiles
 logs
 videos
 */env/*
+analyze/*.txt
 
 data
 curve

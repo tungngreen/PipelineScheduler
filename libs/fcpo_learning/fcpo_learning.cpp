@@ -148,14 +148,32 @@ void FCPOAgent::federatedUpdateCallback(FlData &response) {
     std::istringstream iss(response.network());
     std::unique_lock<std::mutex> lock(model_mutex);
     torch::load(model, iss);
+    auto states = torch::stack(experiences.get_states()).to(precision);
+    auto policy1_history = torch::tensor(experiences.get_batching()).to(precision);
+    auto policy2_history = torch::tensor(experiences.get_timeout()).to(precision);
+    auto policy3_history = torch::tensor(experiences.get_scaling()).to(precision);
+    if (policy1_history.size(0) != policy2_history.size(0) || policy1_history.size(0) != policy3_history.size(0) || policy2_history.size(0) != policy3_history.size(0)) {
+        spdlog::get("container_agent")->error("Mismatch in experience buffer sizes during federated update callback!");
+        federated_steps_counter = 1;
+        return;
+    }
+    if (states.size(0) > policy1_history.size(0)) {
+        spdlog::get("container_agent")->warn("Mismatch in experience buffer sizes during federated update callback! Removing last state.");
+        states = states.slice(0, 0, policy1_history.size(0), 1);
+        if (states.size(0) != policy1_history.size(0)) {
+            spdlog::get("container_agent")->error("Mismatch in experience buffer sizes during federated update callback after slicing!");
+            federated_steps_counter = 1;
+            return;
+        }
+    }
 
     model->train();
     optimizer->zero_grad();
-    auto [policy1_output, policy2_output, policy3_output, value_estimated] = model->forward(torch::stack(experiences.get_states()).to(precision));
+    auto [policy1_output, policy2_output, policy3_output, value_estimated] = model->forward(states);
 
-    auto policy1_loss = torch::nll_loss(policy1_output, torch::tensor(experiences.get_batching()).to(precision));
-    auto policy2_loss = torch::nll_loss(policy2_output, torch::tensor(experiences.get_timeout()).to(precision));
-    auto policy3_loss = torch::nll_loss(policy3_output, torch::tensor(experiences.get_scaling()).to(precision));
+    auto policy1_loss = torch::nll_loss(policy1_output, policy1_history);
+    auto policy2_loss = torch::nll_loss(policy2_output, policy2_history);
+    auto policy3_loss = torch::nll_loss(policy3_output, policy3_history);
 
     auto loss = policy1_loss + policy2_loss + policy3_loss;
     value_estimated.detach();
@@ -177,13 +195,13 @@ void FCPOAgent::rewardCallback(double throughput, double latency, double oversiz
             first = false;
             return;
         }
-        double reward = (theta * throughput - sigma * latency - phi * std::pow(oversize, 2)
-                - rho * (memory_use / (double) (batchInferProfileList[max_batch].gpuMemUsage + 1))) / 2.0;
-        spdlog::get("container_agent")->trace("RL Agent Reward: throughput: {}, latency_penalty: {}, oversize_penalty: {}, memory_use: {}, profile_max_memory: {}, reward: {}",
+        double reward = theta * throughput - sigma * latency - phi * oversize
+                - rho * (memory_use / (double) (batchInferProfileList[max_batch].gpuMemUsage + 1.0));
+        spdlog::get("container_agent")->trace("RL Agent Reward: throughput: {}, latency_penalty: {}, oversize_penalty: {}, memory_use: {}, profile_max_memory: {}, penalty: {}, reward: {}",
                                              throughput, latency, oversize, memory_use,
-                                             batchInferProfileList[max_batch].gpuMemUsage, reward);
+                                             batchInferProfileList[max_batch].gpuMemUsage, penalty, reward);
         reward = std::max(-1.0, std::min(1.0, reward)); // Clip reward to [-1, 1]
-        if (penalty) reward -= 0.2;
+        if (penalty) reward *= (reward < 0) ? 1.1 : -0.9;
         experiences.add_reward(reward);
         cumu_reward += reward;
     }
