@@ -154,7 +154,9 @@ void FCPOAgent::federatedUpdateCallback(FlData &response) {
     auto policy3_history = torch::tensor(experiences.get_scaling()).to(precision);
     if (policy1_history.size(0) != policy2_history.size(0) || policy1_history.size(0) != policy3_history.size(0) || policy2_history.size(0) != policy3_history.size(0)) {
         spdlog::get("container_agent")->error("Mismatch in experience buffer sizes during federated update callback!");
+        steps_counter = 0;
         federated_steps_counter = 1;
+        reset();
         return;
     }
     if (states.size(0) > policy1_history.size(0)) {
@@ -162,31 +164,41 @@ void FCPOAgent::federatedUpdateCallback(FlData &response) {
         states = states.slice(0, 0, policy1_history.size(0), 1);
         if (states.size(0) != policy1_history.size(0)) {
             spdlog::get("container_agent")->error("Mismatch in experience buffer sizes during federated update callback after slicing!");
+            steps_counter = 0;
             federated_steps_counter = 1;
+            reset();
             return;
         }
     }
 
-    model->train();
-    optimizer->zero_grad();
-    auto [policy1_output, policy2_output, policy3_output, value_estimated] = model->forward(states);
+    try {
+        model->train();
+        optimizer->zero_grad();
+        auto [policy1_output, policy2_output, policy3_output, value_estimated] = model->forward(states);
 
-    auto policy1_loss = torch::nll_loss(policy1_output, policy1_history);
-    auto policy2_loss = torch::nll_loss(policy2_output, policy2_history);
-    auto policy3_loss = torch::nll_loss(policy3_output, policy3_history);
+        auto policy1_loss = torch::nll_loss(policy1_output, policy1_history);
+        auto policy2_loss = torch::nll_loss(policy2_output, policy2_history);
+        auto policy3_loss = torch::nll_loss(policy3_output, policy3_history);
 
-    auto loss = policy1_loss + policy2_loss + policy3_loss;
-    value_estimated.detach();
-    loss.to(precision).backward();
-    optimizer->step();
+        auto loss = policy1_loss + policy2_loss + policy3_loss;
+        value_estimated.detach();
+        loss.to(precision).backward();
+        optimizer->step();
+    } catch (const std::exception& e) {
+        spdlog::get("container_agent")->error("Error in federated update callback: {}", e.what());
+        steps_counter = 0;
+        federated_steps_counter = 1;
+        reset();
+        return;
+    }
 
-    uint64_t latency = std::chrono::duration_cast<std::chrono::microseconds>(
-            std::chrono::high_resolution_clock::now() - federatedStartTime).count();
-    out << "federatedAggregation," << latency << "," << federated_steps_counter << "," << steps_counter << std::endl;
-    steps_counter = 0;
-    federated_steps_counter = 1; // 1 means that we are starting local updates again until the next federation
-    if (update_steps < 300) update_steps += update_steps_inc; // Increase the number of steps for the next updates every time we finish federation
-    reset();
+        uint64_t latency = std::chrono::duration_cast<std::chrono::microseconds>(
+                std::chrono::high_resolution_clock::now() - federatedStartTime).count();
+        out << "federatedAggregation," << latency << "," << federated_steps_counter << "," << steps_counter << std::endl;
+        steps_counter = 0;
+        federated_steps_counter = 1; // 1 means that we are starting local updates again until the next federation
+        if (update_steps < 300) update_steps += update_steps_inc; // Increase the number of steps for the next updates every time we finish federation
+        reset();
 }
 
 void FCPOAgent::rewardCallback(double throughput, double latency, double oversize, double memory_use) {

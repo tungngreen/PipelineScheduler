@@ -371,7 +371,7 @@ void Controller::ApplyScheduling() {
         for (auto &model: pipe->tk_pipelineModels) {
             if (ctrl_systemName == "tuti" && model->name.find("datasource") == std::string::npos && model->name.find("sink") == std::string::npos) {
                 model->numReplicas = 3;
-            } else if (ctrl_systemName != "ppp" && ctrl_systemName != "jlf" && ctrl_systemName != "fcpo" && ctrl_systemName != "bce") {
+            } else if (ctrl_systemName == "rim" && ctrl_systemName == "dis") {
                 model->cudaDevices.emplace_back(0);
                 model->numReplicas = 1;
             }
