@@ -9,7 +9,7 @@ from objectcount import objectcount
 from run_log_analyzes import full_analysis
 from final_figures import create_figures
 from rl_analyzes import reward_plot, overall_performance_timeseries, system_overhead, reduced_slo, \
-    limited_network_performance, continual_learning_performance, hyperparameter_sensitivity, warm_start_performance
+     continual_learning_performance, hyperparameter_sensitivity, warm_start_performance, logSystemMetrics
 
 
 def batch(files):
@@ -142,13 +142,13 @@ if __name__ == '__main__':
         if not os.path.exists(os.path.join(args.directory, 'processed_logs')):
             os.makedirs(os.path.join(args.directory, 'processed_logs'))
         reward_plot(args.directory)
-        overall_performance_timeseries(args.directory, 'fcpo_main', ['FCPO', 'BCE', 'Dis', 'OInf']) # main
+        overall_performance_timeseries(args.directory, 'fcpo_main', ['FCPO', 'BCE', 'Tutti', 'OInf']) # main
         overall_performance_timeseries(args.directory, 'fcpo_results', ['FCPO', 'reduced', 'w/o loc']) # ablation
-        #limited_network_performance(args.directory)
         continual_learning_performance(args.directory)
         warm_start_performance(args.directory)
         reduced_slo(args.directory)
         system_overhead(os.path.join(args.directory, 'fcpo_overhead'))
         hyperparameter_sensitivity(args.directory)
+        logSystemMetrics(args.directory)
 
 

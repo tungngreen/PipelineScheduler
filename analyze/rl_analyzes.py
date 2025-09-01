@@ -8,6 +8,7 @@ import matplotlib as mpl
 import matplotlib.patches as mpatches
 import matplotlib.pyplot as plt
 from matplotlib.lines import Line2D
+from matplotlib.collections import LineCollection
 from matplotlib import cm
 from natsort import natsorted
 from pandas import DataFrame
@@ -98,29 +99,38 @@ def reward_plot(base_directory):
             rewards, loss, fcpo_rewards, fcpo_loss, bce_rewards, bce_loss, fcpof_rewards, fcpof_loss, fcpor_rewards, fcpor_loss, fcpog_rewards, fcpog_loss = pickle.load(f)
 
     # plot the results
-    fig1, ax1 = plt.subplots(1, 1, figsize=(2.5, 1.1), gridspec_kw={'height_ratios': [1], 'width_ratios': [1]})
-    fig2, ax2 = plt.subplots(1, 1, figsize=(2.5, 1.1), gridspec_kw={'height_ratios': [1], 'width_ratios': [1]})
-    ax3 = ax1.twinx()
-    ax4 = ax2.twinx()
-    ax1.plot(rewards['FCPO'], label='reward', color=colors[0], linewidth=1)
-    ax3.plot(loss['FCPO'], label='loss', linestyle=(0, (8, 8)), color=colors[1], linewidth=1)
-    ax2.plot(rewards['BCE'], label='reward', color=colors[2], linewidth=1)
-    ax4.plot(loss['BCE'], label='loss', linestyle=(0, (8, 8)), color=colors[3], linewidth=1)
-    for j, (axl, axr) in enumerate([(ax1, ax3), (ax2, ax4)]):
-        axl.set_ylabel(r'Reward  ', size=12, color=colors[j*2])
-        axl.set_ylim([0, 1])
-        axl.set_yticks([0, 1])
+    learning_algos=['FCPO', 'BCE', 'FCPO-reduced', 'without local optimization']
+    for j, algo in enumerate(learning_algos):
+        if j != 0 and j != len(learning_algos) - 1:
+            fig1, ax1 = plt.subplots(1, 1, figsize=(2, 1.75), gridspec_kw={'height_ratios': [1], 'width_ratios': [1]})
+        else:
+            fig1, ax1 = plt.subplots(1, 1, figsize=(2.5, 1.75), gridspec_kw={'height_ratios': [1], 'width_ratios': [1]})
+        ax2 = ax1.twinx()
+        ax1.plot(rewards[algo], label='reward', linewidth=1)
+        ax2.plot(loss[algo], label='loss', linestyle=(0, (8, 8)), linewidth=1)
 
-        axr.set_ylabel(r'Loss', size=12, color=colors[j*2+1])
-        axl.set_xlim(0, 100)
-        axl.set_xticks([0, 30, 90])
-        axl.set_xticklabels([0, 30, '90 Episodes'], size=12)
-    fig1.tight_layout()
-    fig1.savefig(f"FCPO-learning.pdf")
-    fig1.show()
-    fig2.tight_layout()
-    fig2.savefig(f"BCE-learning.pdf")
-    fig2.show()
+        ax1.set_xlim(0, 80)
+        ax1.set_xticks([0, 80])
+        if j == 0:
+            ax1.set_ylabel(r'Reward  ', size=17)
+
+        if j == len(learning_algos) - 1:
+            ax2.set_ylabel(r'Loss', size=17)
+            ax1.set_xticklabels([0, '80 Episodes'], size=17)
+        else:
+            ax1.set_xticklabels([0, 80], size=17)
+
+
+        ax1.set_ylim([0, 1])
+        ax1.set_yticks([0, 1])
+        ax1.set_yticklabels([0, 1], size = 17)
+        ax2.set_ylim([0, max(loss[algo])])
+        ax2.set_yticks([0, max(loss[algo])])
+        ax2.set_yticklabels([0, 1], size=17)
+
+        fig1.tight_layout()
+        fig1.savefig(f"{algo}-learning.pdf")
+        fig1.show()
 
     fig1, ax1 = plt.subplots(1, 1, figsize=(2, 2), gridspec_kw={'height_ratios': [1], 'width_ratios': [1]})
     fig2, ax2 = plt.subplots(1, 1, figsize=(2, 2), gridspec_kw={'height_ratios': [1], 'width_ratios': [1]})
@@ -154,17 +164,17 @@ def reward_plot(base_directory):
         for agent, series in data.items():
             ax1.plot(series, label=agent, color=colors[i])
             i += 1
-        ax1.legend(fontsize=12, loc='center right')
-        ax1.tick_params(axis='x', labelsize=12)
-        ax1.tick_params(axis='y', labelsize=12)
+        ax1.legend(fontsize=14, loc='center right')
+        ax1.tick_params(axis='x', labelsize=14)
+        ax1.tick_params(axis='y', labelsize=14)
         if 'reward' in algo:
-            ax1.set_ylabel('Avg. Reward   ', size=13)
+            ax1.set_ylabel('Avg. Reward   ', size=14)
         else:
-            ax1.set_ylabel('Avg. Loss', size=13)
+            ax1.set_ylabel('Avg. Loss', size=14)
         if 'federated' in algo:
             ax1.set_xlim(0, 40)
             ax1.set_xticks([0, 15, 30])
-            ax1.set_xticklabels([0, 15, '30 Episodes'])
+            ax1.set_xticklabels([0, 15, '30 Episodes'], size=14)
         else:
             ax1.set_xlabel('Episodes', size=12)
             ax1.set_xlim(0, 100)
@@ -177,9 +187,9 @@ def overall_performance_timeseries(directory, experiment, xticks=None):
     directory = os.path.join(directory, experiment)
     systems = natsorted(os.listdir(directory))
     if 'main' in experiment:
-        systems = ['FCPO', 'BCEdge', 'Distream', 'OctopInf']
-        fig1, ax1 = plt.subplots(1, 1, figsize=(4.5, 2.75), gridspec_kw={'height_ratios': [1], 'width_ratios': [1]})
-        fig2, ax2 = plt.subplots(1, 1, figsize=(4.5, 2.75), gridspec_kw={'height_ratios': [1], 'width_ratios': [1]})
+        systems = ['FCPO', 'Tutti', 'OctopInf', 'BCEdge']
+        fig1, ax1 = plt.subplots(1, 1, figsize=(4, 2.75), gridspec_kw={'height_ratios': [1], 'width_ratios': [1]})
+        fig2, ax2 = plt.subplots(1, 1, figsize=(4, 2.75), gridspec_kw={'height_ratios': [1], 'width_ratios': [1]})
     else:
         fig1, ax1 = plt.subplots(1, 1, figsize=(4.5, 2), gridspec_kw={'height_ratios': [1], 'width_ratios': [1]})
         fig2, ax2 = plt.subplots(1, 1, figsize=(4.5, 2), gridspec_kw={'height_ratios': [1], 'width_ratios': [1]})
@@ -238,27 +248,27 @@ def overall_performance_timeseries(directory, experiment, xticks=None):
 
     if 'main' in experiment:
         experiment = 'total'
-        ax1.set_ylabel('Thrghpt (1000 obj / s)       ', size=12)
-        ax2.set_ylabel('Avg Latency (100 ms)   ', size=12)
+        ax1.set_ylabel('Throughput (100 obj/s)       ', size=14)
+        ax2.set_ylabel('Avg Latency (100 ms)    ', size=14)
     else:
         experiment = 'ablation'
-        ax1.set_ylabel('Thrghpt (1000 obj / s)       ', size=12)
+        ax1.set_ylabel('Thrghpt (100 obj / s)       ', size=12)
         ax2.set_ylabel('Latency (100 ms)   ', size=12)
 
 
-    ax2.set_ylim([0, 850])
+    ax2.set_ylim([0, 1050])
     for ax in [ax1, ax2]:
-        ax.set_xlabel('Minutes Passed since Start (min)', size=12)
+        ax.set_xlabel('Minutes Passed since Start (min)', size=14)
         ax.set_xscale('symlog', linthresh=40)
-        ax.set_xticks([0, 10, 20, 50, 100, 200])
-        ax.set_xticklabels([0, 10, 20, 50, 100, 200], size=12)
-        ax.set_xlim([0, 250])
-    ax1.legend(fontsize=12, loc="lower center")
-    ax2.legend(fontsize=12, loc="upper right")
-    ax1.set_yticks([0, 1000, 2000, 3000, 4000, 5000])
-    ax1.set_yticklabels([0, 1, 2, 3, 4, 5], size=12)
-    ax2.set_yticks([0, 200, 400, 600, 800])
-    ax2.set_yticklabels([0, 2, 4, 6, 8], size=12)
+        ax.set_xticks([0, 5, 10, 15, 30, 45, 60])
+        ax.set_xticklabels([0, 5, 10, 15, 30, 45, 60], size=14)
+        ax.set_xlim([0, 60])
+    ax1.legend(handles=ax1.get_legend_handles_labels()[0][-2:], labels=ax1.get_legend_handles_labels()[1][-2:], fontsize=14, loc="lower center", ncol=2)
+    ax2.legend(handles=ax2.get_legend_handles_labels()[0][:2], labels=ax2.get_legend_handles_labels()[1][:2], fontsize=14, loc="upper center", ncol=2)
+    ax1.set_yticks([0, 200, 400, 600, 800, 1000, 1200])
+    ax1.set_yticklabels([0, 2, 4, 6, 8, 10, 12], size=12)
+    ax2.set_yticks([0, 200, 400, 600, 800, 1000, 1200])
+    ax2.set_yticklabels([0, 2, 4, 6, 8, 10, 12], size=12)
     fig1.tight_layout()
     fig1.savefig(f"{experiment}-throughput.pdf")
     fig1.show()
@@ -324,8 +334,8 @@ def warm_start_performance(directory):
     directory = os.path.join(directory, 'warm_start')
     fig1, ax1 = plt.subplots(1, 1, figsize=(6, 2), gridspec_kw={'height_ratios': [1], 'width_ratios': [1]})
     data = {}
-    algorithms = ['fcpo', 'fcpo_cold', 'bce']
-    labels = ['FCPO', 'FCPO (Cold Start)', 'BCE']
+    algorithms = ['fcpo', 'bce', 'fcpo_no_fl', 'fcpo_cold']
+    labels = ['FCPO', 'BCE', 'FCPO w/o FL', 'FCPO (Cold Start)']
     dfs = {}
     for j, d in enumerate(algorithms):
         if not os.path.exists(os.path.join(directory, d, 'df.csv')):
@@ -354,74 +364,16 @@ def warm_start_performance(directory):
         else:
             df = pd.read_csv(os.path.join(directory, d, 'df.csv'))
         dfs[d] = df
-        ax1.plot(df['aligned_timestamp'], df['throughput'], styles[j], label=labels[j], color=colors[j],
+        ax1.plot(dfs[d]['aligned_timestamp'], dfs[d]['throughput'], styles[j], label=labels[j], color=colors[j],
                  linewidth=1, markevery=0.2)
 
-    ax1.set_xlabel('Minutes Passed since Start (min)', size=12)
-    ax1.set_xlim([0, 6])
-    ax1.tick_params(axis='x', labelsize=12)
+    ax1.set_xlim([0, 6.5])
+    ax1.set_xticklabels([0, 1, 2, 3, 4, 5, '6 min'], size=11)
     ax1.set_ylabel('Throughput (obj / s)     ', size=12)
-    ax1.tick_params(axis='y', labelsize=12)
-    ax1.legend(fontsize=12)
+    ax1.tick_params(axis='y', labelsize=11)
+    ax1.legend(fontsize=11, ncol=2, loc='lower center', bbox_to_anchor=(0.5, -0.1))
     plt.tight_layout()
     plt.savefig('warm-start.pdf')
-    plt.show()
-
-
-def limited_network_performance(directory):
-    bandwidth_json = json.loads(open(os.path.join(directory, 'bandwidth-limited.json')).read())
-    # extract the bandwidth and timestamps from the json
-    bandwidth = []
-    bandwidth_timestamps = []
-    for limit in bandwidth_json['bandwidth_limits']:
-        bandwidth.append(limit['mbps'])
-        bandwidth_timestamps.append(limit['time'] / 60 - 1.5) # remove system startup time
-    directory = os.path.join(directory, 'fcpo_netw')
-    fig1, ax1 = plt.subplots(1, 1, figsize=(6, 2), gridspec_kw={'height_ratios': [1], 'width_ratios': [1]})
-    ax2 = ax1.twinx()
-    data = {}
-    for j, d in enumerate(natsorted(os.listdir(directory), reverse=True)):
-        if not os.path.exists(os.path.join(directory, 'df.csv')):
-            data[d] = []
-            for f in natsorted(os.listdir(os.path.join(directory, d))):
-                if not f.endswith('.txt'): continue
-                c, p, _, _ = read_file(os.path.join(directory, d, f))
-                data[d].extend(c)
-                data[d].extend(p)
-            df = pd.DataFrame(data[d], columns=['path', 'latency', 'timestamps'])
-            df['latency'] = df['latency'].apply(lambda x: int(x))
-            df['timestamps'] = df['timestamps'].apply(lambda x: int(x))
-            data[d] = df
-            df = DataFrame()
-            data[d]['aligned_timestamp'] = (data[d]['timestamps'] // 1e6).astype(int) * 1e6
-            # remove elements with latency > 250 ms
-            data[d] = data[d][data[d]['latency'] < 250000]
-            df['throughput'] = data[d].groupby('aligned_timestamp')['latency'].transform('size')
-            df['aligned_timestamp'] = (data[d]['aligned_timestamp'] - data[d]['aligned_timestamp'].iloc[0]) / (60 * 1e6)
-            df = df.groupby('aligned_timestamp').agg({'throughput': 'mean'}).reset_index()
-            df = bucket_and_average(df, ['throughput'], num_buckets=180)
-
-            data[d] = align_timestamps([data[d]])
-            data[d]['throughput'] = data[d].apply(lambda x: (x['timestamps'] / (x['latency'] / 1000) / 10000000000), axis=1)
-            data[d] = bucket_and_average(data[d], ['latency', 'throughput'], num_buckets=180)
-
-            df['throughput'] = (df['throughput'] + data[d]['throughput']) / 2
-            df.to_csv(os.path.join(directory, d, 'df.csv'), index=False)
-        else:
-            df = pd.read_csv(os.path.join(directory, d, 'df.csv'))
-        ax1.plot(df['aligned_timestamp'], df['throughput'], styles[j], label=d, color=colors[j], linewidth=1,
-                 markevery=0.2)
-
-    ax1.set_xlabel('Minutes Passed since Start (min)', size=12)
-    ax1.set_ylabel('Throughput (o/s)', size=12)
-    ax1.set_xlim([0, 31.5])
-    ax1.legend(fontsize=12)
-
-    ax2.plot(bandwidth_timestamps, bandwidth, label='Bandwidth Limit', color='black', linestyle='--', linewidth=1)
-    ax2.set_ylabel('Bandwidth (Mb/s)', size=12)
-    ax2.set_ylim([0, 170])
-    plt.tight_layout()
-    plt.savefig('network-throughput.pdf')
     plt.show()
 
 
@@ -468,14 +420,15 @@ def continual_learning_performance(base_directory):
             ax1.plot(workload_index, [w * 3 for w in workload], label='Workload', color='red', linestyle='--', linewidth=1)
         ax1.plot(df['aligned_timestamp'], df['throughput'], styles[j], label=d, color=colors[j], linewidth=1, markevery=0.2)
 
-    ax1.set_xlabel('Minutes Passed since Start (min)', size=12)
-    ax1.tick_params(axis='x', labelsize=12)
-    ax1.set_ylabel('Thrghpt (obj / s)   ', size=12)
-    ax1.set_ylim([650, 1500])
-    ax1.set_yticks([800, 1000, 1200, 1400])
-    ax1.tick_params(axis='y', labelsize=12)
+    ax1.set_xticks([2.5, 7.5, 12.5, 17.5, 22.5, 27.5, 32.5, 37.5, 42.5, 47.5])
+    ax1.set_xticklabels([1, 2, 3, 4, 5, 1, 2, 3, 4, 5], size=10)
+    ax1.set_xlabel('Cluster ID for network traces and source videos', size=11)
+    ax1.set_ylabel('Throughput (obj / s)   ', size=11)
+    ax1.set_ylim([400, 1400])
+    ax1.set_yticks([400, 600, 800, 1000, 1200, 1400])
+    ax1.tick_params(axis='y', labelsize=10)
     ax1.set_xlim([0, 49])
-    ax1.legend(fontsize=12, loc='lower center')
+    ax1.legend(fontsize=10, loc='lower center', ncol=3, bbox_to_anchor=(0.5, -0.05))
     plt.tight_layout()
     plt.savefig('continual-throughput.pdf')
     plt.show()
@@ -483,8 +436,9 @@ def continual_learning_performance(base_directory):
 def reduced_slo(base_directory):
     base_directory = os.path.join(base_directory, 'reduced_slo')
     fig1, ax1 = plt.subplots(1, 1, figsize=(6, 2), gridspec_kw={'height_ratios': [1], 'width_ratios': [1]})
-    algorithm_names = ['fcpo', 'bce', 'dis', 'ppp']
-    label_map = {'fcpo': 'FCPO', 'bce': 'BCE', 'dis': 'Dis', 'ppp': 'OInf'}
+    algorithm_names = ['fcpo', 'tuti', 'ppp', 'bce']
+    label_map = {'fcpo': 'FCPO', 'bce': 'BCE', 'tuti': 'Tutti', 'ppp': 'OInf'}
+    patterns = ['', 'x', 'o', '*', '//', '\\\\']
     slos = []
     data = {}
     for i, slo in enumerate(natsorted(os.listdir(base_directory))):
@@ -505,7 +459,7 @@ def reduced_slo(base_directory):
                 0.2, alpha=0.5, color=colors[j], hatch='//', edgecolor='white')
         ax1.bar(xs + j * 0.2,
                 [int(data[s]['traffic_goodput']['total'][a]) + int(data[s]['people_goodput']['total'][a]) for s in slos],
-                0.2, label=label_map[a], color=colors[j], edgecolor='white', linewidth=0.5)
+                0.2, label=label_map[a], color=colors[j], hatch=patterns[j], edgecolor='white', linewidth=0.5)
     ax1.axhline(y=data[slos[0]]['max_traffic_throughput'] + data[slos[0]]['max_people_throughput'], color='red', linestyle='--',
                linewidth=2, xmin=0.05, xmax=0.95)
     striped_patch = mpatches.Patch(facecolor='grey', alpha=0.5, hatch='//', edgecolor='white', label='Thrpt')
@@ -514,14 +468,14 @@ def reduced_slo(base_directory):
     mpl.rcParams['hatch.linewidth'] = 2
     ax2 = ax1.twinx()
     ax2.set_yticks([])
-    ax2.legend(handles=[striped_patch, solid_patch, line_patch], loc='lower left', fontsize=12, frameon=True)
+    ax2.legend(handles=[striped_patch, solid_patch, line_patch], loc='lower left', fontsize=10, frameon=True, bbox_to_anchor=(0, -0.1), ncol=3)
 
-    ax1.set_ylabel('(100 Objects / s)', size=12)
-    ax1.set_yticks([0, 400, 800, 1200])
-    ax1.set_yticklabels([0, 4, 8, 12], size=12)
+    ax1.set_ylabel('Throughput (100 obj/s)    ', size=11)
+    ax1.set_yticks([0, 200, 400, 600, 800, 1000])
+    ax1.set_yticklabels([0, 2, 4, 6, 8, 10], size=11)
     ax1.set_xticks(xs + 0.5 * 0.2 * (len(algorithm_names) - 1))
-    ax1.set_xticklabels([str(s) + 'ms' for s in slos], size=12)
-    ax1.legend(fontsize=12, loc='upper right', ncol=2)
+    ax1.set_xticklabels([str(s) + 'ms' for s in slos], size=11)
+    ax1.legend(fontsize=10, loc='upper right', ncol=2)
     plt.tight_layout()
     plt.savefig('reduced-slo.pdf')
     plt.show()
@@ -531,8 +485,8 @@ def system_overhead(directory):
     # Memory
     systems = ['fcpo', 'bce', 'ppp']
     labels = ['FCPO', 'BCE', 'OInf']
-    fig1, ax1 = plt.subplots(1, 1, figsize=(2.5, 2), gridspec_kw={'height_ratios': [1], 'width_ratios': [1]})
-    fig2, ax2 = plt.subplots(1, 1, figsize=(2.5, 2), gridspec_kw={'height_ratios': [1], 'width_ratios': [1]})
+    fig1, ax1 = plt.subplots(1, 1, figsize=(2.5, 2.2), gridspec_kw={'height_ratios': [1], 'width_ratios': [1]})
+    fig2, ax2 = plt.subplots(1, 1, figsize=(2.5, 2.2), gridspec_kw={'height_ratios': [1], 'width_ratios': [1]})
     if not os.path.exists(os.path.join(directory, '..', 'processed_logs', 'memory.pkl')):
         server_memory = avg_memory('nful', systems, 0)
         edge_memory = avg_memory('nful', systems, 1)
@@ -547,13 +501,17 @@ def system_overhead(directory):
         ax1.plot([i - 0.35, i + 0.35], [(server_memory['ppp'][0] + server_memory['ppp'][1]) / 1024,
                                          (server_memory['ppp'][0] + server_memory['ppp'][1]) / 1024], color='black')
         ax2.plot([i - 0.35, i + 0.35], [edge_memory['ppp'][0] / (1024 * 1024), edge_memory['ppp'][0] / (1024 * 1024)], color='black')
-    ax1.legend(fontsize=12, loc='lower center')
-    ax1.set_ylabel('Mem Usage (GB)', size=12)
-    ax1.tick_params(axis='y', labelsize=12)
+    ax1.legend(fontsize=16, loc='lower center')
+    ax1.set_ylabel('Memory (10 GB) ', size=17)
+    ax1.set_yticks([50, 100])
+    ax1.set_yticklabels([5, 10], size=16)
+    ax1.set_ylim([45, 125])
     ax1.set_xticks([])
-    ax2.legend(fontsize=12, loc='lower center')
-    ax2.set_ylabel('Mem Usage (GB)', size=12)
-    ax2.tick_params(axis='y', labelsize=12)
+    ax2.legend(fontsize=16, loc='lower center')
+    ax2.set_ylabel('Memory (GB)', size=17)
+    ax2.set_yticks([2, 4])
+    ax2.set_yticklabels([2, 4], size=16)
+    ax2.set_ylim([1.5, 6])
     ax2.set_xticks([])
     fig1.tight_layout()
     fig2.tight_layout()
@@ -563,7 +521,7 @@ def system_overhead(directory):
     fig2.show()
 
     # Power consumption
-    fig1, ax1 = plt.subplots(1, 1, figsize=(2.5, 2), gridspec_kw={'height_ratios': [1], 'width_ratios': [1]})
+    fig1, ax1 = plt.subplots(1, 1, figsize=(2.5, 2.2), gridspec_kw={'height_ratios': [1], 'width_ratios': [1]})
     if not os.path.exists(os.path.join(directory, '..', 'processed_logs', 'power.pkl')):
         power = avg_edge_power('nful', systems)
         with open(os.path.join(directory, '..', 'processed_logs', 'power.pkl'), 'wb') as f:
@@ -575,44 +533,46 @@ def system_overhead(directory):
         if system == 'ppp':
             continue
         ax1.bar(i, (power[system][0] - power['ppp'][0]), 0.7, label=labels[i], color=colors[i])
-    ax1.legend(fontsize=12, loc='upper right', bbox_to_anchor=(1, 0.85))
-    ax1.set_ylabel('Avg Additional Power\nConsumption (100 mW)', size=12)
+    ax1.legend(fontsize=16, loc='upper right', bbox_to_anchor=(1, 0.9))
+    ax1.set_ylabel('Avg. Power used \nfor RL (100 mW) ', size=17)
     ax1.set_yticks([0, 100, 200])
-    ax1.set_yticklabels([0, 1, 2])
+    ax1.set_yticklabels([0, 1, 2], size=16)
     ax1.set_xticks([])
     fig1.tight_layout()
     fig1.savefig('power-consumption.pdf')
     fig1.show()
 
     # RL Latency
-    fig1, ax1 = plt.subplots(1, 1, figsize=(4, 2), gridspec_kw={'height_ratios': [1], 'width_ratios': [1]})
-    fig2, ax2 = plt.subplots(1, 1, figsize=(4, 2), gridspec_kw={'height_ratios': [1], 'width_ratios': [1]})
-    x_labels = ['Server', 'AGX', 'NX', 'Nano', 'OnPrem']
+    fig1, ax1 = plt.subplots(1, 1, figsize=(4, 2.2), gridspec_kw={'height_ratios': [1], 'width_ratios': [1]})
+    fig2, ax2 = plt.subplots(1, 1, figsize=(4, 2.2), gridspec_kw={'height_ratios': [1], 'width_ratios': [1]})
+    x_labels = ['Server', 'AGX', 'NX', 'Nano']
     x = np.arange(len(x_labels))
     data = json.loads(open(os.path.join(directory, 'latency.json')).read())
     i = 0
     for system, values in data.items():
         j = 0
         for value in values['infer'].values():
-            ax1.bar(j + i * 0.4, value, 0.4, label=system, color=colors[i])
-            j += 1
+            if j < len(x_labels):
+                ax1.bar(j + i * 0.4, value, 0.4, label=system, color=colors[i])
+                j += 1
         j = 0
         for value in values['update'].values():
-            ax2.bar(j + i * 0.4, value, 0.4, label=system, color=colors[i])
-            j += 1
+            if j < len(x_labels):
+                ax2.bar(j + i * 0.4, value, 0.4, label=system, color=colors[i])
+                j += 1
         i += 1
 
     handles, labels = ax1.get_legend_handles_labels()
-    ax1.legend([handles[0], handles[5]], [labels[0], labels[5]], fontsize=12, loc='upper right')
+    ax1.legend([handles[0], handles[5]], [labels[0], labels[5]], fontsize=15, loc='upper center', ncol=2, bbox_to_anchor=(0.5, 1.05))
     ax1.set_xticks(x + 0.2)
-    ax1.set_xticklabels(x_labels, size=12, rotation=25)
-    ax1.set_ylabel('Decision Time (ms)       ', size=12)
-    ax1.tick_params(axis='y', labelsize=12)
-    ax2.legend([handles[0], handles[5]], [labels[0], labels[5]], fontsize=12, loc='upper left')
+    ax1.set_xticklabels(x_labels, size=15)
+    ax1.set_ylabel('Latency (ms)', size=15)
+    ax1.tick_params(axis='y', labelsize=15)
+    ax2.legend([handles[0], handles[5]], [labels[0], labels[5]], fontsize=15, loc='upper center', ncol=2, bbox_to_anchor=(0.5, 1.05))
     ax2.set_xticks(x + 0.2)
-    ax2.set_xticklabels(x_labels, size=12, rotation=25)
-    ax2.set_ylabel('Train Time (100ms)      ', size=12)
-    ax2.tick_params(axis='y', labelsize=12)
+    ax2.set_xticklabels(x_labels, size=15)
+    ax2.set_ylabel('Latency (100ms)    ', size=15)
+    ax2.tick_params(axis='y', labelsize=14)
     ax2.set_yticks([0, 500, 1000])
     ax2.set_yticklabels([0, 5, 10])
     fig1.tight_layout()
@@ -623,7 +583,7 @@ def system_overhead(directory):
     fig2.show()
 
     #FL Latency
-    fig1, (ax1a, ax1b) = plt.subplots(1, 2, sharey=True, figsize=(2.5, 2), gridspec_kw={'height_ratios': [1], 'width_ratios': [2,3]})
+    fig1, (ax1a, ax1b) = plt.subplots(1, 2, sharey=True, figsize=(2.5, 2.2), gridspec_kw={'height_ratios': [1], 'width_ratios': [2,3]})
     FineTuning_latencies = []
     FL_latencies = []
     with open(os.path.join(directory, 'latest_log_21_20-59-1.csv'), 'r') as f:
@@ -631,20 +591,20 @@ def system_overhead(directory):
             if 'federatedAggregation' in line:
                 FineTuning_latencies.append(int(line.split(',')[1]) / 1000000) # convert to seconds
                 FL_latencies.append(int(line.split(',')[2]) / 1000000) # convert to seconds
-    ax1a.text(0.5, 0.5, 'Fine-Tune  ', ha='center', va='bottom', transform=ax1a.transAxes, fontsize=12)
+    ax1b.text(-0.02, 0.02, 'Fine-Tune  ', ha='center', va='bottom', transform=ax1b.transAxes, fontsize=17)
     ax1a.boxplot(FineTuning_latencies, positions=[0], vert=False, widths=0.8, patch_artist=True, boxprops=dict(facecolor=colors[0]),
                 medianprops=dict(color='black'), showfliers=True)
-    ax1b.text(0.5, 0.35, 'FL Round-Trip', ha='center', va='bottom', transform=ax1b.transAxes, fontsize=12)
+    ax1b.text(0.43, 0.37, 'FL Round-Trip', ha='center', va='bottom', transform=ax1b.transAxes, fontsize=17)
     ax1b.boxplot(FL_latencies, positions=[1], vert=False, widths=0.8, patch_artist=True, boxprops=dict(facecolor=colors[0]),
                 medianprops=dict(color='black'), showfliers=True)
 
     ax1a.set_yticks([])
     ax1a.set_xlim(0, 0.25)
-    ax1b.set_xlim(3.5, 12.5)
+    ax1b.set_xlim(3.5, 13)
     ax1a.set_xticks([0, 0.1, 0.2])
     ax1b.set_xticks([4, 6, 9, 12])
-    ax1a.set_xticklabels([0, '.1', '.2'], size=12)
-    ax1b.set_xticklabels([4, 6, 9, '12s'], size=12)
+    ax1a.set_xticklabels([0, '.1', '.2'], size=15)
+    ax1b.set_xticklabels([4, 6, 9, '12s'], size=15)
 
     ax1a.spines['right'].set_visible(False)
     ax1b.spines['left'].set_visible(False)
@@ -661,62 +621,136 @@ def system_overhead(directory):
     fig1.show()
 
 
+def rl_param_plot(base_directory, exp):
+    directory = os.path.join(base_directory, exp)
+    params = os.listdir(directory)
+    if not os.path.exists(os.path.join(base_directory, '..', 'processed_logs', f"{exp}.pkl")):
+        x_vals = sorted(set(float(p.split('-')[0].replace(',', '.')) for p in params))
+        y_vals = sorted(set(float(p.split('-')[1].replace(',', '.')) for p in params))
+        X, Y = np.meshgrid(x_vals, y_vals)
+        data = analyze_single_experiment(directory, natsorted(params), 1, 250)
+        z = []
+        for x, y in zip(X.flatten(), Y.flatten()):
+            param_str = f"{x:.1f}-{y:.1f}".replace('.', ',')
+            try:
+                z.append(data['traffic_throughput']['total'][param_str] + data['people_throughput']['total'][param_str])
+            except KeyError:
+                z.append(0)
+        Z = np.array(z).reshape(X.shape)
+        x_flat = X.flatten()
+        y_flat = Y.flatten()
+        z_flat = Z.flatten()
+        with open(os.path.join(base_directory, '..', 'processed_logs', f"{exp}.pkl"), 'wb') as f:
+            pickle.dump([X, x_flat, Y, y_flat, Z, z_flat], f)
+    else:
+        with open(os.path.join(base_directory, '..', 'processed_logs', f"{exp}.pkl"), 'rb') as f:
+            X, x_flat, Y, y_flat, Z, z_flat = pickle.load(f)
+
+    fig = plt.figure(figsize=(5, 4))
+    ax = fig.add_subplot(111, projection='3d')
+    colors = cm.viridis_r((z_flat - z_flat.min()) / (z_flat.max() - z_flat.min()))
+    sc = ax.scatter(x_flat, y_flat, z_flat, c=colors, s=40)
+
+    # Connect neighbor points (grid lines)
+    rows, cols = X.shape
+    for i in range(rows):
+        for j in range(cols):
+            if j < cols - 1:
+                ax.plot([X[i, j], X[i, j + 1]], [Y[i, j], Y[i, j + 1]], [Z[i, j], Z[i, j + 1]],
+                    color='gray', linewidth=0.5)
+            if i < rows - 1:
+                ax.plot([X[i, j], X[i + 1, j]], [Y[i, j], Y[i + 1, j]], [Z[i, j], Z[i + 1, j]],
+                    color='gray', linewidth=0.5)
+
+    ax.set_xlabel(exp.split('_')[0])
+    ax.set_ylabel(exp.split('_')[1])
+    cbar = plt.colorbar(sc, ax=ax, pad=0, shrink=0.5)
+    cbar.ax.invert_yaxis()
+    cbar.set_ticks([0.0, 0.5, 1.0])
+    cbar.set_ticklabels(['high', 'avg', 'low'])
+    cbar.set_label('Throughput')
+    ax.set_zticks([])
+    ax.set_yticks(y_flat)
+    ax.set_xticks(x_flat)
+    plt.tight_layout()
+    plt.savefig(f"{exp}.pdf")
+    plt.show()
+
+
+def reward_param_plot(directory):
+    params = os.listdir(directory)
+    cols = ["theta", "sigma", "phi", "rho"]
+    if not os.path.exists(os.path.join(directory, 'processed_logs.csv')):
+        data = []
+        exp_data = analyze_single_experiment(directory, natsorted(params), 1, 250)
+        for param in params:
+            folder_path = os.path.join(directory, param)
+            # Ensure it's a directory
+            if os.path.isdir(folder_path):
+                # Split folder name into hyperparameters
+                try:
+                    theta, sigma, phi, rho = map(float, param.split("-"))
+                except ValueError:
+                    print(f"Skipping folder {param}, invalid name format")
+                    continue
+
+
+                data.append({
+                    "theta": theta,
+                    "sigma": sigma,
+                    "phi": phi,
+                    "rho": rho,
+                    "throughput": exp_data['traffic_throughput']['total'][param] + exp_data['people_throughput']['total'][param]
+                })
+
+        df = pd.DataFrame(data)
+        df.to_csv(os.path.join(directory, 'processed_logs.csv'), index=False)
+    else:
+        df = pd.read_csv(os.path.join(directory, 'processed_logs.csv'))
+
+    df = df.sort_values(by='throughput', ascending=True).reset_index(drop=True)
+    perf = df["throughput"].values
+    norm_perf = (perf - perf.min()) / (perf.max() - perf.min())
+    colors = cm.viridis(norm_perf)
+
+    fig, ax = plt.subplots(figsize=(8, 3))
+    x = list(range(len(cols)))
+    # Draw each line as a segment
+    for i in range(len(df)):
+        y = df.iloc[i].values[:len(cols)]
+        points = np.array([x, y]).T.reshape(-1, 1, 2)
+        segments = np.concatenate([points[:-1], points[1:]], axis=1)
+        lc = LineCollection(segments, colors=[colors[i]], linewidth=1.5, alpha=0.8)
+        ax.add_collection(lc)
+
+    # Set axis ticks and labels
+    ax.set_xlim([0, len(cols) - 1])
+    ax.set_xticks(range(len(cols)))
+    ax.set_xticklabels(cols, fontsize=20)
+    ax.set_ylim([0, 16])
+    ax.set_yticks(range(0, 17, 2))
+    ax.set_yticklabels(range(0, 17, 2), fontsize=14)
+    ax.set_ylabel("Hyperparameter Value", fontsize=14)
+    ax.set_title("Parallel Coordinates Plot for Reward Hyperparameters", fontsize=12)
+
+    # Add colorbar
+    sm = plt.cm.ScalarMappable(cmap=cm.viridis, norm=plt.Normalize(vmin=perf.min(), vmax=perf.max()))
+    sm.set_array([])
+    cbar = fig.colorbar(sm, ax=ax)
+    cbar.set_label('Effective Throughput (obj / s)', fontsize=12)
+    cbar.ax.tick_params(labelsize=12)
+    ax.tick_params(axis='both', labelsize=12)
+    plt.savefig('reward-hyperparameters.pdf')
+    plt.show()
+
 def hyperparameter_sensitivity(base_directory):
     base_directory = os.path.join(base_directory, 'hyperparameters')
     for i, exp in enumerate(natsorted(os.listdir(base_directory))):
-        directory = os.path.join(base_directory, exp)
-        params = os.listdir(directory)
-        if not os.path.exists(os.path.join(base_directory, '..', 'processed_logs', f"{exp}.pkl")):
-            x_vals = sorted(set(float(p.split('-')[0].replace(',', '.')) for p in params))
-            y_vals = sorted(set(float(p.split('-')[1].replace(',', '.')) for p in params))
-            X, Y = np.meshgrid(x_vals, y_vals)
-            data = analyze_single_experiment(directory, natsorted(params), 1, 250)
-            z = []
-            for x, y in zip(X.flatten(), Y.flatten()):
-                param_str = f"{x:.1f}-{y:.1f}".replace('.', ',')
-                try:
-                    z.append(data['traffic_throughput']['total'][param_str] + data['people_throughput']['total'][param_str])
-                except KeyError:
-                    z.append(0)
-            Z = np.array(z).reshape(X.shape)
-            x_flat = X.flatten()
-            y_flat = Y.flatten()
-            z_flat = Z.flatten()
-            with open(os.path.join(base_directory, '..', 'processed_logs', f"{exp}.pkl"), 'wb') as f:
-                pickle.dump([X, x_flat, Y, y_flat, Z, z_flat], f)
+        if '_' not in exp:
+            reward_param_plot(os.path.join(base_directory, exp))
         else:
-            with open(os.path.join(base_directory, '..', 'processed_logs', f"{exp}.pkl"), 'rb') as f:
-                X, x_flat, Y, y_flat, Z, z_flat = pickle.load(f)
+            rl_param_plot(base_directory, exp)
 
-        fig = plt.figure(figsize=(5, 4))
-        ax = fig.add_subplot(111, projection='3d')
-        colors = cm.viridis_r((z_flat - z_flat.min()) / (z_flat.max() - z_flat.min()))
-        sc = ax.scatter(x_flat, y_flat, z_flat, c=colors, s=40)
-
-        # Connect neighbor points (grid lines)
-        rows, cols = X.shape
-        for i in range(rows):
-            for j in range(cols):
-                if j < cols - 1:
-                    ax.plot([X[i, j], X[i, j + 1]], [Y[i, j], Y[i, j + 1]], [Z[i, j], Z[i, j + 1]],
-                        color='gray', linewidth=0.5)
-                if i < rows - 1:
-                    ax.plot([X[i, j], X[i + 1, j]], [Y[i, j], Y[i + 1, j]], [Z[i, j], Z[i + 1, j]],
-                        color='gray', linewidth=0.5)
-
-        ax.set_xlabel(exp.split('_')[0])
-        ax.set_ylabel(exp.split('_')[1])
-        cbar = plt.colorbar(sc, ax=ax, pad=0, shrink=0.5)
-        cbar.ax.invert_yaxis()
-        cbar.set_ticks([0.0, 0.5, 1.0])
-        cbar.set_ticklabels(['high', 'avg', 'low'])
-        cbar.set_label('Throughput')
-        ax.set_zticks([])
-        ax.set_yticks(y_flat)
-        ax.set_xticks(x_flat)
-        plt.tight_layout()
-        plt.savefig(f"{exp}.pdf")
-        plt.show()
 
 def perDeviceAnalysis(base_directory):
     fig, ax = plt.subplots(4, 3, figsize=(7.5, 5))
@@ -743,3 +777,29 @@ def perDeviceAnalysis(base_directory):
     plt.tight_layout(pad=0.04)
     plt.savefig('individual-patterns.pdf')
     plt.show()
+
+def logSystemMetrics(base_directory):
+    results = {}
+    experiments = ['fcty', 'camp']
+    for exp in experiments:
+        directory = os.path.join(base_directory, exp)
+        if not os.path.exists(os.path.join(directory, 'processed_logs.pkl')):
+            systems = natsorted(os.listdir(directory))
+            if exp == 'fcty':
+                results[exp] = analyze_single_experiment(directory, systems, 1, 200, True, 2160)
+            elif exp == 'camp':
+                results[exp] = analyze_single_experiment(directory, systems, 1, 250, True, 7200)
+            else:
+                results[exp] = analyze_single_experiment(directory, systems, 1, 250, True)
+            with open(os.path.join(directory, 'processed_logs.pkl'), 'wb') as f:
+                pickle.dump(results[exp], f)
+        else:
+            with open(os.path.join(directory, 'processed_logs.pkl'), 'rb') as f:
+                results[exp] = pickle.load(f)
+
+    with open('systemMetrics.txt', 'wb') as f:
+        for exp in experiments:
+            f.write(f"Experiment: {exp}\n".encode())
+            for key, value in results[exp].items():
+                f.write(f"{key}: {value}\n".encode())
+            f.write("\n".encode())
