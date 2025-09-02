@@ -171,7 +171,7 @@ void Controller::Scheduling() {
             running = false;
             break;
         }
-        std::this_thread::sleep_for(std::chrono::microseconds(sleepTime));
+        std::this_thread::sleep_for(TimePrecisionType(sleepTime));
     }
     delete this;
 }
