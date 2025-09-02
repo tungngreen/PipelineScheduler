@@ -1,10 +1,10 @@
 import os
 import sys
 import json
+import pickle
 import numpy as np
 import matplotlib.pyplot as plt
 from natsort import natsorted
-
 
 def get_total_objects(dir, path='full_run_total.json'):
     traffic_people, traffic_cars, people_people, people_cars = 0, 0, 0, 0
@@ -308,3 +308,30 @@ def get_bandwidths(base_dir):
 
     bandwidths['overall'] = (bandwidth, timestamps)
     return bandwidths
+
+
+def logSystemMetrics(base_directory):
+    results = {}
+    experiments = ['fcty', 'camp']
+    for exp in experiments:
+        directory = os.path.join(base_directory, exp)
+        if not os.path.exists(os.path.join(directory, 'processed_logs.pkl')):
+            systems = natsorted(os.listdir(directory))
+            if exp == 'fcty':
+                results[exp] = analyze_single_experiment(directory, systems, 1, 200, True, 2160)
+            elif exp == 'camp':
+                results[exp] = analyze_single_experiment(directory, systems, 1, 250, True, 7200)
+            else:
+                results[exp] = analyze_single_experiment(directory, systems, 1, 250, True)
+            with open(os.path.join(directory, 'processed_logs.pkl'), 'wb') as f:
+                pickle.dump(results[exp], f)
+        else:
+            with open(os.path.join(directory, 'processed_logs.pkl'), 'rb') as f:
+                results[exp] = pickle.load(f)
+
+    with open('systemMetrics.txt', 'wb') as f:
+        for exp in experiments:
+            f.write(f"Experiment: {exp}\n".encode())
+            for key, value in results[exp].items():
+                f.write(f"{key}: {value}\n".encode())
+            f.write("\n".encode())

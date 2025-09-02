@@ -5,11 +5,11 @@ import numpy as np
 import matplotlib.pyplot as plt
 from natsort import natsorted
 
-from objectcount import objectcount
-from run_log_analyzes import full_analysis
-from final_figures import create_figures
-from rl_analyzes import reward_plot, overall_performance_timeseries, system_overhead, reduced_slo, \
-     continual_learning_performance, hyperparameter_sensitivity, warm_start_performance, logSystemMetrics
+from analyze_object_counts import objectcount
+from run_log_analyzes import full_analysis, logSystemMetrics
+from final_figures import overall_performance_timeseries, system_overhead, reduced_slo, continual_learning_performance, \
+     hyperparameter_sensitivity, warm_start_performance
+from rl_analyzes import reward_plot
 
 
 def batch(files):
@@ -120,7 +120,6 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--directory', type=str, default='')
     parser.add_argument('--mode', type=str, default='')
-    parser.add_argument('--figs', type=str, default='full,thir,slo,abla,long')
     parser.add_argument('--num_results', type=int, default=3)
     args = parser.parse_args()
 
@@ -136,8 +135,6 @@ if __name__ == '__main__':
         objectcount(args, files)
     elif args.mode == 'full':
         full_analysis(args, files)
-    elif args.mode == 'final':
-        create_figures(args, files)
     elif args.mode == 'fcpo':
         if not os.path.exists(os.path.join(args.directory, 'processed_logs')):
             os.makedirs(os.path.join(args.directory, 'processed_logs'))
