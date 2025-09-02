@@ -148,6 +148,13 @@ void FCPOAgent::federatedUpdateCallback(FlData &response) {
     std::istringstream iss(response.network());
     std::unique_lock<std::mutex> lock(model_mutex);
     torch::load(model, iss);
+    if (federated_steps_counter != 0) {
+        spdlog::get("container_agent")->info("Switched Cluster, received new model, resetting episode!");
+        steps_counter = 0;
+        federated_steps_counter = 1;
+        reset();
+        return;
+    }
     auto states = torch::stack(experiences.get_states()).to(precision);
     auto policy1_history = torch::tensor(experiences.get_batching()).to(precision);
     auto policy2_history = torch::tensor(experiences.get_timeout()).to(precision);
@@ -306,7 +313,8 @@ std::tuple<int, int, int> FCPOAgent::runStep() {
 }
 
 
-FCPOServer::FCPOServer(std::string run_name, nlohmann::json parameters, uint state_size, torch::Dtype precision)
+FCPOServer::FCPOServer(std::string run_name, nlohmann::json parameters, uint16_t clusterCount, uint state_size,
+                       torch::Dtype precision)
         : precision(precision), state_size(state_size) {
     path = "../models/fcpo_learning/" + run_name;
     std::filesystem::create_directories(std::filesystem::path(path));
@@ -314,11 +322,15 @@ FCPOServer::FCPOServer(std::string run_name, nlohmann::json parameters, uint sta
 
     std::random_device rd;
     re = std::mt19937(rd());
-    model = std::make_shared<MultiPolicyNet>(state_size, 1, 1, 1);
-    std::string model_save = path + "/latest_model.pt";
-    if (std::filesystem::exists(model_save)) torch::load(model, model_save);
-    model->to(precision);
-    optimizer = std::make_unique<torch::optim::AdamW>(model->parameters(), torch::optim::AdamWOptions(1e-3));
+    for (uint16_t i = 0; i < clusterCount; i++) {
+        models.push_back(std::make_shared<MultiPolicyNet>(state_size, 1, 1, 1));
+        std::string model_save = path + "/latest_model" + std::to_string(i) + ".pt";
+        if (std::filesystem::exists(model_save)) torch::load(models.back(), model_save);
+        models.back()->to(precision);
+    }
+    std::vector<std::map<std::vector<int64_t>, T>> action_heads_by_size =
+            std::vector<std::map<std::vector<int64_t>, T>>(models.front()->parameters().size());
+    optimizer = std::make_unique<torch::optim::AdamW>(models.front()->parameters(), torch::optim::AdamWOptions(1e-3));
 
     lambda = parameters["lambda"];
     gamma = parameters["gamma"];
@@ -357,6 +369,19 @@ bool FCPOServer::addClient(FlData &request, std::shared_ptr<ControlCommands::Stu
     return true;
 }
 
+void FCPOServer::updateCluster(uint16_t id, std::vector<std::tuple<std::string, std::shared_ptr<ControlCommands::Stub>, CompletionQueue *, nlohmann::json>> devices) {
+    if (id >= models.size()) {
+        spdlog::get("container_agent")->error("Server received invalid cluster ID: {}", id);
+        return;
+    }
+    if (id == clusterID) return;
+    spdlog::get("container_agent")->info("Switching to cluster ID: {}", id);
+    clusterID = id;
+    for (auto& d : devices) {
+        sendClusterModel(std::get<0>(d), std::get<1>(d), std::get<2>(d), std::get<3>(d));
+    }
+}
+
 void FCPOServer::proceed() {
     while (run) {
         if (client_counter == 0 || federated_clients.size() < (client_counter / 2)) {
@@ -373,11 +398,10 @@ void FCPOServer::proceed() {
         federated_clients.clear();
 
         std::vector<torch::Tensor> aggregated_shared_params;
-        for (const auto& param : model->parameters()) {
+        for (const auto& param : models[clusterID]->parameters()) {
             aggregated_shared_params.push_back(param.clone());
         }
-        std::vector<std::map<std::vector<int64_t>, T>> action_heads_by_size =
-                std::vector<std::map<std::vector<int64_t>, T>>(aggregated_shared_params.size());
+        std::vector<std::map<std::vector<int64_t>, T>> action_heads = action_heads_by_size;
 
         double last_loss = 0.0;
         for (auto& client : participants) {
@@ -387,11 +411,11 @@ void FCPOServer::proceed() {
                     aggregated_shared_params[i] = aggregated_shared_params[i] + param;
                 } else {
                     auto size_key = param.sizes().vec();
-                    if (action_heads_by_size[i].find(size_key) == action_heads_by_size[i].end()) {
-                        action_heads_by_size[i][size_key] = param.clone();
+                    if (action_heads[i].find(size_key) == action_heads[i].end()) {
+                        action_heads[i][size_key] = param.clone();
                     } else {
                         double factor = 1.0 / (client.data.latest_loss() - last_loss);
-                        action_heads_by_size[i][size_key] = action_heads_by_size[i][size_key] + param * factor;
+                        action_heads[i][size_key] = action_heads[i][size_key] + param * factor;
                     }
                 }
                 i++;
@@ -403,7 +427,7 @@ void FCPOServer::proceed() {
             param /= static_cast<int64_t>(participants.size() + 1);
         }
 
-        for (auto& action_head : action_heads_by_size) {
+        for (auto& action_head : action_heads) {
             for (auto &[key, value]: action_head) {
                 action_head[key] = value / static_cast<int64_t>(action_head.size());
             }
@@ -415,9 +439,37 @@ void FCPOServer::proceed() {
         }
 
         for (unsigned int i = 0; i < aggregated_shared_params.size(); i++) {
-            model->parameters()[i] = aggregated_shared_params[i].clone();
+            models[clusterID]->parameters()[i] = aggregated_shared_params[i].clone();
         }
+        action_heads_by_size = action_heads;
     }
+}
+
+void FCPOServer::sendClusterModel(std::string name, std::shared_ptr<ControlCommands::Stub> stub, CompletionQueue * cq,
+                                  nlohmann::json conf) {
+    FlData request;
+    std::ostringstream oss;
+    auto tmp_model = std::make_shared<MultiPolicyNet>(state_size, conf["batch_size"], conf["timeout_size"],
+                                                      conf["threads_size"]);
+    for (int i = 0; i <= 5; i++) tmp_model->parameters()[i] = models[clusterID]->parameters()[i].clone();
+    models[clusterID]->parameters()[6] = action_heads_by_size[6][{conf["batch_size"]}].clone(); //weights
+    models[clusterID]->parameters()[7] = action_heads_by_size[7][{conf["batch_size"]}].clone(); //biases
+    models[clusterID]->parameters()[8] = action_heads_by_size[8][{conf["timeout_size"]}].clone(); //weights
+    models[clusterID]->parameters()[9] = action_heads_by_size[9][{conf["timeout_size"]}].clone(); //biases
+    models[clusterID]->parameters()[10] = action_heads_by_size[10][{conf["threads_size"]}].clone(); //weights
+    models[clusterID]->parameters()[11] = action_heads_by_size[11][{conf["threads_size"]}].clone(); //biases
+    torch::save(tmp_model, oss);
+    request.set_name(name);
+    request.set_network(oss.str());
+    ClientContext context;
+    EmptyMessage reply;
+    Status status;
+    std::unique_ptr<ClientAsyncResponseReader<EmptyMessage>> rpc(
+            stub->AsyncReturnFl(&context, request, cq));
+    rpc->Finish(&reply, &status, (void *)1);
+    void *got_tag;
+    bool ok = false;
+    if (cq != nullptr) GPR_ASSERT(cq->Next(&got_tag, &ok));
 }
 
 void FCPOServer::returnFLModel(ClientModel &client) {

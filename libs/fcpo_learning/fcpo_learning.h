@@ -314,21 +314,23 @@ private:
 
 class FCPOServer {
 public:
-    FCPOServer(std::string run_name, nlohmann::json parameters, uint state_size = 9, torch::Dtype precision = torch::kF32);
+    FCPOServer(std::string run_name, nlohmann::json parameters, uint16_t clusterCount, uint state_size = 9,
+               torch::Dtype precision = torch::kF32);
     ~FCPOServer() {
-        torch::save(model, path + "/latest_model.pt");
+        int i = 0;
+        for (auto model: models) {
+            torch::save(model, path + "/latest_model" + std::to_string(i++) + ".pt");
+        }
         out.close();
     }
 
     bool addClient(FlData &data, std::shared_ptr<ControlCommands::Stub> stub, CompletionQueue *cq);
 
-    void incrementClientCounter() {
-        client_counter++;
-    }
+    void incrementClientCounter() { client_counter++; }
 
-    void decrementClientCounter() {
-        client_counter--;
-    }
+    void decrementClientCounter() { client_counter--; }
+
+    void updateCluster(uint16_t id, std::vector<std::tuple<std::string, std::shared_ptr<ControlCommands::Stub>, CompletionQueue *, nlohmann::json>> devices);
 
     void stop() { run = false; }
 
@@ -364,7 +366,12 @@ private:
 
     void returnFLModel(ClientModel &client);
 
-    std::shared_ptr<MultiPolicyNet> model;
+    void sendClusterModel(std::string name, std::shared_ptr<ControlCommands::Stub> stub, CompletionQueue * cq,
+                          nlohmann::json conf);
+
+    std::vector<std::shared_ptr<MultiPolicyNet>> models;
+    std::vector<std::map<std::vector<int64_t>, T>> action_heads_by_size;
+    uint16_t clusterID;
     std::unique_ptr<torch::optim::Optimizer> optimizer;
     torch::Dtype precision;
     std::vector<ClientModel> federated_clients;

@@ -204,6 +204,7 @@ struct ContainerHandle {
     bool mergable;
     std::vector<int> dimensions;
     uint64_t pipelineSLO;
+    json fcpo_conf = "";
 
     float arrival_rate;
 
@@ -869,6 +870,16 @@ public:
         return elements;
     }
 
+    std::vector<std::tuple<std::string, std::shared_ptr<ControlCommands::Stub>, CompletionQueue *, nlohmann::json>> getFLConnections() {
+        std::lock_guard<std::mutex> lock(containersMutex);
+        std::vector<std::tuple<std::string, std::shared_ptr<ControlCommands::Stub>, CompletionQueue *, nlohmann::json>> elements;
+        for (auto &c: list) {
+            elements.push_back(std::make_tuple(c.first, c.second->device_agent->stub, c.second->device_agent->cq,
+                                               c.second->fcpo_conf));
+        }
+        return elements;
+    }
+
     std::map<std::string, ContainerHandle *> getMap() {
         std::lock_guard<std::mutex> lock(containersMutex);
         return list;
@@ -1108,6 +1119,7 @@ private:
     std::vector<TaskDescription::TaskStruct> initialTasks;
     std::vector<TaskDescription::TaskStruct> remainTasks;
     uint16_t ctrl_runtime;
+    uint16_t ctrl_clusterID, ctrl_clusterCount;
     uint16_t ctrl_port_offset;
 
     std::string ctrl_logPath;

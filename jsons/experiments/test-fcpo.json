@@ -12,6 +12,7 @@
     "rescaling_interval_sec": 30,
     "scale_up_interval_threshold_sec": 150,
     "scale_down_interval_threshold_sec": 240,
+    "cluster_count": 1,
     "initial_pipelines": [
         {
             "pipeline_name": "traffic4",
