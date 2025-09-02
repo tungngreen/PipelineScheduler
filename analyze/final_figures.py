@@ -271,6 +271,7 @@ def overall_performance_timeseries(directory, experiment, xticks=None):
         fig1, ax1 = plt.subplots(1, 1, figsize=(4.5, 2), gridspec_kw={'height_ratios': [1], 'width_ratios': [1]})
         fig2, ax2 = plt.subplots(1, 1, figsize=(4.5, 2), gridspec_kw={'height_ratios': [1], 'width_ratios': [1]})
     avg_throughput = {'traffic_throughput': {'total': {}}, 'traffic_goodput': {'total': {}}, 'people_throughput': {'total': {}}, 'people_goodput': {'total': {}}}
+    total_data = {}
     for j, d in enumerate(systems):
         if not os.path.isdir(os.path.join(directory, d)): continue
         if not os.path.exists(os.path.join(directory, d, 'df_cars.csv')) or not os.path.exists(
@@ -316,6 +317,7 @@ def overall_performance_timeseries(directory, experiment, xticks=None):
             with open(os.path.join(directory, d, 'avg_throughput.pkl'), 'rb') as f:
                 avg_throughput = pickle.load(f)
             dfs_combined = pd.read_csv(os.path.join(directory, d, 'combined_df.csv'))
+        total_data[d] = dfs_combined
         if d == 'without local optimization':
             d = 'no local opt.'
         ax1.plot(dfs_combined['aligned_timestamp'], dfs_combined['throughput'], styles[j], label=d,
@@ -352,6 +354,47 @@ def overall_performance_timeseries(directory, experiment, xticks=None):
     fig2.tight_layout()
     fig2.savefig(f"{experiment}-latency.pdf")
     fig2.show()
+
+    fig, axs = plt.subplots(2, 2, figsize=(8, 4), gridspec_kw={'height_ratios': [1, 1], 'width_ratios': [1, 1]})
+    for j, d in enumerate(systems):
+        if d not in total_data:
+            continue
+        dfs_combined = total_data[d]
+        k = j // 2
+        j = j % 2
+        ax = axs[j][k]
+        ax_right = ax.twinx()
+        ax.plot(dfs_combined['aligned_timestamp'], dfs_combined['throughput'], styles[0], label=f'Throughput',
+                color=colors[0], linewidth=1)
+        ax_right.plot(dfs_combined['aligned_timestamp'], dfs_combined['avg_latency'], styles[1],
+                      color=colors[1], label=f'Latency', linewidth=1, linestyle=(0, (10, 5)))
+        if k == 0:
+            ax.set_ylabel(' ', size=14)
+            ax.set_yticks([0, 200, 400, 600, 800, 1000, 1200])
+            ax.set_yticklabels([0, 2, 4, 6, 8, 10, 12], size=12)
+            ax_right.set_yticks([])
+        if k == 1:
+            ax_right.set_ylabel(' ', size=14)
+            ax_right.set_yticks([0, 200, 400, 600, 800, 1000])
+            ax_right.set_yticklabels([0, 2, 4, 6, 8, 10], size=14)
+            ax.set_yticks([])
+        if j == 1:
+            ax.set_xlabel(' ', size=14)
+        ax.set_xticks([0, 5, 15, 30, 45, 60])
+        ax.set_xticklabels([0, 5, 15, 30, 45, 60], size=14)
+        ax.set_title(d, size=15)
+        ax.set_xlim([0, 60])
+        ax.set_ylim([0, 1250])
+        ax_right.set_ylim([0, 1050])
+    fig.legend(handles=ax.get_legend_handles_labels()[0] + ax_right.get_legend_handles_labels()[0],
+               labels=ax.get_legend_handles_labels()[1] + ax_right.get_legend_handles_labels()[1],
+               loc='center', fontsize=14, bbox_to_anchor=(0.5, 0.715), ncol=2)
+    fig.text(0.02, 0.5, 'Total Throughput (100 obj/s)', va='center', rotation='vertical', fontsize=14)
+    fig.text(0.96, 0.5, 'Average Latency (100 ms)', va='center', rotation='vertical', fontsize=14)
+    fig.text(0.5, 0.04, 'Minutes Passed since Start (min)', ha='center', fontsize=14)
+    plt.tight_layout()
+    plt.savefig(f"{experiment}-individual-timeseries.pdf")
+    plt.show()
 
     # plot the throughput and latency for each pipeline
     fig, ax1 = plt.subplots(1, 1, figsize=(2.5, 3), gridspec_kw={'height_ratios': [1], 'width_ratios': [1]})
