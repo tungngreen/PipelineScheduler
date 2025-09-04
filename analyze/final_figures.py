@@ -1,9 +1,12 @@
 import os
-
 import json
 import pickle
+import itertools
+
 import numpy as np
 import pandas as pd
+import seaborn as sns
+
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
@@ -11,6 +14,7 @@ from matplotlib.lines import Line2D
 from matplotlib.collections import LineCollection
 from matplotlib import cm
 from matplotlib.ticker import ScalarFormatter
+
 from natsort import natsorted
 from pandas import DataFrame
 
@@ -18,7 +22,8 @@ from run_log_analyzes import read_file, get_total_objects, analyze_single_experi
 from database_connection import bucket_and_average, align_timestamps, avg_memory, avg_edge_power
 from analyze_object_counts import load_data
 
-colors = ['#0072B2', '#E69F00', '#009E73', '#CC79A7', '#56B4E9', '#F0E442', '#D55E00']
+colors = ['#365d8d', '#e6ab02', '#471164', '#5dc863', '#21908c']
+long_colors = ['#0072B2', '#E69F00', '#009E73', '#CC79A7', '#56B4E9', '#F0E442', '#D55E00']
 bar_width = 0.2
 x_labels = ['traffic', 'surveillance']
 x = np.arange(len(x_labels))
@@ -535,9 +540,9 @@ def continual_learning_performance(base_directory):
         else:
             df = pd.read_csv(os.path.join(directory, d, 'df.csv'))
         if d == 'FCPO':
-            workload_index, workload = load_data(os.path.join(directory, 'trafficchanges.csv'))
+            workload_index, workload = load_data(os.path.join(directory, 'workload.csv'))
             # 3 data sources in experiment
-            ax1.plot(workload_index, [w * 3 for w in workload], label='Workload', color='red', linestyle='--', linewidth=1)
+            ax1.plot(workload_index, [w * 3 for w in workload], label='Workload', color='black', linestyle='-.', linewidth=1)
         ax1.plot(df['aligned_timestamp'], df['throughput'], styles[j], label=d, color=colors[j], linewidth=1, markevery=0.2)
 
     ax1.set_xticks([2.5, 7.5, 12.5, 17.5, 22.5, 27.5, 32.5, 37.5, 42.5, 47.5])
@@ -559,7 +564,6 @@ def reduced_slo(base_directory):
     fig1, ax1 = plt.subplots(1, 1, figsize=(6, 2), gridspec_kw={'height_ratios': [1], 'width_ratios': [1]})
     algorithm_names = ['fcpo', 'tuti', 'ppp', 'bce']
     label_map = {'fcpo': 'FCPO', 'bce': 'BCE', 'tuti': 'Tutti', 'ppp': 'OInf'}
-    patterns = ['', 'x', 'o', '*', '//', '\\\\']
     slos = []
     data = {}
     for i, slo in enumerate(natsorted(os.listdir(base_directory))):
@@ -580,12 +584,12 @@ def reduced_slo(base_directory):
                 0.2, alpha=0.5, color=colors[j], hatch='//', edgecolor='white')
         ax1.bar(xs + j * 0.2,
                 [int(data[s]['traffic_goodput']['total'][a]) + int(data[s]['people_goodput']['total'][a]) for s in slos],
-                0.2, label=label_map[a], color=colors[j], hatch=patterns[j], edgecolor='white', linewidth=0.5)
-    ax1.axhline(y=data[slos[0]]['max_traffic_throughput'] + data[slos[0]]['max_people_throughput'], color='red', linestyle='--',
+                0.2, label=label_map[a], color=colors[j], hatch=markers[j], edgecolor='white', linewidth=0.5, hatch_linewidth=0.5)
+    ax1.axhline(y=data[slos[0]]['max_traffic_throughput'] + data[slos[0]]['max_people_throughput'], color='black', linestyle='-.',
                linewidth=2, xmin=0.05, xmax=0.95)
     striped_patch = mpatches.Patch(facecolor='grey', alpha=0.5, hatch='//', edgecolor='white', label='Thrpt')
     solid_patch = mpatches.Patch(facecolor='grey', label='Effect. Thrpt')
-    line_patch = Line2D([0], [0], color='red', linestyle='--', linewidth=2, label='Workload')
+    line_patch = Line2D([0], [0], color='black', linestyle='-.', linewidth=2, label='Workload')
     mpl.rcParams['hatch.linewidth'] = 2
     ax2 = ax1.twinx()
     ax2.set_yticks([])
@@ -619,9 +623,9 @@ def system_overhead(directory):
     for i, system in enumerate(systems):
         ax1.bar(i, (server_memory[system][0] + server_memory[system][1]) / 1024, 0.7, label=labels[i], color=colors[i])
         ax2.bar(i, edge_memory[system][0] / (1024 * 1024), 0.7, label=labels[i], color=colors[i])
-        ax1.plot([i - 0.35, i + 0.35], [(server_memory['ppp'][0] + server_memory['ppp'][1]) / 1024,
+        ax1.plot([-.4, 2.4], [(server_memory['ppp'][0] + server_memory['ppp'][1]) / 1024,
                                          (server_memory['ppp'][0] + server_memory['ppp'][1]) / 1024], color='black')
-        ax2.plot([i - 0.35, i + 0.35], [edge_memory['ppp'][0] / (1024 * 1024), edge_memory['ppp'][0] / (1024 * 1024)], color='black')
+        ax2.plot([-.4, 2.4], [edge_memory['ppp'][0] / (1024 * 1024), edge_memory['ppp'][0] / (1024 * 1024)], color='black')
     ax1.legend(fontsize=16, loc='lower center')
     ax1.set_ylabel('Memory (10 GB) ', size=17)
     ax1.set_yticks([50, 100])
@@ -769,7 +773,7 @@ def rl_param_plot(base_directory, exp):
 
     fig = plt.figure(figsize=(5, 4))
     ax = fig.add_subplot(111, projection='3d')
-    colors = cm.viridis_r((z_flat - z_flat.min()) / (z_flat.max() - z_flat.min()))
+    colors = cm.viridis((z_flat - z_flat.min()) / (z_flat.max() - z_flat.min()))
     sc = ax.scatter(x_flat, y_flat, z_flat, c=colors, s=40)
 
     # Connect neighbor points (grid lines)
@@ -787,8 +791,8 @@ def rl_param_plot(base_directory, exp):
     ax.set_ylabel(exp.split('_')[1])
     cbar = plt.colorbar(sc, ax=ax, pad=0, shrink=0.5)
     cbar.ax.invert_yaxis()
-    cbar.set_ticks([0.0, 0.5, 1.0])
-    cbar.set_ticklabels(['high', 'avg', 'low'])
+    cbar.set_ticks([0.0, 1.0])
+    cbar.set_ticklabels(['high', 'low'])
     cbar.set_label('Throughput')
     ax.set_zticks([])
     ax.set_yticks(y_flat)
@@ -817,10 +821,10 @@ def reward_param_plot(directory):
 
 
                 data.append({
-                    "theta": theta,
-                    "sigma": sigma,
-                    "phi": phi,
-                    "rho": rho,
+                    "theta": int(theta),
+                    "sigma": int(sigma),
+                    "phi": int(phi),
+                    "rho": int(rho),
                     "throughput": exp_data['traffic_throughput']['total'][param] + exp_data['people_throughput']['total'][param]
                 })
 
@@ -829,6 +833,38 @@ def reward_param_plot(directory):
     else:
         df = pd.read_csv(os.path.join(directory, 'processed_logs.csv'))
 
+    hyperparams = ["theta", "sigma", "phi", "rho"]
+    pairs = list(itertools.combinations(hyperparams, 2))
+
+    fig, axes = plt.subplots(2, 3, figsize=(8, 5.5))
+    axes = axes.flatten()
+    for i, (xparam, yparam) in enumerate(pairs):
+        ax = axes[i]
+        pivot_table = df.pivot_table(
+            index=yparam,
+            columns=xparam,
+            values="throughput",
+            aggfunc="mean"
+        )
+        sns.heatmap(
+           pivot_table,
+           ax=ax,
+           cmap="viridis",
+           cbar=i == len(pairs) - 1,  # Only last plot gets colorbar
+           cbar_kws={"ticks": [pivot_table.min().min(), pivot_table.max().max()], "format": '%.0f'}
+        )
+        if i == len(pairs) - 1:
+           cbar = ax.collections[0].colorbar
+           cbar.set_ticks([pivot_table.min().min(), pivot_table.max().max()])
+           cbar.set_ticklabels(['min', 'max'], fontsize=14, rotation=90)
+        ax.tick_params(axis='both', which='major', labelsize=13)
+        ax.set_xlabel(xparam, fontsize=14)
+        ax.set_ylabel(yparam, fontsize=14)
+    plt.tight_layout()
+    plt.savefig('reward-hyperparameters-heatmaps.pdf')
+    plt.show()
+
+    #parallel axis plot
     df = df.sort_values(by='throughput', ascending=True).reset_index(drop=True)
     perf = df["throughput"].values
     norm_perf = (perf - perf.min()) / (perf.max() - perf.min())
@@ -861,7 +897,7 @@ def reward_param_plot(directory):
     cbar.set_label('Effective Throughput (obj / s)', fontsize=12)
     cbar.ax.tick_params(labelsize=12)
     ax.tick_params(axis='both', labelsize=12)
-    plt.savefig('reward-hyperparameters.pdf')
+    plt.savefig('reward-hyperparameters-parallel-coordinates.pdf')
     plt.show()
 
 

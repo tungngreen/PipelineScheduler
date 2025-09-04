@@ -3,7 +3,7 @@ import pickle
 
 import matplotlib.pyplot as plt
 from natsort import natsorted
-from final_figures import colors, styles
+from final_figures import (colors, long_colors, styles)
 
 def read_rl_logs(directory, agents, rewards, loss):
     for agent in agents:
@@ -91,8 +91,8 @@ def reward_plot(base_directory):
         else:
             fig1, ax1 = plt.subplots(1, 1, figsize=(2.5, 1.75), gridspec_kw={'height_ratios': [1], 'width_ratios': [1]})
         ax2 = ax1.twinx()
-        ax1.plot(rewards[algo], label='reward', linewidth=1)
-        ax2.plot(loss[algo], label='loss', linestyle=(0, (8, 8)), linewidth=1)
+        ax1.plot(rewards[algo], label='reward', color=colors[0], linewidth=1)
+        ax2.plot(loss[algo], label='loss', color=colors[0], linestyle=(0, (8, 8)), linewidth=1)
 
         ax1.set_xlim(0, 80)
         ax1.set_xticks([0, 80])
@@ -147,7 +147,10 @@ def reward_plot(base_directory):
             fig, ax1 = plt.subplots(1, 1, figsize=(4, 4), gridspec_kw={'height_ratios': [1], 'width_ratios': [1]})
         i = 0
         for agent, series in data.items():
-            ax1.plot(series, label=agent, color=colors[i])
+            if 'fed' in algo:
+                ax1.plot(series, label=agent, color=colors[i])
+            else:
+                ax1.plot(series, label=agent, color=long_colors[i])
             i += 1
         ax1.legend(fontsize=14, loc='center right')
         ax1.tick_params(axis='x', labelsize=14)

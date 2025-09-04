@@ -139,8 +139,7 @@ if __name__ == '__main__':
         if not os.path.exists(os.path.join(args.directory, 'processed_logs')):
             os.makedirs(os.path.join(args.directory, 'processed_logs'))
         reward_plot(args.directory)
-        overall_performance_timeseries(args.directory, 'fcpo_main', ['FCPO', 'BCE', 'Tutti', 'OInf']) # main
-        overall_performance_timeseries(args.directory, 'fcpo_results', ['FCPO', 'reduced', 'w/o loc']) # ablation
+        overall_performance_timeseries(args.directory, 'fcpo_main', ['FCPO', 'BCE', 'Tutti', 'OInf'])
         continual_learning_performance(args.directory)
         warm_start_performance(args.directory)
         reduced_slo(args.directory)
