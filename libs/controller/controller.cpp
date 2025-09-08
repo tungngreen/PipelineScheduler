@@ -614,22 +614,26 @@ Controller::Controller(int argc, char **argv) {
     running = true;
     ctrl_clusterID = 0;
 
-    std::string server_address = absl::StrFormat("%s:%d", "0.0.0.0", CONTROLLER_BASE_PORT + ctrl_port_offset);
-    ServerBuilder builder;
-    builder.AddListeningPort(server_address, grpc::InsecureServerCredentials());
-    builder.RegisterService(&service);
-    cq = builder.AddCompletionQueue();
-    server = builder.BuildAndStart();
+    std::string server_address = absl::StrFormat("tcp://*:%d", CONTROLLER_RECEIVE_PORT + ctrl_port_offset);
+    ctx = context_t();
+    server_socket = socket_t(ctx, ZMQ_REP);
+    server_socket.bind(server_address);
+    handlers = {
+        {MSG_TYPE[DEVICE_ADVERTISEMENT], std::bind(&Controller::handleDeviseAdvertisement, this, std::placeholders::_1)},
+        {MSG_TYPE[DUMMY_DATA], std::bind(&Controller::handleDummyDataRequest, this, std::placeholders::_1)},
+        {MSG_TYPE[START_FL], std::bind(&Controller::handleForwardFLRequest, this, std::placeholders::_1)}
+    };
+    server_address = absl::StrFormat("tcp://*:%d", CONTROLLER_MESSAGE_QUEUE_PORT + ctrl_port_offset);
+    message_queue = socket_t(ctx, ZMQ_PUB);
+    message_queue.bind(server_address);
 
     // append one device for sink of type server
-    NodeHandle *sink_node = new NodeHandle("sink", ctrl_sinkNodeIP,
-                                           ControlCommands::NewStub(grpc::CreateChannel(
-                                      absl::StrFormat("%s:%d", ctrl_sinkNodeIP, DEVICE_CONTROL_PORT + ctrl_port_offset), grpc::InsecureChannelCredentials())),
-                      new CompletionQueue(), SystemDeviceType::Server, DATA_BASE_PORT + ctrl_port_offset, {});
+    NodeHandle *sink_node = new NodeHandle("sink", ctrl_sinkNodeIP,  SystemDeviceType::Server,
+                                            DATA_BASE_PORT + ctrl_port_offset, {});
     devices.addDevice("sink", sink_node);
 
     if (ctrl_systemName == "fcpo") {
-        ctrl_fcpo_server = new FCPOServer(ctrl_systemName + "_" + ctrl_experimentName, ctrl_fcpo_config, ctrl_clusterCount);
+        ctrl_fcpo_server = new FCPOServer(ctrl_systemName + "_" + ctrl_experimentName, ctrl_fcpo_config, ctrl_clusterCount, &message_queue);
     }
 
     ctrl_nextSchedulingTime = std::chrono::system_clock::now();
@@ -642,27 +646,15 @@ Controller::~Controller() {
     }
 
     for (auto &device: devices.getList()) {
-        //skip Sink
-        if (device->name == "sink") {
-            continue;
-        }
-        EmptyMessage request;
-        EmptyMessage reply;
-        ClientContext context;
-        Status status;
-        std::unique_ptr<ClientAsyncResponseReader<EmptyMessage>> rpc(
-                device->stub->AsyncShutdown(&context, request, device->cq));
-        rpc->Finish(&reply, &status, (void *)1);
-        void *got_tag;
-        bool ok = false;
-        if (device->cq != nullptr) GPR_ASSERT(device->cq->Next(&got_tag, &ok));
-        device->cq->Shutdown();
+        if (device->name == "sink") { continue; }
+        sendMessageToDevice(device->name, MSG_TYPE[DEVICE_SHUTDOWN], "");
     }
-    server->Shutdown();
-    cq->Shutdown();
+    std::this_thread::sleep_for(std::chrono::seconds(10));
+    ctx.shutdown();
+    ctx.close();
 }
 
-// ============================================================ Excutor/Maintainers ============================================================ //
+// =========================================================== Executor/Maintainers ============================================================ //
 // ============================================================================================================================================= //
 // ============================================================================================================================================= //
 // ============================================================================================================================================= //
@@ -891,35 +883,6 @@ void Controller::ApplyScheduling() {
         colocationTemporalScheduling();
     }
 
-    // // Testing gpu portion reclaiming
-    // uint8_t numReclaims = 0, numSinks = 0;
-
-    // for (auto container: new_containers) {
-    //     if (container->model == Sink) {
-    //         numSinks++;
-    //     }
-    // }
-
-    // std::mt19937 gen(3000);
-
-    // std::uniform_int_distribution<> dis(1, 100);
-    // while (numReclaims < new_containers.size() - numSinks) {
-
-    //     for (auto container : new_containers) {
-    //         if (container->model == Sink || container->executionPortion == nullptr) {
-    //             continue;
-    //         }
-    //         int random = dis(gen);
-    //         if (random <= 33) {
-    //             std::cout << "Reclaiming GPU Portion for container: " << container->name << std::endl;
-    //             reclaimGPUPortion(container->executionPortion);
-    //             container->executionPortion = nullptr;
-    //             numReclaims++;
-    //         }
-    //     }
-    // }
-    // // done testing
-
     for (auto pipe: ctrl_scheduledPipelines.getList()) {
         for (auto &model: pipe->tk_pipelineModels) {
             //int i = 0;
@@ -1054,9 +1017,6 @@ void Controller::AdjustTiming(ContainerHandle *container) {
     container->cycleStartTime = ctrl_currSchedulingTime;
 
     TimeKeeping request;
-    ClientContext context;
-    EmptyMessage reply;
-    Status status;
     request.set_name(container->name);
     request.set_slo(container->pipelineSLO);
     request.set_time_budget(container->timeBudgetLeft);
@@ -1064,25 +1024,13 @@ void Controller::AdjustTiming(ContainerHandle *container) {
     request.set_end_time(container->endTime);
     request.set_local_duty_cycle(container->localDutyCycle);
     request.set_cycle_start_time(std::chrono::duration_cast<TimePrecisionType>(container->cycleStartTime.time_since_epoch()).count());
-    std::unique_ptr<ClientAsyncResponseReader<EmptyMessage>> rpc(
-            container->device_agent->stub->AsyncUpdateTimeKeeping(&context, request,
-                                                               container->device_agent->cq));
-    rpc->Finish(&reply, &status, (void *)1);
-    void *got_tag;
-    bool ok = false;
-    if (container->device_agent->cq != nullptr) GPR_ASSERT(container->device_agent->cq->Next(&got_tag, &ok));
-    if (!status.ok()) {
-        spdlog::get("container_agent")->error("Failed to update TimeKeeping for container: {0:s}", container->name);
-        return;
-    }
+    sendMessageToDevice(container->device_agent->name, MSG_TYPE[TIME_KEEPING_UPDATE], request.SerializeAsString());
+    spdlog::get("container_agent")->info("Requested container {0:s} to update time keeping!", container->name);
 }
 
 void Controller::StartContainer(ContainerHandle *container, bool easy_allocation) {
     spdlog::get("container_agent")->info("Starting container: {0:s}", container->name);
     ContainerConfig request;
-    ClientContext context;
-    EmptyMessage reply;
-    Status status;
     json start_config;
     unsigned int control_port;
     std::string pipelineName = splitString(container->name, "_")[2];
@@ -1102,7 +1050,7 @@ void Controller::StartContainer(ContainerHandle *container, bool easy_allocation
         start_config["container"]["cont_systemName"] = ctrl_systemName;
         start_config["container"]["cont_pipeName"] = pipelineName;
         start_config["container"]["cont_hostDevice"] = container->device_agent->name;
-        start_config["container"]["cont_hostDeviceType"] = ctrl_sysDeviceInfo[container->device_agent->type];
+        start_config["container"]["cont_hostDeviceType"] = SystemDeviceTypeList[container->device_agent->type];
         start_config["container"]["cont_name"] = container->name;
         start_config["container"]["cont_allocationMode"] = easy_allocation ? 1 : 0;
         if (ctrl_systemName == "ppp" || ctrl_systemName == "bce") {
@@ -1122,7 +1070,7 @@ void Controller::StartContainer(ContainerHandle *container, bool easy_allocation
 
         if (container->model != DataSource) {
             std::vector<uint32_t> modelProfile;
-            for (auto &[batchSize, profile]: container->pipelineModel->processProfiles.at(ctrl_sysDeviceInfo[container->device_agent->type]).batchInfer) {
+            for (auto &[batchSize, profile]: container->pipelineModel->processProfiles.at(SystemDeviceTypeList[container->device_agent->type]).batchInfer) {
                 modelProfile.push_back(batchSize);
                 modelProfile.push_back(profile.p95prepLat);
                 modelProfile.push_back(profile.p95inferLat);
@@ -1255,18 +1203,8 @@ void Controller::StartContainer(ContainerHandle *container, bool easy_allocation
         request.add_input_shape(dim);
     }
 
-    std::unique_ptr<ClientAsyncResponseReader<EmptyMessage>> rpc(
-            container->device_agent->stub->AsyncStartContainer(&context, request,
-                                                                      container->device_agent->cq));
-    rpc->Finish(&reply, &status, (void *)1);
-    void *got_tag;
-    bool ok = false;
-    if (container->device_agent->cq != nullptr) GPR_ASSERT(container->device_agent->cq->Next(&got_tag, &ok));
-    if (!status.ok()) {
-        spdlog::get("container_agent")->error("Failed to start container: {0:s}", container->name);
-        return;
-    }
-    spdlog::get("container_agent")->info("Container {0:s} started", container->name);
+    sendMessageToDevice(container->device_agent->name, MSG_TYPE[CONTAINER_START], request.SerializeAsString());
+    spdlog::get("container_agent")->info("Requested container {0:s} to start!", container->name);
 }
 
 void Controller::MoveContainer(ContainerHandle *container, NodeHandle *device) {
@@ -1316,9 +1254,6 @@ void Controller::MoveContainer(ContainerHandle *container, NodeHandle *device) {
 void Controller::AdjustUpstream(int port, ContainerHandle *upstr, NodeHandle *new_device,
                                 const std::string &dwnstr, AdjustUpstreamMode mode, const std::string &old_link) {
     ContainerLink request;
-    ClientContext context;
-    EmptyMessage reply;
-    Status status;
     request.set_mode(mode);
     request.set_name(upstr->name);
     request.set_downstream_name(dwnstr);
@@ -1328,44 +1263,26 @@ void Controller::AdjustUpstream(int port, ContainerHandle *upstr, NodeHandle *ne
     request.set_old_link(old_link);
     request.set_offloading_duration(0);
 
-    std::unique_ptr<ClientAsyncResponseReader<EmptyMessage>> rpc(
-            upstr->device_agent->stub->AsyncUpdateDownstream(&context, request, upstr->device_agent->cq));
-    rpc->Finish(&reply, &status, (void *)1);
-    void *got_tag;
-    bool ok = false;
-    if (upstr->device_agent->cq != nullptr) GPR_ASSERT(upstr->device_agent->cq->Next(&got_tag, &ok));
+    sendMessageToDevice(upstr->device_agent->name, MSG_TYPE[ADJUST_UPSTREAM], request.SerializeAsString());
     spdlog::get("container_agent")->info("Upstream of {0:s} adjusted to container {1:s}", dwnstr, upstr->name);
 }
 
 void Controller::SyncDatasource(ContainerHandle *prev, ContainerHandle *curr) {
     ContainerLink request;
-    ClientContext context;
-    EmptyMessage reply;
-    Status status;
     request.set_name(prev->name);
     request.set_downstream_name(curr->name);
-    std::unique_ptr<ClientAsyncResponseReader<EmptyMessage>> rpc(
-            curr->device_agent->stub->AsyncSyncDatasource(&context, request, curr->device_agent->cq));
-    rpc->Finish(&reply, &status, (void *)1);
-    void *got_tag;
-    bool ok = false;
-    if (curr->device_agent->cq != nullptr) GPR_ASSERT(curr->device_agent->cq->Next(&got_tag, &ok));
+
+    sendMessageToDevice(curr->device_agent->name, MSG_TYPE[SYNC_DATASOURCES], request.SerializeAsString());
+    spdlog::get("container_agent")->info("Datasource {0:s} synced with {1:s}", prev->name, curr->name);
 }
 
 void Controller::AdjustBatchSize(ContainerHandle *msvc, int new_bs) {
     msvc->batch_size = new_bs;
     ContainerInts request;
-    ClientContext context;
-    EmptyMessage reply;
-    Status status;
     request.set_name(msvc->name);
     request.add_value(new_bs);
-    std::unique_ptr<ClientAsyncResponseReader<EmptyMessage>> rpc(
-            msvc->device_agent->stub->AsyncUpdateBatchSize(&context, request, msvc->device_agent->cq));
-    rpc->Finish(&reply, &status, (void *)1);
-    void *got_tag;
-    bool ok = false;
-    if (msvc->device_agent->cq != nullptr) GPR_ASSERT(msvc->device_agent->cq->Next(&got_tag, &ok));
+
+    sendMessageToDevice(msvc->device_agent->name, MSG_TYPE[BATCH_SIZE_UPDATE], request.SerializeAsString());
     spdlog::get("container_agent")->info("Batch size of {0:s} adjusted to {1:d}", msvc->name, new_bs);
 }
 
@@ -1377,35 +1294,23 @@ void Controller::AdjustCudaDevice(ContainerHandle *msvc, GPUHandle *new_device) 
 void Controller::AdjustResolution(ContainerHandle *msvc, std::vector<int> new_resolution) {
     msvc->dimensions = new_resolution;
     ContainerInts request;
-    ClientContext context;
-    EmptyMessage reply;
-    Status status;
     request.set_name(msvc->name);
     request.add_value(new_resolution[0]);
     request.add_value(new_resolution[1]);
     request.add_value(new_resolution[2]);
-    std::unique_ptr<ClientAsyncResponseReader<EmptyMessage>> rpc(
-            msvc->device_agent->stub->AsyncUpdateResolution(&context, request, msvc->device_agent->cq));
-    rpc->Finish(&reply, &status, (void *)1);
-    void *got_tag;
-    bool ok = false;
-    if (msvc->device_agent->cq != nullptr) GPR_ASSERT(msvc->device_agent->cq->Next(&got_tag, &ok));
+
+    sendMessageToDevice(msvc->device_agent->name, MSG_TYPE[RESOLUTION_UPDATE], request.SerializeAsString());
+    spdlog::get("container_agent")->info("Resolution of {0:s} adjusted to {1:d}x{2:d}x{3:d}",
+                                      msvc->name, new_resolution[0], new_resolution[1], new_resolution[2]);
 }
 
 void Controller::StopContainer(ContainerHandle *container, NodeHandle *device, bool forced) {
     spdlog::get("container_agent")->info("Stopping container: {0:s}", container->name);
     ContainerSignal request;
-    ClientContext context;
-    EmptyMessage reply;
-    Status status;
     request.set_name(container->name);
     request.set_forced(forced);
-    std::unique_ptr<ClientAsyncResponseReader<EmptyMessage>> rpc(
-            device->stub->AsyncStopContainer(&context, request, container->device_agent->cq));
-    rpc->Finish(&reply, &status, (void *)1);
-    void *got_tag;
-    bool ok = false;
-    if (container->device_agent->cq != nullptr) GPR_ASSERT(container->device_agent->cq->Next(&got_tag, &ok));
+    sendMessageToDevice(device->name, MSG_TYPE[CONTAINER_STOP], request.SerializeAsString());
+
     if (container->gpuHandle != nullptr)
         container->gpuHandle->removeContainer(container);
     if (ctrl_systemName == "fcpo" && container->model != DataSource && container->model != Sink) {
@@ -1488,103 +1393,98 @@ void Controller::calculateQueueSizes(ContainerHandle &container, const ModelType
     container.expectedThroughput = postprocess_thrpt;
 }
 
-
 // ============================================================ Communication Handlers ============================================================ //
 // ================================================================================================================================================ //
 // ================================================================================================================================================ //
 // ================================================================================================================================================ //
 
-void Controller::HandleRecvRpcs() {
-    new DeviseAdvertisementHandler(&service, cq.get(), this);
-    new DummyDataRequestHandler(&service, cq.get(), this);
-    new ForwardFLRequestHandler(&service, cq.get(), this);
-    void *tag;
-    bool ok;
+void Controller::HandleControlMessages() {
     while (running) {
-        if (!cq->Next(&tag, &ok)) {
+        message_t message;
+        if (server_socket.recv(message, recv_flags::none)) {
+            std::string raw = message.to_string();
+            std::istringstream iss(raw);
+            std::string topic;
+            iss >> topic;
+            iss.get(); // skip the space after the topic
+            std::string payload((std::istreambuf_iterator<char>(iss)),
+                                std::istreambuf_iterator<char>());
+            if (handlers.count(topic)) {
+                handlers[topic](payload);
+            } else {
+                spdlog::get("container_agent")->error("Received unknown topic: {}", topic);
+            }
+        } else {
+            spdlog::get("container_agent")->error("Received unsupported message in communication!");
+        }
+    }
+}
+
+void Controller::handleDeviseAdvertisement(const std::string& msg) {
+    ConnectionConfigs request;
+    SystemInfo reply;
+    if (!request.ParseFromString(msg)){
+        spdlog::get("container_agent")->error("Failed to connect device with msg: {}", msg);
+        return;
+    }
+    std::string deviceName = request.device_name();
+    NodeHandle *node = new NodeHandle{deviceName, request.ip_address(), static_cast<SystemDeviceType>(request.device_type()),
+                                      DATA_BASE_PORT + ctrl_port_offset + request.agent_port_offset(), {}};
+    reply.set_name(ctrl_systemName);
+    reply.set_experiment(ctrl_experimentName);
+    server_socket.send(message_t(reply.SerializeAsString()), send_flags::dontwait);
+    initialiseGPU(node, request.processors(), std::vector<int>(request.memory().begin(), request.memory().end()));
+    devices.addDevice(deviceName, node);
+    spdlog::get("container_agent")->info("Device {} is connected to the system", request.device_name());
+    queryInDeviceNetworkEntries(devices.getDevice(deviceName));
+
+    if (node->type != SystemDeviceType::Server) {
+        std::thread networkCheck(&Controller::initNetworkCheck, this, std::ref(*(devices.getDevice(deviceName))), 1000, 300000, 30);
+        networkCheck.detach();
+    } else {
+        node->initialNetworkCheck = true;
+    }
+}
+
+void Controller::handleDummyDataRequest(const std::string& msg) {
+    DummyMessage request;
+    if (!request.ParseFromString(msg)){
+        spdlog::get("container_agent")->error("Failed handle dummy data: {}", msg);
+        return;
+    }
+    ClockType now = std::chrono::system_clock::now();
+    unsigned long diff = std::chrono::duration_cast<TimePrecisionType>(
+            now - std::chrono::time_point<std::chrono::system_clock>(TimePrecisionType(request.gen_time()))).count();
+    unsigned int size = request.data().size();
+    network_check_buffer[request.origin_name()].push_back({size, diff});
+    server_socket.send(message_t("success"), send_flags::dontwait);
+}
+
+void Controller::handleForwardFLRequest(const std::string& msg) {
+    FlData request;
+    if (!request.ParseFromString(msg)){
+        spdlog::get("container_agent")->error("Failed adding FCPO client with msg: {}", msg);
+        return;
+    }
+    for (auto &dev: devices.getMap()) {
+        if (dev.first == request.device_name()) {
+            if (ctrl_fcpo_server->addClient(request)) {
+                spdlog::get("container_agent")->info("Successfully added client {} to FCPO Aggregation.", request.device_name());
+                server_socket.send(message_t("success"), send_flags::dontwait);
+            } else {
+                spdlog::get("container_agent")->error("Failed adding client {} to FCPO Aggregation.", request.device_name());
+                server_socket.send(message_t("error"), send_flags::dontwait);
+            }
             break;
         }
-        GPR_ASSERT(ok);
-        static_cast<RequestHandler *>(tag)->Proceed();
     }
 }
 
-void Controller::DeviseAdvertisementHandler::Proceed() {
-    if (status == CREATE) {
-        status = PROCESS;
-        service->RequestAdvertiseToController(&ctx, &request, &responder, cq, cq, this);
-    } else if (status == PROCESS) {
-        new DeviseAdvertisementHandler(service, cq, controller);
-        std::string target_str = absl::StrFormat("%s:%d", request.ip_address(),
-                                                 DEVICE_CONTROL_PORT + controller->ctrl_port_offset + request.agent_port_offset());
-        std::string deviceName = request.device_name();
-        NodeHandle *node = new NodeHandle{deviceName,
-                                     request.ip_address(),
-                                          ControlCommands::NewStub(
-                                             grpc::CreateChannel(target_str, grpc::InsecureChannelCredentials())),
-                                     new CompletionQueue(),static_cast<SystemDeviceType>(request.device_type()),
-                                     DATA_BASE_PORT + controller->ctrl_port_offset + request.agent_port_offset(), {}};
-        reply.set_name(controller->ctrl_systemName);
-        reply.set_experiment(controller->ctrl_experimentName);
-        status = FINISH;
-        responder.Finish(reply, Status::OK, this);
-        controller->initialiseGPU(node, request.processors(), std::vector<int>(request.memory().begin(), request.memory().end()));
-        controller->devices.addDevice(deviceName, node);
-        spdlog::get("container_agent")->info("Device {} is connected to the system", request.device_name());
-        controller->queryInDeviceNetworkEntries(controller->devices.getDevice(deviceName));
-
-        if (node->type != SystemDeviceType::Server) {
-            std::thread networkCheck(&Controller::initNetworkCheck, controller, std::ref(*(controller->devices.getDevice(deviceName))), 1000, 300000, 30);
-            networkCheck.detach();
-        } else {
-            node->initialNetworkCheck = true;
-        }
-    } else {
-        GPR_ASSERT(status == FINISH);
-        delete this;
-    }
-}
-
-void Controller::DummyDataRequestHandler::Proceed() {
-    if (status == CREATE) {
-        status = PROCESS;
-        service->RequestSendDummyData(&ctx, &request, &responder, cq, cq, this);
-    } else if (status == PROCESS) {
-        new DummyDataRequestHandler(service, cq, controller);
-        ClockType now = std::chrono::system_clock::now();
-        unsigned long diff = std::chrono::duration_cast<TimePrecisionType>(
-                now - std::chrono::time_point<std::chrono::system_clock>(TimePrecisionType(request.gen_time()))).count();
-        unsigned int size = request.data().size();
-        controller->network_check_buffer[request.origin_name()].push_back({size, diff});
-        status = FINISH;
-        responder.Finish(reply, Status::OK, this);
-    } else {
-        GPR_ASSERT(status == FINISH);
-        delete this;
-    }
-}
-
-void Controller::ForwardFLRequestHandler::Proceed() {
-    if (status == CREATE) {
-        status = PROCESS;
-        service->RequestForwardFl(&ctx, &request, &responder, cq, cq, this);
-    } else if (status == PROCESS) {
-        new ForwardFLRequestHandler(service, cq, controller);
-        for (auto &dev: controller->devices.getMap()) {
-            if (dev.first == request.device_name()) {
-                if (controller->ctrl_fcpo_server->addClient(request, dev.second->stub, dev.second->cq)) {
-                    responder.Finish(reply, Status::OK, this);
-                } else {
-                    responder.Finish(reply, Status::CANCELLED, this);
-                }
-                break;
-            }
-        }
-        status = FINISH;
-    } else {
-        GPR_ASSERT(status == FINISH);
-        delete this;
-    }
+void Controller::sendMessageToDevice(const std::string &topik, const std::string &type, const std::string &content) {
+    std::string msg = absl::StrFormat("%s| %s %s", topik, type, content);
+    message_t zmq_msg(msg.size());
+    memcpy(zmq_msg.data(), msg.data(), msg.size());
+    message_queue.send(zmq_msg, send_flags::dontwait);
 }
 
 /**
@@ -1601,19 +1501,11 @@ NetworkEntryType Controller::initNetworkCheck(NodeHandle &node, uint32_t minPack
         return {};
     }
     LoopRange request;
-    EmptyMessage reply;
-    ClientContext context;
-    Status status;
     request.set_min(minPacketSize);
     request.set_max(maxPacketSize);
     request.set_repetitions(numLoops);
     try {
-        std::unique_ptr<ClientAsyncResponseReader<EmptyMessage>> rpc(
-                node.stub->AsyncExecuteNetworkTest(&context, request, node.cq));
-        rpc->Finish(&reply, &status, (void *)1);
-        void *got_tag;
-        bool ok = false;
-        if (node.cq != nullptr) GPR_ASSERT(node.cq->Next(&got_tag, &ok));
+        sendMessageToDevice(node.name, MSG_TYPE[NETWORK_CHECK], request.SerializeAsString());
         spdlog::get("container_agent")->info("Successfully started network check for device {}.", node.name);
     } catch (const std::exception &e) {
         spdlog::get("container_agent")->error("Error while starting network check for device {}.", node.name);
@@ -1662,7 +1554,7 @@ void Controller::checkNetworkConditions() {
         std::map<std::string, NetworkEntryType> networkEntries = {};
 
         
-        for (auto [deviceName, nodeHandle] : devices.getMap()) {
+        for (const auto& [deviceName, nodeHandle] : devices.getMap()) {
             std::unique_lock<std::mutex> lock(nodeHandle->nodeHandleMutex);
             bool initialNetworkCheck = nodeHandle->initialNetworkCheck;
             uint64_t timeSinceLastCheck = std::chrono::duration_cast<TimePrecisionType>(

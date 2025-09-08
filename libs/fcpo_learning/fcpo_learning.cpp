@@ -1,13 +1,13 @@
 #include "fcpo_learning.h"
 
 FCPOAgent::FCPOAgent(std::string& cont_name, uint state_size, uint timeout_size, uint max_batch,  uint scaling_size,
-                     CompletionQueue *cq, std::shared_ptr<InDeviceMessages::Stub> stub,
-                     BatchInferProfileListType profile, int base_batch, torch::Dtype precision, uint update_steps,
-                     uint update_steps_inc, uint federated_steps, double lambda, double gamma, double clip_epsilon,
-                     double penalty_weight, double theta, double sigma, double phi, double rho, int seed)
-        : precision(precision), batchInferProfileList(profile), cont_name(cont_name), cq(cq), stub(stub), lambda(lambda),
-          gamma(gamma), clip_epsilon(clip_epsilon), penalty_weight(penalty_weight), theta(theta), sigma(sigma), phi(phi),
-          rho(rho), state_size(state_size), timeout_size(timeout_size), max_batch(max_batch),
+                     socket_t *socket, BatchInferProfileListType profile, int base_batch, torch::Dtype precision,
+                     uint update_steps, uint update_steps_inc, uint federated_steps, double lambda, double gamma,
+                     double clip_epsilon, double penalty_weight, double theta, double sigma, double phi, double rho,
+                     int seed)
+        : precision(precision), batchInferProfileList(profile), cont_name(cont_name), device_socket(socket),
+          lambda(lambda), gamma(gamma), clip_epsilon(clip_epsilon), penalty_weight(penalty_weight), theta(theta),
+          sigma(sigma), phi(phi), rho(rho), state_size(state_size), timeout_size(timeout_size), max_batch(max_batch),
           base_batch(base_batch), scaling_size(scaling_size), update_steps(update_steps),
           update_steps_inc(update_steps_inc), federated_steps(federated_steps) {
     path = "../models/fcpo_learning/" + cont_name;
@@ -126,24 +126,33 @@ void FCPOAgent::federatedUpdate(const double loss) {
     torch::save(model, oss);
     request.set_network(oss.str());
     oss.str("");
-    EmptyMessage reply;
-    ClientContext context;
-    Status status;
-    std::unique_ptr<ClientAsyncResponseReader<EmptyMessage>> rpc(
-            stub->AsyncStartFederatedLearning(&context, request, cq));
-    rpc->Finish(&reply, &status, (void *)1);
-    void *got_tag;
-    bool ok = false;
-    if (cq != nullptr) GPR_ASSERT(cq->Next(&got_tag, &ok));
-    if (!status.ok()){
-        spdlog::get("container_agent")->error("Federated update failed: {}", status.error_message());
+
+    std::string msg = absl::StrFormat("%s %s", MSG_TYPE[START_FL], request.SerializeAsString());
+    message_t zmq_msg(msg.size()), reply;
+    memcpy(zmq_msg.data(), msg.data(), msg.size());
+    if (!device_socket->send(zmq_msg, send_flags::dontwait)) {
+        spdlog::get("container_agent")->error("Failed to send federated update request to device socket.");
         federated_steps_counter = 1; // 1 means that we are starting local updates again until the next federation
-    } else {
+        return;
+    }
+    if (device_socket->recv(reply) && reply.to_string() == "success") {
+        spdlog::get("container_agent")->info("Federated update request sent successfully.");
         federatedStartTime = std::chrono::high_resolution_clock::now();
+    } else {
+        spdlog::get("container_agent")->error("Federated update failed (no response or error).");
+        federated_steps_counter = 1; // 1 means that we are starting local updates again until the next federation
     }
 }
 
-void FCPOAgent::federatedUpdateCallback(FlData &response) {
+void FCPOAgent::federatedUpdateCallback(const std::string &msg) {
+    FlData response;
+    if (!response.ParseFromString(msg)) {
+        spdlog::get("container_agent")->error("Failed to parse federated update response: {}", msg);
+        steps_counter = 0;
+        federated_steps_counter = 1; // 1 means that we are starting local updates again until the next federation
+        reset();
+        return;
+    }
     spdlog::get("container_agent")->info("Federated Update received!");
     std::istringstream iss(response.network());
     std::unique_lock<std::mutex> lock(model_mutex);
@@ -313,9 +322,15 @@ std::tuple<int, int, int> FCPOAgent::runStep() {
 }
 
 
-FCPOServer::FCPOServer(std::string run_name, nlohmann::json parameters, uint16_t clusterCount, uint state_size,
+// ============================================================= FCPO SERVER ============================================================== //
+// ======================================================================================================================================== //
+// ======================================================================================================================================== //
+// ======================================================================================================================================== //
+
+
+FCPOServer::FCPOServer(std::string run_name, nlohmann::json parameters, uint16_t clusterCount, socket_t *mq, uint state_size,
                        torch::Dtype precision)
-        : precision(precision), state_size(state_size) {
+        : precision(precision), message_queue(mq), state_size(state_size) {
     path = "../models/fcpo_learning/" + run_name;
     std::filesystem::create_directories(std::filesystem::path(path));
     out.open(path + "/latest_log.csv");
@@ -352,12 +367,11 @@ FCPOServer::FCPOServer(std::string run_name, nlohmann::json parameters, uint16_t
     t.detach();
 }
 
-bool FCPOServer::addClient(FlData &request, std::shared_ptr<ControlCommands::Stub> stub, CompletionQueue *cq) {
+bool FCPOServer::addClient(FlData &request) {
     std::istringstream iss(request.network());
     federated_clients.push_back({request,
                                  std::make_shared<MultiPolicyNet>(request.state_size(), request.timeout_size(),
-                                                                  request.max_batch(), request.threading_size()),
-                                 stub, cq});
+                                                                  request.max_batch(), request.threading_size())});
     try {
         torch::load(federated_clients.back().model, iss);
         federated_clients.back().model->to(precision);
@@ -369,7 +383,7 @@ bool FCPOServer::addClient(FlData &request, std::shared_ptr<ControlCommands::Stu
     return true;
 }
 
-void FCPOServer::updateCluster(uint16_t id, std::vector<std::tuple<std::string, std::shared_ptr<ControlCommands::Stub>, CompletionQueue *, nlohmann::json>> agents) {
+void FCPOServer::updateCluster(uint16_t id, std::vector<std::tuple<std::string, std::string, nlohmann::json>> agents) {
     if (id >= models.size()) {
         spdlog::get("container_agent")->error("Server received invalid cluster ID: {}", id);
         return;
@@ -378,8 +392,8 @@ void FCPOServer::updateCluster(uint16_t id, std::vector<std::tuple<std::string, 
     spdlog::get("container_agent")->info("Switching to cluster ID: {}", id);
     clusterID = id;
     for (auto& a: agents) {
-        if (std::get<3>(a).contains("batch_size"))
-            sendClusterModel(std::get<0>(a), std::get<1>(a), std::get<2>(a), std::get<3>(a));
+        if (std::get<2>(a).contains("batch_size"))
+            sendClusterModel(std::get<0>(a), std::get<1>(a), std::get<2>(a));
     }
 }
 
@@ -446,8 +460,7 @@ void FCPOServer::proceed() {
     }
 }
 
-void FCPOServer::sendClusterModel(std::string name, std::shared_ptr<ControlCommands::Stub> stub, CompletionQueue * cq,
-                                  nlohmann::json conf) {
+void FCPOServer::sendClusterModel(std::string name, std::strint queue, nlohmann::json conf) {
     FlData request;
     std::ostringstream oss;
     auto tmp_model = std::make_shared<MultiPolicyNet>(state_size, conf["batch_size"], conf["timeout_size"],
@@ -489,13 +502,9 @@ void FCPOServer::returnFLModel(ClientModel &client) {
     torch::save(client.model, oss);
     request.set_name(client.data.name());
     request.set_network(oss.str());
-    ClientContext context;
-    EmptyMessage reply;
-    Status status;
-    std::unique_ptr<ClientAsyncResponseReader<EmptyMessage>> rpc(
-            client.stub->AsyncReturnFl(&context, request, client.cq));
-    rpc->Finish(&reply, &status, (void *)1);
-    void *got_tag;
-    bool ok = false;
-    if (client.cq != nullptr) GPR_ASSERT(client.cq->Next(&got_tag, &ok));
+
+    std::string msg = absl::StrFormat("%s| %s %s", client.data.device_name(), MSG_TYPE[RETURN_FL], request.SerializeAsString());
+    message_t zmq_msg(msg.size());
+    memcpy(zmq_msg.data(), msg.data(), msg.size());
+    message_queue->send(zmq_msg, send_flags::dontwait);
 }

@@ -158,6 +158,9 @@ else ()
 set(_GRPC_CPP_PLUGIN_EXECUTABLE $<TARGET_FILE:gRPC::grpc_cpp_plugin>)
 endif ()
 
+# ZeroMQ
+find_package(cppzmq REQUIRED)
+
 # SPDLOG logging
 find_package(spdlog REQUIRED)
 

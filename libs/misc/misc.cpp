@@ -6,6 +6,30 @@ using json = nlohmann::json;
 
 std::ofstream errOutFile;
 
+std::unordered_map<MESSAGE_TYPE_VALUES, std::string> MSG_TYPE = {
+        {DEVICE_ADVERTISEMENT, "DEV_AD"},
+        {DUMMY_DATA, "DUMMY"},
+
+        {NETWORK_CHECK, "NET_CHECK"},
+        {DEVICE_SHUTDOWN, "SHUTDOWN"},
+
+        {CONTAINER_START, "CONT_START"},
+        {MSVC_START_REPORT, "MSVC_START"},
+        {CONTEXT_METRICS, "CXT_MET"},
+        {ADJUST_UPSTREAM, "ADJ_UPSTR"},
+        {UPDATE_SENDER, "UPD_SENDER"},
+        {SYNC_DATASOURCES, "SYNC_DS"},
+        {TRANSFER_FRAME_ID, "FRAME_ID"},
+        {BATCH_SIZE_UPDATE, "BS"},
+        {RESOLUTION_UPDATE, "RES"},
+        {TIME_KEEPING_UPDATE, "TIME_KEEP"},
+        {CONTAINER_STOP, "CONT_STOP"},
+
+        {START_FL, "FL_START"},
+        {RETURN_FL, "RET_FL"},
+        {BCEDGE_UPDATE, "BCEDGE_UPD"}
+};
+
 std::chrono::time_point<std::chrono::_V2::system_clock, std::chrono::milliseconds> timePointCastMillisecond(
     std::chrono::system_clock::time_point tp) {
     return std::chrono::time_point_cast<std::chrono::milliseconds>(tp);

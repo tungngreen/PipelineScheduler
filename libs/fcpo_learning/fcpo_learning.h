@@ -5,21 +5,13 @@
 #include <random>
 #include <cmath>
 #include <chrono>
-#include "indevicecommands.grpc.pb.h"
 #include "indevicemessages.grpc.pb.h"
-#include "controlcommands.grpc.pb.h"
+#include "controlmessages.grpc.pb.h"
 
 #ifndef PIPEPLUSPLUS_BATCH_LEARNING_H
 #define PIPEPLUSPLUS_BATCH_LEARNING_H
 
-using controlcommands::ControlCommands;
-using grpc::Status;
-using grpc::CompletionQueue;
-using grpc::ClientContext;
-using grpc::ClientAsyncResponseReader;
-using indevicemessages::InDeviceMessages;
-using indevicecommands::FlData;
-using EmptyMessage = google::protobuf::Empty;
+using indevicemessages::FlData;
 using T = torch::Tensor;
 
 enum threadingAction {
@@ -236,11 +228,10 @@ struct SinglePolicyNet: torch::nn::Module {
 class FCPOAgent {
 public:
     FCPOAgent(std::string& cont_name, uint state_size, uint timeout_size, uint max_batch, uint scaling_size,
-             CompletionQueue *cq, std::shared_ptr<InDeviceMessages::Stub> stub, BatchInferProfileListType profile,
-             int base_batch, torch::Dtype precision = torch::kF64, uint update_steps = 60, uint update_steps_inc = 5,
-             uint federated_steps = 5, double lambda = 0.95, double gamma = 0.99, double clip_epsilon = 0.2,
-             double penalty_weight = 0.1, double theta = 1.0, double sigma = 10.0, double phi = 2.0, double rho = 1.0,
-             int seed = 42);
+             socket_t *server, BatchInferProfileListType profile, int base_batch, torch::Dtype precision = torch::kF64,
+             uint update_steps = 60, uint update_steps_inc = 5, uint federated_steps = 5, double lambda = 0.95,
+             double gamma = 0.99, double clip_epsilon = 0.2, double penalty_weight = 0.1, double theta = 1.0,
+             double sigma = 10.0, double phi = 2.0, double rho = 1.0, int seed = 42);
 
     ~FCPOAgent() {
         torch::save(model, path + "/latest_model.pt");
@@ -251,7 +242,7 @@ public:
     void rewardCallback(double throughput, double latency_penalty, double oversize_penalty, double memory_use);
     void setState(double curr_timeout, double curr_batch, double curr_scaling,  double arrival, double pre_queue_size,
                   double inf_queue_size, double post_queue_size, double slo, double memory_use);
-    void federatedUpdateCallback(FlData &response);
+    void federatedUpdateCallback(const std::string &msg);
 
 private:
     void update();
@@ -281,8 +272,7 @@ private:
     std::ofstream out;
     std::string path;
     std::string cont_name;
-    CompletionQueue *cq;
-    std::shared_ptr<InDeviceMessages::Stub> stub;
+    socket_t *device_socket;
 
     // PPO Hyperparameters
     double lambda;
@@ -314,7 +304,7 @@ private:
 
 class FCPOServer {
 public:
-    FCPOServer(std::string run_name, nlohmann::json parameters, uint16_t clusterCount, uint state_size = 9,
+    FCPOServer(std::string run_name, nlohmann::json parameters, uint16_t clusterCount, socket_t *mq, uint state_size = 9,
                torch::Dtype precision = torch::kF32);
     ~FCPOServer() {
         int i = 0;
@@ -324,13 +314,13 @@ public:
         out.close();
     }
 
-    bool addClient(FlData &data, std::shared_ptr<ControlCommands::Stub> stub, CompletionQueue *cq);
+    bool addClient(FlData &data);
 
     void incrementClientCounter() { client_counter++; }
 
     void decrementClientCounter() { client_counter--; }
 
-    void updateCluster(uint16_t id, std::vector<std::tuple<std::string, std::shared_ptr<ControlCommands::Stub>, CompletionQueue *, nlohmann::json>> devices);
+    void updateCluster(uint16_t id, std::vector<std::tuple<std::string, std::string, nlohmann::json>> devices);
 
     void stop() { run = false; }
 
@@ -358,16 +348,13 @@ private:
     struct ClientModel{
         FlData data;
         std::shared_ptr<MultiPolicyNet> model;
-        std::shared_ptr<ControlCommands::Stub> stub;
-        CompletionQueue *cq;
     };
 
     void proceed();
 
     void returnFLModel(ClientModel &client);
 
-    void sendClusterModel(std::string name, std::shared_ptr<ControlCommands::Stub> stub, CompletionQueue * cq,
-                          nlohmann::json conf);
+    void sendClusterModel(std::string name, std::string queue, nlohmann::json conf);
 
     std::vector<std::shared_ptr<MultiPolicyNet>> models;
     std::vector<std::map<std::vector<int64_t>, T>> action_heads_by_size;
@@ -381,6 +368,7 @@ private:
     std::ofstream out;
     std::string path;
     std::atomic<bool> run;
+    socket_t *message_queue;
 
     // PPO Hyperparameters
     double lambda;

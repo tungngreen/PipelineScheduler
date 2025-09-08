@@ -15,7 +15,7 @@
 #include "opencv2/opencv.hpp"
 #include <unordered_set>
 #include <pqxx/pqxx>
-#include <grpcpp/grpcpp.h>
+#include <zmq.hpp>
 #include "absl/strings/str_format.h"
 #include "absl/flags/parse.h"
 #include "absl/flags/flag.h"
@@ -25,9 +25,7 @@
 
 ABSL_DECLARE_FLAG(uint16_t, deploy_mode);
 
-using grpc::Status;
-using grpc::CompletionQueue;
-using grpc::ClientAsyncResponseReader;
+using namespace zmq;
 
 typedef uint16_t NumQueuesType;
 typedef uint16_t QueueLengthType;
@@ -48,9 +46,36 @@ typedef uint16_t BatchSizeType;
 typedef uint32_t RequestMemSizeType;
 
 const int DATA_BASE_PORT = 55001;
-const int CONTROLLER_BASE_PORT = 60001;
-const int DEVICE_CONTROL_PORT = 60002;
-const int INDEVICE_CONTROL_PORT = 60003;
+const int CONTROLLER_RECEIVE_PORT = 60001;
+const int CONTROLLER_MESSAGE_QUEUE_PORT = 60002;
+const int IN_DEVICE_RECEIVE_PORT = 60011;
+const int IN_DEVICE_MESSAGE_QUEUE_PORT = 60012;
+
+enum MESSAGE_TYPE_VALUES {
+    DEVICE_ADVERTISEMENT,
+    DUMMY_DATA,
+
+    NETWORK_CHECK,
+    DEVICE_SHUTDOWN,
+
+    CONTAINER_START,
+    MSVC_START_REPORT,
+    CONTEXT_METRICS,
+    ADJUST_UPSTREAM,
+    UPDATE_SENDER,
+    SYNC_DATASOURCES,
+    TRANSFER_FRAME_ID,
+    BATCH_SIZE_UPDATE,
+    RESOLUTION_UPDATE,
+    TIME_KEEPING_UPDATE,
+    CONTAINER_STOP,
+
+    START_FL,
+    RETURN_FL,
+    BCEDGE_UPDATE
+};
+
+extern std::unordered_map<MESSAGE_TYPE_VALUES, std::string> MSG_TYPE;
 
 std::chrono::time_point<std::chrono::_V2::system_clock, std::chrono::milliseconds> timePointCastMillisecond(
     std::chrono::system_clock::time_point tp);

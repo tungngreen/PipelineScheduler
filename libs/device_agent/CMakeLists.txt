@@ -89,22 +89,22 @@ target_include_directories(device_agent
 
 target_link_libraries(device_agent
         PUBLIC
-                device_comm_grpc_proto
-                device_mess_grpc_proto
-                absl::flags
-                absl::flags_parse
-                ${CMAKE_THREAD_LIBS_INIT}
-                ${_GRPC_GRPCPP}
-                ${_REFLECTION}
-                ${_PROTOBUF_LIBPROTOBUF}
-                ${PostgreSQL_LIBRARIES}
-                ${LIBPQXX_LIBRARIES}
-                ${CMAKE_THREAD_LIBS_INIT}
-                ${CUDA_LIBRARIES}
-                profiler
-                communicator
-                microservice
-                controller
+            cppzmq
+            device_mess_grpc_proto
+            absl::flags
+            absl::flags_parse
+            ${CMAKE_THREAD_LIBS_INIT}
+            ${_GRPC_GRPCPP}
+            ${_REFLECTION}
+            ${_PROTOBUF_LIBPROTOBUF}
+            ${PostgreSQL_LIBRARIES}
+            ${LIBPQXX_LIBRARIES}
+            ${CMAKE_THREAD_LIBS_INIT}
+            ${CUDA_LIBRARIES}
+            profiler
+            communicator
+            microservice
+            controller
 )
 
 # Here we configure variables specifying the target directories.
