@@ -228,7 +228,7 @@ struct SinglePolicyNet: torch::nn::Module {
 class FCPOAgent {
 public:
     FCPOAgent(std::string& cont_name, uint state_size, uint timeout_size, uint max_batch, uint scaling_size,
-             socket_t *server, BatchInferProfileListType profile, int base_batch, torch::Dtype precision = torch::kF64,
+             socket_t *socket, BatchInferProfileListType profile, int base_batch, torch::Dtype precision = torch::kF64,
              uint update_steps = 60, uint update_steps_inc = 5, uint federated_steps = 5, double lambda = 0.95,
              double gamma = 0.99, double clip_epsilon = 0.2, double penalty_weight = 0.1, double theta = 1.0,
              double sigma = 10.0, double phi = 2.0, double rho = 1.0, int seed = 42);

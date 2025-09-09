@@ -460,7 +460,7 @@ void FCPOServer::proceed() {
     }
 }
 
-void FCPOServer::sendClusterModel(std::string name, std::strint queue, nlohmann::json conf) {
+void FCPOServer::sendClusterModel(std::string name, std::string queue, nlohmann::json conf) {
     FlData request;
     std::ostringstream oss;
     auto tmp_model = std::make_shared<MultiPolicyNet>(state_size, conf["batch_size"], conf["timeout_size"],
@@ -481,19 +481,11 @@ void FCPOServer::sendClusterModel(std::string name, std::strint queue, nlohmann:
     torch::save(tmp_model, oss);
     request.set_name(name);
     request.set_network(oss.str());
-    ClientContext context;
-    EmptyMessage reply;
-    Status status;
-    std::unique_ptr<ClientAsyncResponseReader<EmptyMessage>> rpc(
-            stub->AsyncReturnFl(&context, request, cq));
-    rpc->Finish(&reply, &status, (void *)1);
-    void *got_tag;
-    bool ok = false;
-    if (cq != nullptr) {
-        auto deadline = std::chrono::system_clock::now() + std::chrono::seconds(2);
-        grpc::CompletionQueue::NextStatus status = cq->AsyncNext(&got_tag, &ok, deadline);
-        GPR_ASSERT(status == grpc::CompletionQueue::GOT_EVENT);
-    }
+
+    std::string msg = absl::StrFormat("%s| %s %s", queue, MSG_TYPE[RETURN_FL], request.SerializeAsString());
+    message_t zmq_msg(msg.size());
+    memcpy(zmq_msg.data(), msg.data(), msg.size());
+    message_queue->send(zmq_msg, send_flags::dontwait);
 }
 
 void FCPOServer::returnFLModel(ClientModel &client) {

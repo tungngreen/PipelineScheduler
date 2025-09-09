@@ -122,7 +122,7 @@ int main(int argc, char **argv) {
         }
 
     } else if (algorithm == "fcpo") { // only used for testing the training
-        auto *fcpo = new FCPOAgent(algorithm, 7, 2, 16, 2, nullptr, nullptr, {}, 1, torch::kF32, steps,
+        auto *fcpo = new FCPOAgent(algorithm, 7, 2, 16, 2, nullptr, {}, 1, torch::kF32, steps,
                                         0, epochs + 2, .95, .99, .75, .15);
         for (int i = 0; i < epochs; i++) {
             int last_resolution = 0, last_batch_size = 0, last_threading = 0;

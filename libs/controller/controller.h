@@ -846,12 +846,11 @@ public:
         return elements;
     }
 
-    std::vector<std::tuple<std::string, std::shared_ptr<ControlCommands::Stub>, CompletionQueue *, nlohmann::json>> getFLConnections() {
+    std::vector<std::tuple<std::string, std::string, nlohmann::json>> getFLConnections() {
         std::lock_guard<std::mutex> lock(containersMutex);
-        std::vector<std::tuple<std::string, std::shared_ptr<ControlCommands::Stub>, CompletionQueue *, nlohmann::json>> elements;
+        std::vector<std::tuple<std::string, std::string, nlohmann::json>> elements;
         for (auto &c: list) {
-            elements.push_back(std::make_tuple(c.first, c.second->device_agent->stub, c.second->device_agent->cq,
-                                               c.second->fcpo_conf));
+            elements.push_back(std::make_tuple(c.first, c.second->device_agent->name, c.second->fcpo_conf));
         }
         return elements;
     }
