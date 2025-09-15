@@ -65,24 +65,36 @@ RUN wget -q https://cmake.org/files/v3.25/cmake-3.25.2-linux-aarch64.sh -O /tmp/
 # gRPC (lean build)
 # --------------------------------------------------
 ARG GRPC_INSTALL_DIR=/grpc
-RUN git clone --recurse-submodules -b v1.62.0 --depth 1 https://github.com/grpc/grpc /grpc-src && \
-    mkdir -p /grpc-src/build && cd /grpc-src/build && \
-    cmake -DgRPC_INSTALL=ON \
-          -DgRPC_BUILD_TESTS=OFF \
-          -DBUILD_SHARED_LIBS=ON \
-          -DBUILD_DEPS=ON \
-          -DCMAKE_BUILD_TYPE=Release \
-          -DCMAKE_INSTALL_PREFIX=$GRPC_INSTALL_DIR .. && \
-    make -j"$(nproc)" install && \
-    rm -rf /grpc-src
+RUN git clone --recurse-submodules -b v1.62.0 --depth 1 --shallow-submodules https://github.com/grpc/grpc /grpc-src && \
+    cd /grpc-src && mkdir -p third_party/abseil-cpp/cmake/build && cd third_party/abseil-cpp/cmake/build && \
+    cmake -DCMAKE_BUILD_TYPE=Release -DCMAKE_POSITION_INDEPENDENT_CODE=TRUE ../.. && make "-j${GRPC_CPP_DISTRIBTEST_BUILD_COMPILER_JOBS}" install && \
+    cd /grpc-src && mkdir -p "third_party/cares/cares/cmake/build" && cd third_party/cares/cares/cmake/build && \
+    cmake -DCMAKE_BUILD_TYPE=Release ../.. && make "-j${GRPC_CPP_DISTRIBTEST_BUILD_COMPILER_JOBS}" install && \
+    cd /grpc-src && mkdir -p "third_party/protobuf/cmake/build" && cd "third_party/protobuf/cmake/build" && \
+    cmake -Dprotobuf_BUILD_SHARED_LIBS=ON -Dprotobuf_BUILD_TESTS=OFF -DCMAKE_BUILD_TYPE=Release -Dprotobuf_ABSL_PROVIDER=package ../.. && make "-j4" install && \
+    cd /grpc-src && mkdir -p "third_party/re2/cmake/build" && cd "third_party/re2/cmake/build" && \
+    cmake -DCMAKE_BUILD_TYPE=Release -DCMAKE_POSITION_INDEPENDENT_CODE=TRUE ../.. && make "-j${GRPC_CPP_DISTRIBTEST_BUILD_COMPILER_JOBS}" install && \
+    cd /grpc-src && mkdir -p "third_party/zlib/cmake/build" && cd "third_party/zlib/cmake/build" && \
+    cmake -DCMAKE_BUILD_TYPE=Release ../.. && make "-j${GRPC_CPP_DISTRIBTEST_BUILD_COMPILER_JOBS}" install && \
+    cd /grpc-src && git submodule update --init && mkdir -p cmake/build && cd cmake/build && \
+    cmake -DgRPC_INSTALL=ON                \
+              -DCMAKE_BUILD_TYPE=Release       \
+              -DgRPC_ABSL_PROVIDER=package     \
+              -DgRPC_CARES_PROVIDER=package    \
+              -DgRPC_PROTOBUF_PROVIDER=package \
+              -DgRPC_RE2_PROVIDER=package      \
+              -DgRPC_SSL_PROVIDER=package      \
+              -DgRPC_ZLIB_PROVIDER=package     \
+              -DBUILD_DEPS=ON \
+              -DCMAKE_INSTALL_PREFIX=$GRPC_INSTALL_DIR \
+      ../.. && make -j$(nproc) install && rm -rf /grpc-src
 ENV PATH="${PATH}:${GRPC_INSTALL_DIR}/bin"
 
 # --------------------------------------------------
 # OpenCV + contrib (with CUDA)
 # --------------------------------------------------
 ENV OPENCV_VERSION=4.10.0
-RUN apt-get -y purge '*libopencv*' && \
-    wget -q -O opencv.zip https://github.com/opencv/opencv/archive/refs/tags/${OPENCV_VERSION}.zip && unzip -q opencv.zip && \
+RUN wget -q -O opencv.zip https://github.com/opencv/opencv/archive/refs/tags/${OPENCV_VERSION}.zip && unzip -q opencv.zip && \
     wget -q -O opencv_contrib.zip https://github.com/opencv/opencv_contrib/archive/refs/tags/${OPENCV_VERSION}.zip && unzip -q opencv_contrib.zip && \
     mkdir -p opencv-${OPENCV_VERSION}/release && cd opencv-${OPENCV_VERSION}/release && \
     cmake -DOPENCV_EXTRA_MODULES_PATH=../../opencv_contrib-${OPENCV_VERSION}/modules \

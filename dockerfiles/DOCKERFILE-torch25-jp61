@@ -19,6 +19,7 @@ RUN apt-get update --fix-missing && \
         git \
         libavcodec-dev \
         libavformat-dev \
+        libboost-all-dev \
         libbz2-dev \
         libgstreamer1.0-dev \
         libgstreamer-plugins-base1.0-dev \
@@ -66,13 +67,22 @@ RUN wget -q https://cmake.org/files/v3.25/cmake-3.25.2-linux-aarch64.sh -O /tmp/
 # gRPC (lean build)
 # --------------------------------------------------
 ARG GRPC_INSTALL_DIR=/grpc
-RUN git clone --recurse-submodules -b v1.62.0 --depth 1 https://github.com/grpc/grpc /grpc-src && \
-    mkdir -p /grpc-src/build && cd /grpc-src/build && \
-    cmake -DgRPC_INSTALL=ON -DgRPC_BUILD_TESTS=OFF \
-          -DCMAKE_BUILD_TYPE=Release \
-          -DCMAKE_INSTALL_PREFIX=$GRPC_INSTALL_DIR .. && \
-    make -j"$(nproc)" && make install && \
-    rm -rf /grpc-src
+RUN git clone --recurse-submodules -b v1.62.0 --depth 1 --shallow-submodules https://github.com/grpc/grpc /grpc-src && \
+    cd /grpc-src && mkdir -p third_party/abseil-cpp/cmake/build && cd third_party/abseil-cpp/cmake/build && \
+    cmake -DCMAKE_BUILD_TYPE=Release -DCMAKE_POSITION_INDEPENDENT_CODE=TRUE ../.. && make "-j${GRPC_CPP_DISTRIBTEST_BUILD_COMPILER_JOBS}" install && \
+    cd /grpc-src && mkdir -p "third_party/cares/cares/cmake/build" && cd third_party/cares/cares/cmake/build && \
+    cmake -DCMAKE_BUILD_TYPE=Release ../.. && make "-j${GRPC_CPP_DISTRIBTEST_BUILD_COMPILER_JOBS}" install && \
+    cd /grpc-src && mkdir -p "third_party/protobuf/cmake/build" && cd "third_party/protobuf/cmake/build" && \
+    cmake -Dprotobuf_BUILD_SHARED_LIBS=ON -Dprotobuf_BUILD_TESTS=OFF -DCMAKE_BUILD_TYPE=Release -Dprotobuf_ABSL_PROVIDER=package ../.. && make "-j4" install && \
+    cd /grpc-src && mkdir -p "third_party/re2/cmake/build" && cd "third_party/re2/cmake/build" && \
+    cmake -DCMAKE_BUILD_TYPE=Release -DCMAKE_POSITION_INDEPENDENT_CODE=TRUE ../.. && make "-j${GRPC_CPP_DISTRIBTEST_BUILD_COMPILER_JOBS}" install && \
+    cd /grpc-src && mkdir -p "third_party/zlib/cmake/build" && cd "third_party/zlib/cmake/build" && \
+    cmake -DCMAKE_BUILD_TYPE=Release ../.. && make "-j${GRPC_CPP_DISTRIBTEST_BUILD_COMPILER_JOBS}" install && \
+    cd /grpc-src && git submodule update --init && mkdir -p cmake/build && cd cmake/build && \
+    cmake -DgRPC_INSTALL=ON -DCMAKE_BUILD_TYPE=Release -DgRPC_ABSL_PROVIDER=package -DgRPC_CARES_PROVIDER=package    \
+          -DgRPC_PROTOBUF_PROVIDER=package -DgRPC_RE2_PROVIDER=package -DgRPC_SSL_PROVIDER=package \
+          -DgRPC_ZLIB_PROVIDER=package -DBUILD_DEPS=ON -DCMAKE_INSTALL_PREFIX=$GRPC_INSTALL_DIR \
+      ../.. && make -j$(nproc) install && rm -rf /grpc-src
 ENV PATH=${PATH}:${GRPC_INSTALL_DIR}/bin
 
 # --------------------------------------------------
@@ -105,7 +115,7 @@ RUN git clone --depth 1 https://github.com/zeromq/libzmq.git && \
 # --------------------------------------------------
 # Boost 1.84.0
 # --------------------------------------------------
-RUN wget -q https://boostorg.jfrog.io/artifactory/main/release/1.84.0/source/boost_1_84_0.tar.gz && \
+RUN wget -q https://archives.boost.io/release/1.84.0/source/boost_1_84_0.tar.gz && \
     tar -xzf boost_1_84_0.tar.gz && cd boost_1_84_0 && \
     ./bootstrap.sh --prefix=/usr && ./b2 -j"$(nproc)" install && \
     cd / && rm -rf boost_1_84_0 boost_1_84_0.tar.gz
@@ -124,7 +134,7 @@ RUN git clone --branch v1.5.0 --depth 1 https://github.com/gabime/spdlog.git && 
 # --------------------------------------------------
 ARG LIBSPARSE_LT=libsparselt
 ARG LIBSPARSE_LT_LINK=https://developer.download.nvidia.com/compute/cusparselt/redist/libcusparse_lt/linux-aarch64/libcusparse_lt-linux-aarch64-0.6.3.2-archive.tar.xz
-ARG LD_LIBRARY_PATH="/${LIBSPARSE_LT}/lib:$LD_LIBRARY_PATH"
+ENV LD_LIBRARY_PATH="/${LIBSPARSE_LT}/lib:$LD_LIBRARY_PATH"
 ARG TORCH_VERSION=torch-2.5.0a0+872d972e41.nv24.08.17622132-cp310-cp310-linux_aarch64.whl
 ARG TORCH_LINK=https://developer.download.nvidia.com/compute/redist/jp/v61/pytorch/torch-2.5.0a0+872d972e41.nv24.08.17622132-cp310-cp310-linux_aarch64.whl
 RUN wget -q -O ${LIBSPARSE_LT}.tar.xz ${LIBSPARSE_LT_LINK} && \
