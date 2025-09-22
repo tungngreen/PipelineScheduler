@@ -626,6 +626,7 @@ Controller::Controller(int argc, char **argv) {
     server_address = absl::StrFormat("tcp://*:%d", CONTROLLER_MESSAGE_QUEUE_PORT + ctrl_port_offset);
     message_queue = socket_t(ctx, ZMQ_PUB);
     message_queue.bind(server_address);
+    message_queue.set(zmq::sockopt::sndtimeo, 100);
 
     // append one device for sink of type server
     NodeHandle *sink_node = new NodeHandle("sink", ctrl_sinkNodeIP,  SystemDeviceType::Server,
@@ -1484,7 +1485,7 @@ void Controller::sendMessageToDevice(const std::string &topik, const std::string
     std::string msg = absl::StrFormat("%s| %s %s", topik, type, content);
     message_t zmq_msg(msg.size());
     memcpy(zmq_msg.data(), msg.data(), msg.size());
-    message_queue.send(zmq_msg, send_flags::dontwait);
+    message_queue.send(zmq_msg, send_flags::none);
 }
 
 /**

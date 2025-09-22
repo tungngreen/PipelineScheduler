@@ -485,7 +485,7 @@ void FCPOServer::sendClusterModel(std::string name, std::string queue, nlohmann:
     std::string msg = absl::StrFormat("%s| %s %s", queue, MSG_TYPE[RETURN_FL], request.SerializeAsString());
     message_t zmq_msg(msg.size());
     memcpy(zmq_msg.data(), msg.data(), msg.size());
-    message_queue->send(zmq_msg, send_flags::dontwait);
+    message_queue->send(zmq_msg, send_flags::none);
 }
 
 void FCPOServer::returnFLModel(ClientModel &client) {
@@ -498,5 +498,5 @@ void FCPOServer::returnFLModel(ClientModel &client) {
     std::string msg = absl::StrFormat("%s| %s %s", client.data.device_name(), MSG_TYPE[RETURN_FL], request.SerializeAsString());
     message_t zmq_msg(msg.size());
     memcpy(zmq_msg.data(), msg.data(), msg.size());
-    message_queue->send(zmq_msg, send_flags::dontwait);
+    message_queue->send(zmq_msg, send_flags::none);
 }

@@ -129,6 +129,7 @@ DeviceAgent::DeviceAgent(const std::string &controller_url) : DeviceAgent() {
     server_address = absl::StrFormat("tcp://*:%d", IN_DEVICE_MESSAGE_QUEUE_PORT + dev_system_port_offset);
     in_device_message_queue = socket_t(in_device_ctx, ZMQ_PUB);
     in_device_message_queue.bind(server_address);
+    in_device_message_queue.set(zmq::sockopt::sndtimeo, 100);
 
     controller_ctx = context_t(1);
     server_address = absl::StrFormat("tcp://%s:%d", controller_url, CONTROLLER_RECEIVE_PORT + dev_system_port_offset - dev_agent_port_offset);
@@ -821,7 +822,7 @@ void DeviceAgent::sendMessageToContainer(const std::string &topik, const std::st
     std::string msg = absl::StrFormat("%s| %s %s", topik, type, content);
     message_t zmq_msg(msg.size());
     memcpy(zmq_msg.data(), msg.data(), msg.size());
-    in_device_message_queue.send(zmq_msg, send_flags::dontwait);
+    in_device_message_queue.send(zmq_msg, send_flags::none);
 }
 
 // Function to run the bash script with parameters from a JSON file

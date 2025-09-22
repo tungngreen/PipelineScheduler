@@ -1681,6 +1681,7 @@ void ContainerAgent::transferFrameID(const std::string &msg) {
     std::string url = absl::StrFormat("tcp://localhost:%d/", request.value());
     socket_t message_queue_pub = socket_t(messaging_ctx, ZMQ_PUB);
     message_queue_pub.connect(url);
+    message_queue_pub.set(zmq::sockopt::sndtimeo, 100);
 
     cont_msvcsGroups["receiver"].msvcList[0]->pauseThread();
 
@@ -1688,7 +1689,7 @@ void ContainerAgent::transferFrameID(const std::string &msg) {
     std::string req_msg = absl::StrFormat("%s| %s %s", request.name(), MSG_TYPE[TRANSFER_FRAME_ID], request.SerializeAsString());
     message_t zmq_msg(req_msg.size());
     memcpy(zmq_msg.data(), req_msg.data(), req_msg.size());
-    if (message_queue_pub.send(zmq_msg, send_flags::dontwait)) {
+    if (message_queue_pub.send(zmq_msg, send_flags::none)) {
         run = false;
         stopAllMicroservices();
     } else {
