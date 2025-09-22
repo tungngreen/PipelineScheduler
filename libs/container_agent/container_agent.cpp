@@ -563,7 +563,7 @@ ContainerAgent::ContainerAgent(const json& configs) {
     sending_socket.connect(server_address);
     server_address = absl::StrFormat("tcp://localhost:%d", IN_DEVICE_MESSAGE_QUEUE_PORT + absl::GetFlag(FLAGS_port_offset));
     device_message_queue = socket_t(messaging_ctx, ZMQ_SUB);
-    device_message_queue.setsockopt(ZMQ_SUBSCRIBE, cont_name + "|");
+    device_message_queue.setsockopt(ZMQ_SUBSCRIBE, (cont_name + "|").c_str(), cont_name.size() + 1);
     device_message_queue.connect(server_address);
 
     run = true;

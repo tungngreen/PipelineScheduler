@@ -137,7 +137,7 @@ DeviceAgent::DeviceAgent(const std::string &controller_url) : DeviceAgent() {
     controller_socket.connect(server_address);
     server_address = absl::StrFormat("tcp://%s:%d", controller_url, CONTROLLER_MESSAGE_QUEUE_PORT + dev_system_port_offset  - dev_agent_port_offset);
     controller_message_queue = socket_t(controller_ctx, ZMQ_SUB);
-    controller_message_queue.setsockopt(ZMQ_SUBSCRIBE, dev_name + "|");
+    controller_message_queue.setsockopt(ZMQ_SUBSCRIBE, (dev_name + "|").c_str(), dev_name.size() + 1);
     controller_message_queue.connect(server_address);
 
     dev_profiler = new Profiler({(unsigned int) getpid()}, "runtime");
