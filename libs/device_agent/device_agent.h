@@ -50,21 +50,15 @@ public:
 
     virtual ~DeviceAgent() {
         running = false;
+        std::this_thread::sleep_for(std::chrono::seconds(1));
         ContainerSignal message;
         message.set_forced(true);
-        for (const auto &c: containers) {
-            message.set_name(c.first);
-            StopContainer(message);
+        if (!containers.empty()) {
+            for (const auto &c: containers) {
+                message.set_name(c.first);
+                StopContainer(message);
+            }
         }
-
-        for (std::thread &t: threads) {
-            t.join();
-        }
-
-        controller_ctx.shutdown();
-        controller_ctx.close();
-        in_device_ctx.shutdown();
-        in_device_ctx.close();
     };
 
     [[nodiscard]] bool isRunning() const { return running; }

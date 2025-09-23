@@ -126,6 +126,7 @@ DeviceAgent::DeviceAgent(const std::string &controller_url) : DeviceAgent() {
     std::string server_address = absl::StrFormat("tcp://*:%d", IN_DEVICE_RECEIVE_PORT + dev_system_port_offset);
     in_device_socket = socket_t(in_device_ctx, ZMQ_REP);
     in_device_socket.bind(server_address);
+    in_device_socket.set(zmq::sockopt::rcvtimeo, 1000);
     server_address = absl::StrFormat("tcp://*:%d", IN_DEVICE_MESSAGE_QUEUE_PORT + dev_system_port_offset);
     in_device_message_queue = socket_t(in_device_ctx, ZMQ_PUB);
     in_device_message_queue.bind(server_address);
@@ -139,6 +140,7 @@ DeviceAgent::DeviceAgent(const std::string &controller_url) : DeviceAgent() {
     controller_message_queue = socket_t(controller_ctx, ZMQ_SUB);
     controller_message_queue.setsockopt(ZMQ_SUBSCRIBE, (dev_name + "|").c_str(), dev_name.size() + 1);
     controller_message_queue.connect(server_address);
+    controller_message_queue.set(zmq::sockopt::rcvtimeo, 1000);
 
     dev_profiler = new Profiler({(unsigned int) getpid()}, "runtime");
     SystemInfo readyReply = Ready(getHostIP());
@@ -621,8 +623,8 @@ void DeviceAgent::HandleDeviceMessages() {
             } else {
                 spdlog::get("container_agent")->error("Received unknown device topic: {}", topic);
             }
-        } else {
-            spdlog::get("container_agent")->error("Received unsupported message in device communication!");
+//        } else {
+//            spdlog::get("container_agent")->trace("Device Communication Receive Timeout");
         }
     }
 }
@@ -644,8 +646,8 @@ void DeviceAgent::HandleControlCommands() {
             } else {
                 spdlog::get("container_agent")->error("Received unknown controller type: {} (topic: {})", type, topic);
             }
-        } else {
-            spdlog::get("container_agent")->error("Received unsupported message in controller communication!");
+//        } else {
+//            spdlog::get("container_agent")->trace("Control Communication Receive Timeout");
         }
     }
 }
