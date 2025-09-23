@@ -618,6 +618,7 @@ Controller::Controller(int argc, char **argv) {
     ctx = context_t();
     server_socket = socket_t(ctx, ZMQ_REP);
     server_socket.bind(server_address);
+    server_socket.set(zmq::sockopt::rcvtimeo, 1000);
     handlers = {
         {MSG_TYPE[DEVICE_ADVERTISEMENT], std::bind(&Controller::handleDeviseAdvertisement, this, std::placeholders::_1)},
         {MSG_TYPE[DUMMY_DATA], std::bind(&Controller::handleDummyDataRequest, this, std::placeholders::_1)},
@@ -641,18 +642,17 @@ Controller::Controller(int argc, char **argv) {
 }
 
 Controller::~Controller() {
+    running = false;
     if (ctrl_systemName == "fcpo") ctrl_fcpo_server->stop();
     for (auto msvc: containers.getList()) {
         StopContainer(msvc, msvc->device_agent, true);
     }
-
+    std::this_thread::sleep_for(std::chrono::seconds(10));
     for (auto &device: devices.getList()) {
         if (device->name == "sink") { continue; }
         sendMessageToDevice(device->name, MSG_TYPE[DEVICE_SHUTDOWN], "");
     }
     std::this_thread::sleep_for(std::chrono::seconds(10));
-    ctx.shutdown();
-    ctx.close();
 }
 
 // =========================================================== Executor/Maintainers ============================================================ //
@@ -1415,8 +1415,8 @@ void Controller::HandleControlMessages() {
             } else {
                 spdlog::get("container_agent")->error("Received unknown topic: {}", topic);
             }
-        } else {
-            spdlog::get("container_agent")->error("Received unsupported message in communication!");
+//        } else {
+//            spdlog::get("container_agent")->trace("Communication Receive Timeout");
         }
     }
 }

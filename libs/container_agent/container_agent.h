@@ -96,8 +96,6 @@ public:
         for (auto msvc: cont_msvcsGroups["sender"].msvcList) {
             delete msvc;
         }
-        messaging_ctx.shutdown();
-        messaging_ctx.close();
     };
 
     [[nodiscard]] bool running() const { return run; }

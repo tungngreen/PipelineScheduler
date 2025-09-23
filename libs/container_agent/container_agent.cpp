@@ -565,6 +565,7 @@ ContainerAgent::ContainerAgent(const json& configs) {
     device_message_queue = socket_t(messaging_ctx, ZMQ_SUB);
     device_message_queue.setsockopt(ZMQ_SUBSCRIBE, (cont_name + "|").c_str(), cont_name.size() + 1);
     device_message_queue.connect(server_address);
+    device_message_queue.set(zmq::sockopt::rcvtimeo, 1000);
 
     run = true;
     reportHwMetrics = false;
@@ -1421,13 +1422,13 @@ void ContainerAgent::HandleControlMessages() {
             iss.get(); // skip the space after the topic
             std::string payload((std::istreambuf_iterator<char>(iss)),
                                 std::istreambuf_iterator<char>());
-            if (handlers.count(topic)) {
-                handlers[topic](payload);
+            if (handlers.count(type)) {
+                handlers[type](payload);
             } else {
-                spdlog::get("container_agent")->error("Received unknown device topic: {}", topic);
+                spdlog::get("container_agent")->error("Received unknown device type: {} (topic: {})", type, topic);
             }
-        } else {
-            spdlog::get("container_agent")->error("Received unsupported message in device communication!");
+//        } else {
+//            spdlog::get("container_agent")->trace("Device Communication Receive Timeout");
         }
     }
 }
