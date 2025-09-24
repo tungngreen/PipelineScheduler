@@ -13,6 +13,7 @@ ABSL_FLAG(std::string, log_dir, "../logs", "Log path for the container");
 ABSL_FLAG(uint16_t, profiling_mode, 0,
           "flag to make the model running in profiling mode 0:deployment, 1:profiling, 2:empty_profiling");
 
+std::atomic<bool> CONT_RUN(true);
 
 torch::Dtype getTorchDtype(const std::string& type_str) {
     auto it = DTYPE_MAP.find(type_str);
@@ -272,7 +273,8 @@ bool ContainerAgent::readModelProfile(const json &profile) {
 }
 
 ContainerAgent::ContainerAgent(const json& configs) {
-
+    std::signal(SIGTERM, ContainerAgent::handleSignal);
+    std::signal(SIGINT, ContainerAgent::handleSignal);
     json containerConfigs = configs["container"];
     //std::cout << containerConfigs.dump(4) << std::endl;
 
@@ -567,7 +569,7 @@ ContainerAgent::ContainerAgent(const json& configs) {
     device_message_queue.connect(server_address);
     device_message_queue.set(zmq::sockopt::rcvtimeo, 1000);
 
-    run = true;
+    CONT_RUN = true;
     reportHwMetrics = false;
     profiler = nullptr;
     readModelProfile(containerConfigs["cont_modelProfile"]);
@@ -958,9 +960,9 @@ void ContainerAgent::collectRuntimeMetrics() {
      *
      */
     if (isDataSource) {
-        while (run) {
+        while (running()) {
             if (cont_msvcsGroups["receiver"].msvcList[0]->STOP_THREADS) {
-                run = false;
+                CONT_RUN = false;
             }
             std::this_thread::sleep_for(std::chrono::milliseconds(100));
         }
@@ -970,7 +972,7 @@ void ContainerAgent::collectRuntimeMetrics() {
     uint16_t maxNumSeconds = cont_metricsServerConfigs.queryArrivalPeriodMillisec.back() / 1000;
     // Initiate a fixed-size vector to store the arrival records for each second
     RunningArrivalRecord perSecondArrivalRecords(maxNumSeconds);
-    while (run) {
+    while (running()) {
         bool hwMetricsScraped = false;
         auto metricsStopwatch = Stopwatch();
         metricsStopwatch.start();
@@ -1163,7 +1165,7 @@ void ContainerAgent::collectRuntimeMetrics() {
                     }
                 }
                 if (allStopped) {
-                    run = false;
+                    CONT_RUN = false;
                     continue;
                 }
             }
@@ -1202,7 +1204,7 @@ void ContainerAgent::collectRuntimeMetrics() {
         }
         nextTime = std::min(nextTime, cont_nextOptimizationMetricsTime);
         if (hasDataReader && cont_msvcsGroups["receiver"].msvcList[0]->STOP_THREADS) {
-            run = false;
+            CONT_RUN = false;
         }
         timeDiff = std::chrono::duration_cast<std::chrono::milliseconds>(nextTime - std::chrono::high_resolution_clock::now()).count();
         std::chrono::milliseconds sleepPeriod(timeDiff - (reportLatencyMillisec) + 2);
@@ -1411,7 +1413,7 @@ void ContainerAgent::updateProcessRecords(ProcessRecordType processRecords, Batc
 }
 
 void ContainerAgent::HandleControlMessages() {
-    while (run) {
+    while (running()) {
         message_t message;
         if (device_message_queue.recv(message, recv_flags::none)) {
             std::string raw = message.to_string();
@@ -1449,7 +1451,7 @@ std::string ContainerAgent::sendMessageToDevice(const std::string &type, const s
 }
 
 void ContainerAgent::stopExecution(const std::string &msg) {
-    run = false;
+    CONT_RUN = false;
 }
 
 void ContainerAgent::updateSender(const std::string &msg) {
@@ -1691,7 +1693,7 @@ void ContainerAgent::transferFrameID(const std::string &msg) {
     message_t zmq_msg(req_msg.size());
     memcpy(zmq_msg.data(), req_msg.data(), req_msg.size());
     if (message_queue_pub.send(zmq_msg, send_flags::none)) {
-        run = false;
+        CONT_RUN = false;
         stopAllMicroservices();
     } else {
         spdlog::get("container_agent")->error("Failed to send transferFrameID message: {0:s}", req_msg);

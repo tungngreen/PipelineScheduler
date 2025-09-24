@@ -1039,9 +1039,6 @@ void signalHandler(int signal) {
     case SIGILL:
         std::cerr << "Error: Illegal instruction detected (signal " << signal << ")." << std::endl;
         break;
-    case SIGTERM:
-        std::cerr << "Error: Termination request detected (signal " << signal << ")." << std::endl;
-        break;
     default:
         std::cerr << "Error: Unknown signal " << signal << " received." << std::endl;
     }
@@ -1049,7 +1046,7 @@ void signalHandler(int signal) {
     void* callStack[128];
     int stackSize = backtrace(callStack, 128);
 
-// Print the backtrace
+    // Print the backtrace
     std::cerr << "Backtrace (most recent calls first):" << std::endl;
     char** symbols = backtrace_symbols(callStack, stackSize);
     for (int i = 0; i < stackSize; ++i) {
@@ -1087,7 +1084,6 @@ void setupLogger(
     std::signal(SIGFPE, signalHandler);
     std::signal(SIGABRT, signalHandler);
     std::signal(SIGILL, signalHandler);
-    std::signal(SIGTERM, signalHandler);
 
     std::string path = logPath + "/" + loggerName + "_" + getTimestampString() + ".log";
 

@@ -482,24 +482,20 @@ void DeviceAgent::StopContainer(const std::string &msg) {
 }
 
 void DeviceAgent::StopContainer(ContainerSignal request) {
-    if (containers.find(request.name()) == containers.end()) {
-        if (request.name().find("sink") != std::string::npos) {
-            std::string command = "docker stop " + request.name();
-            int status = system(command.c_str());
-            containers.erase(request.name());
-            spdlog::get("container_agent")->info("Stopped container: {} with status: {}", request.name(), status);
-        } else {
-            spdlog::get("container_agent")->error("Container {} not found for deletion!", request.name());
-            return;
-        }
-    } else {
+    spdlog::get("container_agent")->info("Stopping container: {}", request.name());
+    if (containers.find(request.name()) != containers.end()) {
         unsigned int pid = containers[request.name()].pid;
         containers[request.name()].pid = 0;
-        spdlog::get("container_agent")->info("Stopping container: {}", request.name());
-        sendMessageToContainer(request.name(), MSG_TYPE[CONTAINER_STOP], request.SerializeAsString());
+        dev_profiler->removePid(pid);
+    }
+    std::string command = "docker stop " + request.name();
+    int status = system(command.c_str());
+    if (status == 0) {
+        spdlog::get("container_agent")->info("Successfully stopped container: {}", request.name());
         std::lock_guard<std::mutex> lock(containers_mutex);
         containers.erase(request.name());
-        dev_profiler->removePid(pid);
+    } else {
+        spdlog::get("container_agent")->error("Container {} not found for deletion!", request.name());
     }
 }
 

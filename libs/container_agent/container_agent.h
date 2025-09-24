@@ -42,6 +42,8 @@ using indevicemessages::ProcessData;
 using indevicemessages::ContainerMetrics;
 using EmptyMessage = google::protobuf::Empty;
 
+extern std::atomic<bool> CONT_RUN;
+
 enum TransferMethod {
     LocalCPU,
     RemoteCPU,
@@ -98,7 +100,7 @@ public:
         }
     };
 
-    [[nodiscard]] bool running() const { return run; }
+    [[nodiscard]] bool running() const { return CONT_RUN; }
 
     void START() {
         for (auto msvcGroup: cont_msvcsGroups) {
@@ -178,6 +180,9 @@ public:
 
     virtual void runService(const json &pipeConfigs, const json &configs);
 
+    static void handleSignal(int signal) {
+        if (signal == SIGTERM || signal == SIGINT) CONT_RUN = false;
+        else signalHandler(signal);}
 protected:
 
     /////////////////////////////////////////// PROTECTED FUNCTIONS ///////////////////////////////////////////
@@ -234,7 +239,6 @@ protected:
     // RUNTIME VARIABLES
     std::mutex cont_pipeStructureMutex;
     std::map<std::string, MicroserviceGroup> cont_msvcsGroups;
-    std::atomic<bool> run;
     int cont_pipeSLO;
     int cont_modelSLO;
     double cont_request_arrival_rate;
