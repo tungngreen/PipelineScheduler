@@ -1488,3 +1488,45 @@ void addTimestampsToPath(
         path += delimiter + std::to_string(std::chrono::duration_cast<TimePrecisionType>(timeRecords[i].time_since_epoch()).count());
     }
 }
+
+std::string generateComposeConfig(const std::string &base_file, const std::string &cont_name,
+                                   const std::string &docker_tag, const std::string &executable,
+                                   const std::string &start_string, int device, int port, int port_offset,
+                                   bool deploy_mode) {
+    std::ifstream infile(base_file);
+    if (!infile.is_open()) {
+        spdlog::get("container_agent")->error("Failed to open base compose file: {}", base_file);
+        return "";
+    }
+    std::stringstream buffer;
+    buffer << infile.rdbuf();
+    std::string yaml_content = buffer.str();
+
+    auto replaceAll = [](std::string &str, const std::string &from, const std::string &to) {
+        size_t start_pos = 0;
+        while ((start_pos = str.find(from, start_pos)) != std::string::npos) {
+            str.replace(start_pos, from.length(), to);
+            start_pos += to.length();
+        }
+    };
+
+    replaceAll(yaml_content, "${CONTAINER_NAME}", cont_name);
+    replaceAll(yaml_content, "${DOCKER_TAG}", docker_tag);
+    replaceAll(yaml_content, "${EXECUTABLE}", executable);
+    replaceAll(yaml_content, "${START_STRING}", start_string);
+    replaceAll(yaml_content, "${DEVICE}", std::to_string(device));
+    replaceAll(yaml_content, "${PORT}", std::to_string(port));
+    replaceAll(yaml_content, "${PORT_OFFSET}", std::to_string(port_offset));
+    replaceAll(yaml_content, "${LOGGING_ARGS}", deploy_mode ? "--logging_mode 1" : "--verbose 0 --logging_mode 2");
+
+    std::string tmp_file = COMPOSE_PATH + cont_name + ".yml";
+    std::ofstream outfile(tmp_file);
+    if (!outfile.is_open()) {
+        spdlog::get("container_agent")->error("Failed to write temporary compose file: {}", tmp_file);
+        return "";
+    }
+    outfile << yaml_content;
+    outfile.close();
+
+    return tmp_file;
+}

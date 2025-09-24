@@ -11,6 +11,7 @@ ABSL_FLAG(uint16_t, dev_system_port_offset, 0, "port offset of the whole system 
 ABSL_FLAG(uint16_t, dev_bandwidthLimitID, 0, "id at the end of bandwidth_limits{}.json file to indicate which should be used");
 ABSL_FLAG(std::string, dev_networkInterface, "eth0", "optionally specify the network interface to use for bandwidth limiting");
 ABSL_FLAG(int, dev_gpuID, -1, "GPU ID to use a specific GPU for containers (setting for virtual Devices)");
+ABSL_FLAG(bool, dev_verbose_compose, false, "if true, docker compose will create a separate file for each container instead of using env-variables");
 
 std::string getHostIP() {
     struct ifaddrs *ifAddrStruct = nullptr;
@@ -98,6 +99,9 @@ DeviceAgent::DeviceAgent() {
         {MSG_TYPE[DEVICE_SHUTDOWN], std::bind(&DeviceAgent::Shutdown, this, std::placeholders::_1)}
     };
 
+    if (absl::GetFlag(FLAGS_dev_verbose_compose))
+        std::filesystem::create_directories(COMPOSE_PATH);
+
     dev_totalBandwidthData = std::vector<BandwidthManager>();
     for (int id = 0; id <= 20; ++id) {
         BandwidthManager data;
@@ -118,6 +122,7 @@ DeviceAgent::DeviceAgent() {
         data.prepare();
         dev_totalBandwidthData.push_back(data);
     }
+
     dev_startTime = std::chrono::high_resolution_clock::now();
 }
 
@@ -331,10 +336,6 @@ void DeviceAgent::collectRuntimeMetrics() {
 
             dev_metricsServerConfigs.nextMetricsReportTime = std::chrono::high_resolution_clock::now() +
                                                              std::chrono::milliseconds(dev_metricsServerConfigs.metricsReportIntervalMillisec);
-            if (dev_type == SystemDeviceType::Server) {
-                std::thread t(&DeviceAgent::ContainersLifeCheck, this);
-                t.detach();
-            }
         }
 
         if (dev_system_name == "edvi" && timePointCastMillisecond(startTime) >= timePointCastMillisecond(dev_nextRLDecisionTime)) {
@@ -440,7 +441,7 @@ void DeviceAgent::CreateContainer(const std::string &msg) {
     }
     spdlog::get("container_agent")->info("Creating container: {}", c.name());
     try {
-        std::string command = runDocker(c.executable(), c.name(), c.json_config(), c.device(), c.control_port());
+        std::string command = runCompose(c.executable(), c.name(), c.json_config(), c.device(), c.control_port());
         std::string target = absl::StrFormat("%s:%d", "localhost", c.control_port());
         if (c.name().find("sink") != std::string::npos) {
             return;
@@ -459,19 +460,6 @@ void DeviceAgent::CreateContainer(const std::string &msg) {
     }
 }
 
-void DeviceAgent::ContainersLifeCheck() {
-    std::lock_guard<std::mutex> lock(containers_mutex);
-    for (auto &container: containers) {
-        if (container.second.pid == 0) continue;
-        if (system(("docker inspect -f '{{.State.Running}}' " + container.first).c_str()) != 0) {
-            if (container.second.startCommand != "") {
-                spdlog::get("container_agent")->error("Container {} is not running anymore, trying restart.", container.first);
-                if (runDocker(container.second.startCommand) != 0) container.second.pid = 0;
-            }
-        }
-    }
-}
-
 void DeviceAgent::StopContainer(const std::string &msg) {
     ContainerSignal request;
     if (!request.ParseFromString(msg)){
@@ -482,18 +470,25 @@ void DeviceAgent::StopContainer(const std::string &msg) {
 }
 
 void DeviceAgent::StopContainer(ContainerSignal request) {
-    spdlog::get("container_agent")->info("Stopping container: {}", request.name());
+    std::string file;
     if (containers.find(request.name()) != containers.end()) {
         unsigned int pid = containers[request.name()].pid;
         containers[request.name()].pid = 0;
         dev_profiler->removePid(pid);
     }
-    std::string command = "docker stop " + request.name();
-    int status = system(command.c_str());
-    if (status == 0) {
-        spdlog::get("container_agent")->info("Successfully stopped container: {}", request.name());
+    if (absl::GetFlag(FLAGS_dev_verbose_compose))
+        file = COMPOSE_PATH + request.name() + ".yml";
+    else if (dev_type == Virtual || dev_type == Server || dev_type == OnPremise)
+        file += "docker-compose.server.yml";
+    else
+        file += "docker-compose.jetson.yml";
+    std::string command ="docker compose -f " + file + " -p " + request.name() + " down";
+    spdlog::get("container_agent")->info("Stopping container via: {}", command);
+    if (runCommand(command) == 0) {
         std::lock_guard<std::mutex> lock(containers_mutex);
         containers.erase(request.name());
+        if (absl::GetFlag(FLAGS_dev_verbose_compose))
+            std::filesystem::remove(COMPOSE_PATH + request.name() + ".yml");
     } else {
         spdlog::get("container_agent")->error("Container {} not found for deletion!", request.name());
     }
@@ -842,7 +837,7 @@ void DeviceAgent::limitBandwidth(const std::string& scriptPath, std::string inte
             std::ostringstream command;
             command << "sudo bash " << scriptPath << " " << interface << " " << std::fixed << std::setprecision(2) << dev_bandwidthLimit[bwThresholdIndex].mbps;
             spdlog::get("container_agent")->info("{0:s} Setting BW limit to {1:f} Mbps", dev_name, dev_bandwidthLimit[bwThresholdIndex].mbps);
-            int result = system(command.str().c_str());
+            int result = runCommand(command.str());
             spdlog::get("container_agent")->info("Command executed with result: {0:d}", result);
 
             if (bwThresholdIndex == dev_bandwidthLimit.size() - 1) {

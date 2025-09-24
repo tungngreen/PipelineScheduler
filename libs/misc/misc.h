@@ -51,6 +51,8 @@ const int CONTROLLER_MESSAGE_QUEUE_PORT = 60002;
 const int IN_DEVICE_RECEIVE_PORT = 60011;
 const int IN_DEVICE_MESSAGE_QUEUE_PORT = 60012;
 
+const std::string COMPOSE_PATH = "../dockerfiles/tmp/";
+
 enum MESSAGE_TYPE_VALUES {
     DEVICE_ADVERTISEMENT,
     DUMMY_DATA,
@@ -879,4 +881,9 @@ void addTimestampsToPath(
     const RequestTimeType &timeRecords,
     const std::string &delimiter = "|"
 );
+
+std::string generateComposeConfig(const std::string &base_file, const std::string &cont_name,
+                                  const std::string &docker_tag, const std::string &executable,
+                                  const std::string &start_string, int device, int port, int port_offset,
+                                  bool deploy_mode);
 #endif

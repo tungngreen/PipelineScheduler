@@ -33,6 +33,7 @@ ABSL_DECLARE_FLAG(uint16_t, dev_system_port_offset);
 ABSL_DECLARE_FLAG(uint16_t, dev_bandwidthLimitID);
 ABSL_DECLARE_FLAG(std::string, dev_networkInterface);
 ABSL_DECLARE_FLAG(int, dev_gpuID);
+ABSL_DECLARE_FLAG(bool, dev_verbose_compose);
 
 using indevicemessages::ContainerSignal;
 using indevicemessages::Connection;
@@ -52,13 +53,14 @@ public:
         running = false;
         std::this_thread::sleep_for(std::chrono::seconds(1));
         ContainerSignal message;
-        message.set_forced(true);
         if (!containers.empty()) {
             for (const auto &c: containers) {
                 message.set_name(c.first);
                 StopContainer(message);
             }
         }
+        if (absl::GetFlag(FLAGS_dev_verbose_compose))
+            std::filesystem::remove_all(COMPOSE_PATH);
     };
 
     [[nodiscard]] bool isRunning() const { return running; }
@@ -94,7 +96,6 @@ protected:
     // CONTAINER CONTROL
     void CreateContainer(const std::string &msg);
     void ReceiveStartReport(const std::string &msg);
-    void ContainersLifeCheck();
     void ReceiveContainerMetrics(const std::string &msg);
     void UpdateContainerSender(const std::string &msg);
     void UpdateContainerSender(int mode, const std::string &cont_name, const std::string &dwnstr, const std::string &ip,
@@ -116,48 +117,49 @@ protected:
     void sendMessageToContainer(const std::string &topik, const std::string &type, const std::string &content);
 
     // SYSTEM COMMANDS
-    std::string runDocker(const std::string &executable, const std::string &cont_name, const std::string &start_string,
-                         int device, const int &port) {
-        std::string command = "docker run -d --rm --network=host --runtime nvidia --gpus all ";
-        std::string docker_tag;
+    std::string runCompose(const std::string &executable, const std::string &cont_name, const std::string &start_string,
+                           int device, const int &port) {
+        std::string command, docker_tag, compose_file = "../dockerfiles/";
         if (dev_type == Virtual || dev_type == Server || dev_type == OnPremise) {
-            if (dev_gpuID >=  0) device = dev_gpuID;
-            command += "-v /ssd0/tung/PipePlusPlus/data/:/app/data/  -v /ssd0/tung/PipePlusPlus/logs/:/app/logs/ "
-                       "-v /ssd0/tung/PipePlusPlus/models/:/app/models/ "
-                       "-v /ssd0/tung/PipePlusPlus/model_profiles/:/app/model_profiles/ --name " +
-                       absl::StrFormat(
-                               R"(%s lucasliebe/pipeplusplus:amd64-torch %s --json '%s' --device %i --port %i --port_offset %i)",
-                               cont_name, executable, start_string, device, port, dev_system_port_offset);
+            if (dev_gpuID >= 0) device = dev_gpuID;
+            compose_file += "docker-compose.server.yml";
+            docker_tag = "amd64-torch";
+        } else if (dev_type == NanoXavier || dev_type == NXXavier || dev_type == AGXXavier) {
+            compose_file += "docker-compose.jetson.yml";
+            docker_tag = "jp512-torch";
+        } else if (dev_type == OrinNano || dev_type == OrinNX || dev_type == OrinAGX) {
+            compose_file += "docker-compose.jetson.yml";
+            docker_tag = "jp61-torch";
         } else {
-            if (dev_type == NanoXavier || dev_type == NXXavier || dev_type == AGXXavier) {
-                docker_tag = "jp512-torch";
-            } else if (dev_type == OrinNano || dev_type == OrinNX || dev_type == OrinAGX) {
-                docker_tag = "jp61-torch";
-            } else {
-                spdlog::get("container_agent")->error("Unknown edge device type while trying to start container!");
-                return "";
-            }
-            command += "-u 0:0 --privileged -v /home/cdsn/FCPO:/app "
-                       "-v /home/cdsn/pipe/data:/app/data -v /home/cdsn/pipe/models:/app/models "
-                       "-v /run/jtop.sock:/run/jtop.sock  -v /usr/bin/tegrastats:/usr/bin/tegrastats --name " +
-                        absl::StrFormat(
-                                R"(%s lucasliebe/pipeplusplus:%s %s --json '%s' --device %i --port %i --port_offset %i)",
-                                cont_name, docker_tag, executable, start_string, device, port, dev_system_port_offset);
-        }
-        command += " --log_dir ../logs";
-        command += (deploy_mode? " --logging_mode 1" : " --verbose 0 --logging_mode 2");
-
-        if (dev_type == Server || dev_type == Virtual) { // since many models might start on the server we need to slow down creation to prevent errors
-            std::this_thread::sleep_for(std::chrono::milliseconds(700));
+            spdlog::get("container_agent")->error("Unknown device type while trying to start container!");
+            return "";
         }
 
-        if (runDocker(command) != 0) {
-            spdlog::get("container_agent")->error("Failed to start Container {}!", cont_name);
+        // generate temporary compose file
+        if (absl::GetFlag(FLAGS_dev_verbose_compose)) {
+            std::string config = generateComposeConfig(compose_file, cont_name, docker_tag, executable,
+                                                       start_string, device, port, dev_system_port_offset,
+                                                       deploy_mode);
+            if (config.empty()) return "";
+            command = "docker compose -f " + config + " -p " + cont_name + " up -d";
+        } else {
+            std::string env = absl::StrFormat(
+                    "CONTAINER_NAME=%s EXECUTABLE=%s START_STRING='%s' DEVICE=%i PORT=%i PORT_OFFSET=%i "
+                    "LOGGING_ARGS='%s' DOCKER_TAG=%s",
+                    cont_name, executable, start_string, device, port, dev_system_port_offset,
+                    (deploy_mode ? "--logging_mode 1" : "--verbose 0 --logging_mode 2"),
+                    docker_tag
+            );
+            command = env + " docker compose -f " + compose_file + " -p " + cont_name + " up -d";
+        }
+        if (runCommand(command) != 0) {
+            spdlog::get("container_agent")->error("Failed to start Container {} via docker compose!", cont_name);
             return "";
         }
         return command;
-    };
-    static int runDocker(const std::string &command) {
+    }
+
+    static int runCommand(const std::string &command) {
         spdlog::get("container_agent")->info("Running command: {}", command);
         return system(command.c_str());
     };
