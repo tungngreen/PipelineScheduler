@@ -68,6 +68,9 @@ void Engine::serializeEngineOptions(const TRTConfigs &configs) {
         std::vector<std::string> deviceNames;
         getDeviceNames(deviceNames);
 
+        int runtimeVersion;
+        cudaError_t error = cudaRuntimeGetVersion(&runtimeVersion);
+
         if (static_cast<size_t>(configs.deviceIndex) >= deviceNames.size()) {
             throw std::runtime_error("Error, provided device index is out of range!");
         }
@@ -77,6 +80,9 @@ void Engine::serializeEngineOptions(const TRTConfigs &configs) {
         deviceName = getLastWord(deviceName);
 
         engineName+= "_" + deviceName;
+
+
+        engineName+= "_" + std::to_string(runtimeVersion / 1000) + std::to_string((runtimeVersion % 1000) / 10);
 
         // Serialize the specified options into the filename
         if (configs.precision == MODEL_DATA_TYPE::fp16) {

@@ -1,7 +1,7 @@
 {
     "container": {
-        "cont_experimentName": "rl1",
-        "cont_systemName": "fcpo",
+        "cont_experimentName": "th0",
+        "cont_systemName": "ppp",
         "cont_pipeName": "traffic",
         "cont_taskName": "platedet",
         "cont_hostDevice": "server",
@@ -132,7 +132,7 @@
             {
                 "msvc_name": "batcher",
                 "msvc_numInstances": 1,
-                "msvc_idealBatchSize": 2,
+                "msvc_idealBatchSize": 4,
                 "msvc_dnstreamMicroservices": [
                     {
                         "nb_classOfInterest": -1,
@@ -185,7 +185,7 @@
             {
                 "msvc_name": "inference",
                 "msvc_numInstances": 1,
-                "msvc_idealBatchSize": 1,
+                "msvc_idealBatchSize": 4,
                 "msvc_dnstreamMicroservices": [
                     {
                         "nb_classOfInterest": -1,
@@ -332,7 +332,7 @@
                         "nb_classOfInterest": -1,
                         "nb_commMethod": 2,
                         "nb_link": [
-                            "localhost:55020"
+                            "localhost:55055"
                         ],
                         "nb_maxQueueSize": 100,
                         "nb_name": "datasink",
@@ -378,7 +378,8 @@
         "cont_metricServerConfigs": "../jsons/metricsserver.json",
         "cont_numWarmUpBatches": 15,
         "cont_allocationMode": 1,
-        "cont_batchMode": 0,
+        "cont_batchMode": 1,
+        "cont_batchTimeout": 0,
         "cont_dropMode": 0,
         "cont_pipelineSLO": 100000,
         "cont_timeBudgetLeft": 70000,
@@ -411,6 +412,7 @@
         "theta": 1.1,
         "sigma": 10.0,
         "phi": 2.0,
+        "rho": 1.0,
         "precision": "float",
         "update_steps": 60,
         "update_step_incs": 5,

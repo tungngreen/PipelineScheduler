@@ -1,9 +1,9 @@
 #!/bin/bash
 
 # Default values
-DEFAULT_DB_HOST="default_host"
-DEFAULT_DB_PORT="default_port"
-DEFAULT_PHRASE="default_phrase"
+DEFAULT_DB_HOST="143.248.57.18"
+DEFAULT_DB_PORT="60004"
+DEFAULT_PHRASE="hs1"
 DEFAULT_DB_NAME="pipeline"
 DEFAULT_DB_USER="postgres"
 DEFAULT_DB_PASSWORD="pipe"

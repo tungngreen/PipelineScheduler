@@ -6,9 +6,6 @@
 class SinkAgent: public DeviceAgent {
 public:
     explicit SinkAgent(const std::string &controller_url);
-
-private:
-    void HandleControlRecvRpcs() override;
 };
 
 #endif //SINK_AGENT_H

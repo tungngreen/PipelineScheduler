@@ -41,7 +41,8 @@ int main(int argc, char **argv) {
     std::string common_end = "\", \"msvc_maxBatchSize\": 64, \"msvc_allocationMode\": 1, \"msvc_numWarmUpBatches\": 0, "
                              "\"msvc_batchMode\": 0, \"msvc_dropMode\": 0, \"msvc_timeBudgetLeft\": 9999999, "
                              "\"msvc_contSLO\": 30000, \"msvc_pipelineSLO\": 9999999, \"msvc_contStartTime\": 0, "
-                             "\"msvc_contEndTime\": 30000, \"msvc_localDutyCycle\": 50000, \"msvc_cycleStartTime\": 0}";
+                             "\"msvc_contEndTime\": 30000, \"msvc_localDutyCycle\": 50000, \"msvc_cycleStartTime\": 0, "
+                             "\"msvc_batchTimeout\": 0}";
 
     json receiver_json = json::parse(std::string("{\"msvc_contName\": \"dataSink\", \"msvc_deviceIndex\": 0, "
                                                  "\"msvc_RUNMODE\": 0, \"msvc_name\": \"receiver\", \"msvc_type\": 0, "

@@ -5,7 +5,8 @@
 PipelineScheduler is a system which enables the highest performance in terms of throughput and latency. 
 It can find the **optimal workload distribution** to split the pipelines between the server and the Edge devices, and apply **local optimization** of runtime parameters like **inference batch size**.
 The control components ensure the best throughput and latency against challenges such as *content dynamics* and *network instability*.
-PipelineScheduler also considers *resource contention* and is equipped with **inference spatiotemporal scheduling** to mitigate the adverse effects of *co-location interference*. The research works behind our design have been published at [PerCom](https://percom.org/2025/) and [ArXiv](https://www.arxiv.org/abs/2507.18047) titled ***Workload-Aware Inference Serving for Edge Video Analytics*** and ***FCPO: Federated Continual Policy Optimization for Real-Time High-Throughput Edge Video Analytics***.
+PipelineScheduler also considers *resource contention* and is equipped with **inference spatiotemporal scheduling** to mitigate the adverse effects of *co-location interference*. 
+The research works behind our design have been published at [PerCom](https://percom.org/2025/) and [ArXiv](https://www.arxiv.org/abs/2507.18047) titled ***Workload-Aware Inference Serving for Edge Video Analytics*** and ***FCPO: Federated Continual Policy Optimization for Real-Time High-Throughput Edge Video Analytics***.
 Architectural diagram:
 
 ![overall-arch](/assets/overall-arch.png)
@@ -329,7 +330,7 @@ If you find the repo useful, please cite the following works which have encompas
 
 * **OCTOPINF: Workload-Aware Real-Time Inference Serving for Edge Video Analytics** 
     ```
-    @inproceedings{nguyen2025,
+    @inproceedings{nguyen2025octopinf,
         author={Thanh-Tung Nguyen and Lucas Liebe and Tau-Nhat Quang and Yuheng Wu and Jinghan Cheng and Dongman Lee}
         title = {{OCTOPINF: Workload-Aware Real-Time Inference Serving for Edge Video Analytics}},
         booktitle = {The 23rd International Conference on Pervasive Computing and Communications (PerCom)},
@@ -342,7 +343,7 @@ If you find the repo useful, please cite the following works which have encompas
 
 * **FCPO: Federated Continual Policy Optimization for Real-Time High-Throughput Edge Video Analytics** 
     ```
-    @inproceedings{liebe2025,
+    @inproceedings{liebe2025fcpo,
         author={Lucas Liebe and Thanh-Tung Nguyen and Dongman Lee}
         title = {{FCPO: Federated Continual Policy Optimization for Real-Time High-Throughput Edge Video Analytics}},
         booktitle = {arXiv},
@@ -353,7 +354,7 @@ If you find the repo useful, please cite the following works which have encompas
 
 * **OctoCross: Workload-Aware Request Offloading Scheduling in Cross-Camera Collaboration** 
     ```
-    @inproceedings{cheng2025,
+    @inproceedings{cheng2025octocross,
         author={Jinghan Cheng and Thanh-Tung Nguyen and Lucas Liebe and Yuheng Wu and Tau-Nhat Quang and Pablo Espinosa and Dongman Lee}
         title = {{OctoCross: Workload-Aware Request Offloading Scheduling in Cross-Camera Collaboration}},
         booktitle = {Service-{Oriented} {Computing}},

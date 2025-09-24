@@ -17,22 +17,8 @@ SinkAgent::SinkAgent(const std::string &controller_url) : DeviceAgent() {
 
     running = true;
     threads = std::vector<std::thread>();
-    threads.emplace_back(&SinkAgent::HandleControlRecvRpcs, this);
+    threads.emplace_back(&DeviceAgent::HandleControlCommands, this);
     for (auto &thread: threads) {
         thread.detach();
-    }
-}
-
-void SinkAgent::HandleControlRecvRpcs() {
-    new StartContainerRequestHandler(&controller_service, controller_cq.get(), this);
-    new StopContainerRequestHandler(&controller_service, controller_cq.get(), this);
-    void *tag;
-    bool ok;
-    while (running) {
-        if (!controller_cq->Next(&tag, &ok)) {
-            break;
-        }
-        GPR_ASSERT(ok);
-        static_cast<RequestHandler *>(tag)->Proceed();
     }
 }

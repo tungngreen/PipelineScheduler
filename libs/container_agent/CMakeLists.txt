@@ -74,7 +74,6 @@ target_include_directories(container_agent
 
 target_link_libraries(container_agent
         PUBLIC
-        device_comm_grpc_proto
         device_mess_grpc_proto
         absl::flags
         absl::flags_parse

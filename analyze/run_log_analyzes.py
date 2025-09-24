@@ -1,10 +1,10 @@
 import os
 import sys
 import json
+import pickle
 import numpy as np
 import matplotlib.pyplot as plt
 from natsort import natsorted
-
 
 def get_total_objects(dir, path='full_run_total.json'):
     traffic_people, traffic_cars, people_people, people_cars = 0, 0, 0, 0
@@ -74,112 +74,154 @@ def read_file(filepath, first = None, last = None):
     return cars, people, first, last
 
 
-def analyze_single_experiment(base_dir, dirs, num_results = 3, latency_target = 200):
+def analyze_single_experiment(base_dir, dirs, num_results = 3, latency_target = 200, combined = False, running_seconds = 1800):
     latency_target *= 1000
     people_latency_target = latency_target + 100000
     first, last = {}, {}
-    traffic_people, traffic_cars, people_people, people_cars = {}, {}, {}, {}
-    total_traffic_people, total_traffic_cars, total_people_people, total_people_cars = get_total_objects(base_dir)
 
-    for d in dirs:
-        first[d], last[d] = sys.maxsize, 0
-        traffic_people[d], traffic_cars[d], people_people[d], people_cars[d] = [], [], [], []
-        filepath = os.path.join(base_dir, d)
-        if not os.path.isdir(filepath):
-            continue
-        for file in natsorted(os.listdir(filepath)):
-            if not 'txt' in file:
+    dirs_copy = dirs.copy()
+    for d in dirs_copy:
+        if not os.path.isdir(os.path.join(base_dir, d)):
+            dirs.remove(d)
+
+    if combined:
+        cars, people = {}, {}
+        for d in dirs:
+            filepath = os.path.join(base_dir, d)
+            if not os.path.isdir(filepath):
                 continue
-            cars, people, first[d], last[d] = read_file(os.path.join(filepath, file), first[d], last[d])
-            if "traffic" in file:
-                traffic_people[d].extend(people)
-                traffic_cars[d].extend(cars)
-            else:
-                people_people[d].extend(people)
-                people_cars[d].extend(cars)
+            first[d], last[d] = sys.maxsize, 0
+            cars[d], people[d] = [], []
+            for file in natsorted(os.listdir(filepath)):
+                if not 'txt' in file:
+                    continue
+                c, p, first[d], last[d] = read_file(os.path.join(filepath, file), first[d], last[d])
+                cars[d].extend(c)
+                people[d].extend(p)
 
-    cars = {}
-    people = {}
-    total = {}
-    for d in dirs:
-        cars[d] = min(100 * len(traffic_cars[d]) / num_results / total_traffic_cars, 100.0)
-        people[d] = min(100 * len(traffic_people[d]) / num_results / total_traffic_people, 100.0)
-        total[d] = min(100 * (len(traffic_cars[d]) + len(traffic_people[d])) / num_results / (total_traffic_cars + total_traffic_people), 100.0)
-    traffic_total_arr_percentage = {'cars': cars.copy(),'people': people.copy(),'total': total.copy()}
+        total = 0
+        for d in dirs:
+            total += min(100 * (len(cars[d]) + len(people[d])) / num_results, 100.0)
 
-    for d in dirs:
-        c = len([x for x in traffic_cars[d] if int(x[1]) < latency_target]) / num_results
-        p = len([x for x in traffic_people[d] if int(x[1]) < latency_target]) / num_results
-        cars[d] = min(100 * c / total_traffic_cars, 100.0)
-        people[d] = min(100 * p / total_traffic_people, 100.0)
-        total[d] = min(100 * (c + p) / (total_traffic_people + total_traffic_cars), 100.0)
-    traffic_intime_arr_percentage = {'cars': cars.copy(),'people': people.copy(),'total': total.copy()}
+        throughput = {}
+        for d in dirs:
+            throughput[d] = (len(cars[d]) + len(people[d])) / num_results / running_seconds
+        goodput = {}
+        for d in dirs:
+            c = len([x for x in cars[d] if int(x[1]) < latency_target])
+            p = len([x for x in people[d] if int(x[1]) < people_latency_target])
+            goodput[d] = (c + p) / num_results / running_seconds
+        avg_latency = {}
+        for d in dirs:
+            avg_latency[d] = sum([int(x[1]) / 1000 for x in cars[d]] + [int(x[1]) / 1000 for x in people[d]]) / (len(cars[d]) + len(people[d])) if (len(cars[d]) + len(people[d])) > 0 else 1
 
-    for d in cars:
-        cars[d] = len(traffic_cars[d]) / num_results / 1800
-        people[d] = len(traffic_people[d]) / num_results / 1800
-        total[d] = (len(traffic_cars[d]) + len(traffic_people[d])) / num_results / 1800
-    traffic_throughput = {'cars': cars.copy(),'people': people.copy(),'total': total.copy()}
+        return {'throughput': throughput,
+                'goodput': goodput,
+                'latency': avg_latency,
+                'max_throughput': (total) / running_seconds}
+    else:
+        traffic_people, traffic_cars, people_people, people_cars = {}, {}, {}, {}
+        total_traffic_people, total_traffic_cars, total_people_people, total_people_cars = get_total_objects(base_dir)
 
-    for d in dirs:
-        c = len([x for x in traffic_cars[d] if int(x[1]) < latency_target])
-        p = len([x for x in traffic_people[d] if int(x[1]) < latency_target])
-        cars[d] = c / num_results / 1800
-        people[d] = p / num_results / 1800
-        total[d] = (c + p) / num_results / 1800
-    traffic_goodput = {'cars': cars.copy(),'people': people.copy(),'total': total.copy()}
+        for d in dirs:
+            filepath = os.path.join(base_dir, d)
+            if not os.path.isdir(filepath):
+                continue
+            first[d], last[d] = sys.maxsize, 0
+            traffic_people[d], traffic_cars[d], people_people[d], people_cars[d] = [], [], [], []
+            for file in natsorted(os.listdir(filepath)):
+                if not 'txt' in file:
+                    continue
+                cars, people, first[d], last[d] = read_file(os.path.join(filepath, file), first[d], last[d])
+                if "traffic" in file:
+                    traffic_people[d].extend(people)
+                    traffic_cars[d].extend(cars)
+                else:
+                    people_people[d].extend(people)
+                    people_cars[d].extend(cars)
 
-    for d in dirs:
-        cars[d] = [int(x[1]) / 1000 for x in traffic_cars[d]]
-        people[d] = [int(x[1]) / 1000 for x in traffic_people[d]]
-        total[d] = cars[d] + people[d]
-    traffic_latency = {'cars': cars.copy(),'people': people.copy(),'total': total.copy()}
+        cars = {}
+        people = {}
+        total = {}
+        for d in dirs:
+            cars[d] = min(100 * len(traffic_cars[d]) / num_results / total_traffic_cars, 100.0)
+            people[d] = min(100 * len(traffic_people[d]) / num_results / total_traffic_people, 100.0)
+            total[d] = min(100 * (len(traffic_cars[d]) + len(traffic_people[d])) / num_results / (total_traffic_cars + total_traffic_people), 100.0)
+        traffic_total_arr_percentage = {'cars': cars.copy(),'people': people.copy(),'total': total.copy()}
 
-    for d in dirs:
-        cars[d] = 0
-        people[d] = min(100 * len(people_people[d]) / num_results / total_people_people, 100.0)
-        total[d] = min(100 * (len(people_cars[d]) + len(people_people[d])) / num_results / total_people_people, 100.0)
-    people_total_arr_percentage = {'cars': cars.copy(),'people': people.copy(),'total': total.copy()}
+        for d in dirs:
+            c = len([x for x in traffic_cars[d] if int(x[1]) < latency_target]) / num_results
+            p = len([x for x in traffic_people[d] if int(x[1]) < latency_target]) / num_results
+            cars[d] = min(100 * c / total_traffic_cars, 100.0)
+            people[d] = min(100 * p / total_traffic_people, 100.0)
+            total[d] = min(100 * (c + p) / (total_traffic_people + total_traffic_cars), 100.0)
+        traffic_intime_arr_percentage = {'cars': cars.copy(),'people': people.copy(),'total': total.copy()}
 
-    for d in dirs:
-        c = len([x for x in people_cars[d] if int(x[1]) < people_latency_target]) / num_results
-        p = len([x for x in people_people[d] if int(x[1]) < people_latency_target]) / num_results
-        cars[d] = 0
-        people[d] = min(100 * p / total_people_people, 100.0)
-        total[d] = min(100 * (c + p) / total_people_people, 100.0)
-    people_intime_arr_percentage = {'cars': cars.copy(),'people': people.copy(),'total': total.copy()}
+        for d in cars:
+            cars[d] = len(traffic_cars[d]) / num_results / running_seconds
+            people[d] = len(traffic_people[d]) / num_results / running_seconds
+            total[d] = (len(traffic_cars[d]) + len(traffic_people[d])) / num_results / running_seconds
+        traffic_throughput = {'cars': cars.copy(),'people': people.copy(),'total': total.copy()}
 
-    for d in dirs:
-        cars[d] = 0
-        people[d] = len(people_people[d]) / num_results / 1800
-        total[d] = len(people_people[d]) / num_results / 1800
-    people_throughput = {'cars': cars.copy(),'people': people.copy(),'total': total.copy()}
+        for d in dirs:
+            c = len([x for x in traffic_cars[d] if int(x[1]) < latency_target])
+            p = len([x for x in traffic_people[d] if int(x[1]) < latency_target])
+            cars[d] = c / num_results / running_seconds
+            people[d] = p / num_results / running_seconds
+            total[d] = (c + p) / num_results / running_seconds
+        traffic_goodput = {'cars': cars.copy(),'people': people.copy(),'total': total.copy()}
 
-    for d in dirs:
-        cars[d] = 0
-        p = len([x for x in people_people[d] if int(x[1]) < people_latency_target])
-        people[d] = p / num_results / 1800
-        total[d] = p / num_results / 1800
-    people_goodput = {'cars': cars.copy(),'people': people.copy(),'total': total.copy()}
+        for d in dirs:
+            cars[d] = [int(x[1]) / 1000 for x in traffic_cars[d]]
+            people[d] = [int(x[1]) / 1000 for x in traffic_people[d]]
+            total[d] = cars[d] + people[d]
+        traffic_latency = {'cars': cars.copy(),'people': people.copy(),'total': total.copy()}
 
-    for d in dirs:
-        cars[d] = [0 for _ in people_cars[d]]
-        people[d] = [int(x[1]) / 1000 for x in people_people[d]]
-        total[d] = cars[d] + people[d]
-    people_latency = {'cars': cars.copy(),'people': people.copy(),'total': total.copy()}
+        for d in dirs:
+            cars[d] = 0
+            people[d] = min(100 * len(people_people[d]) / num_results / total_people_people, 100.0)
+            total[d] = min(100 * (len(people_cars[d]) + len(people_people[d])) / num_results / total_people_people, 100.0)
+        people_total_arr_percentage = {'cars': cars.copy(),'people': people.copy(),'total': total.copy()}
 
-    return {'traffic_total': traffic_total_arr_percentage,
-            'traffic_intime': traffic_intime_arr_percentage,
-            'traffic_throughput': traffic_throughput,
-            'traffic_goodput': traffic_goodput,
-            'traffic_latency': traffic_latency,
-            'people_total': people_total_arr_percentage,
-            'people_intime': people_intime_arr_percentage,
-            'people_throughput': people_throughput,
-            'people_goodput': people_goodput,
-            'people_latency': people_latency,
-            'max_traffic_throughput': (total_traffic_people + total_traffic_cars) / 1800,
-            'max_people_throughput': total_people_people / 1800}
+        for d in dirs:
+            c = len([x for x in people_cars[d] if int(x[1]) < people_latency_target]) / num_results
+            p = len([x for x in people_people[d] if int(x[1]) < people_latency_target]) / num_results
+            cars[d] = 0
+            people[d] = min(100 * p / total_people_people, 100.0)
+            total[d] = min(100 * (c + p) / total_people_people, 100.0)
+        people_intime_arr_percentage = {'cars': cars.copy(),'people': people.copy(),'total': total.copy()}
+
+        for d in dirs:
+            cars[d] = 0
+            people[d] = len(people_people[d]) / num_results / running_seconds
+            total[d] = len(people_people[d]) / num_results / running_seconds
+        people_throughput = {'cars': cars.copy(),'people': people.copy(),'total': total.copy()}
+
+        for d in dirs:
+            cars[d] = 0
+            p = len([x for x in people_people[d] if int(x[1]) < people_latency_target])
+            people[d] = p / num_results / running_seconds
+            total[d] = p / num_results / running_seconds
+        people_goodput = {'cars': cars.copy(),'people': people.copy(),'total': total.copy()}
+
+        for d in dirs:
+            cars[d] = [0 for _ in people_cars[d]]
+            people[d] = [int(x[1]) / 1000 for x in people_people[d]]
+            total[d] = cars[d] + people[d]
+        people_latency = {'cars': cars.copy(),'people': people.copy(),'total': total.copy()}
+
+        return {'traffic_total': traffic_total_arr_percentage,
+                'traffic_intime': traffic_intime_arr_percentage,
+                'traffic_throughput': traffic_throughput,
+                'traffic_goodput': traffic_goodput,
+                'traffic_latency': traffic_latency,
+                'people_total': people_total_arr_percentage,
+                'people_intime': people_intime_arr_percentage,
+                'people_throughput': people_throughput,
+                'people_goodput': people_goodput,
+                'people_latency': people_latency,
+                'max_traffic_throughput': (total_traffic_people + total_traffic_cars) / running_seconds,
+                'max_people_throughput': total_people_people / running_seconds}
 
 
 def full_analysis(args, dirs):
@@ -266,3 +308,30 @@ def get_bandwidths(base_dir):
 
     bandwidths['overall'] = (bandwidth, timestamps)
     return bandwidths
+
+
+def logSystemMetrics(base_directory):
+    results = {}
+    experiments = ['fcty', 'camp']
+    for exp in experiments:
+        directory = os.path.join(base_directory, exp)
+        if not os.path.exists(os.path.join(directory, 'processed_logs.pkl')):
+            systems = natsorted(os.listdir(directory))
+            if exp == 'fcty':
+                results[exp] = analyze_single_experiment(directory, systems, 1, 200, True, 2160)
+            elif exp == 'camp':
+                results[exp] = analyze_single_experiment(directory, systems, 1, 250, True, 7200)
+            else:
+                results[exp] = analyze_single_experiment(directory, systems, 1, 250, True)
+            with open(os.path.join(directory, 'processed_logs.pkl'), 'wb') as f:
+                pickle.dump(results[exp], f)
+        else:
+            with open(os.path.join(directory, 'processed_logs.pkl'), 'rb') as f:
+                results[exp] = pickle.load(f)
+
+    with open('systemMetrics.txt', 'wb') as f:
+        for exp in experiments:
+            f.write(f"Experiment: {exp}\n".encode())
+            for key, value in results[exp].items():
+                f.write(f"{key}: {value}\n".encode())
+            f.write("\n".encode())

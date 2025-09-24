@@ -12,6 +12,7 @@
     "rescaling_interval_sec": 30,
     "scale_up_interval_threshold_sec": 60,
     "scale_down_interval_threshold_sec": 120,
+    "cluster_count": 1,
     "initial_pipelines": [
         {
             "pipeline_name": "people1",

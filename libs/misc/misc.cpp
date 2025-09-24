@@ -6,6 +6,30 @@ using json = nlohmann::json;
 
 std::ofstream errOutFile;
 
+std::unordered_map<MESSAGE_TYPE_VALUES, std::string> MSG_TYPE = {
+        {DEVICE_ADVERTISEMENT, "DEV_AD"},
+        {DUMMY_DATA, "DUMMY"},
+
+        {NETWORK_CHECK, "NET_CHECK"},
+        {DEVICE_SHUTDOWN, "SHUTDOWN"},
+
+        {CONTAINER_START, "CONT_START"},
+        {MSVC_START_REPORT, "MSVC_START"},
+        {CONTEXT_METRICS, "CXT_MET"},
+        {ADJUST_UPSTREAM, "ADJ_UPSTR"},
+        {UPDATE_SENDER, "UPD_SENDER"},
+        {SYNC_DATASOURCES, "SYNC_DS"},
+        {TRANSFER_FRAME_ID, "FRAME_ID"},
+        {BATCH_SIZE_UPDATE, "BS"},
+        {RESOLUTION_UPDATE, "RES"},
+        {TIME_KEEPING_UPDATE, "TIME_KEEP"},
+        {CONTAINER_STOP, "CONT_STOP"},
+
+        {START_FL, "FL_START"},
+        {RETURN_FL, "RET_FL"},
+        {BCEDGE_UPDATE, "BCEDGE_UPD"}
+};
+
 std::chrono::time_point<std::chrono::_V2::system_clock, std::chrono::milliseconds> timePointCastMillisecond(
     std::chrono::system_clock::time_point tp) {
     return std::chrono::time_point_cast<std::chrono::milliseconds>(tp);
@@ -1015,9 +1039,6 @@ void signalHandler(int signal) {
     case SIGILL:
         std::cerr << "Error: Illegal instruction detected (signal " << signal << ")." << std::endl;
         break;
-    case SIGTERM:
-        std::cerr << "Error: Termination request detected (signal " << signal << ")." << std::endl;
-        break;
     default:
         std::cerr << "Error: Unknown signal " << signal << " received." << std::endl;
     }
@@ -1025,7 +1046,7 @@ void signalHandler(int signal) {
     void* callStack[128];
     int stackSize = backtrace(callStack, 128);
 
-// Print the backtrace
+    // Print the backtrace
     std::cerr << "Backtrace (most recent calls first):" << std::endl;
     char** symbols = backtrace_symbols(callStack, stackSize);
     for (int i = 0; i < stackSize; ++i) {
@@ -1063,7 +1084,6 @@ void setupLogger(
     std::signal(SIGFPE, signalHandler);
     std::signal(SIGABRT, signalHandler);
     std::signal(SIGILL, signalHandler);
-    std::signal(SIGTERM, signalHandler);
 
     std::string path = logPath + "/" + loggerName + "_" + getTimestampString() + ".log";
 
@@ -1467,4 +1487,46 @@ void addTimestampsToPath(
     for (uint8_t i = 1; i < timeRecords.size(); i++) {
         path += delimiter + std::to_string(std::chrono::duration_cast<TimePrecisionType>(timeRecords[i].time_since_epoch()).count());
     }
+}
+
+std::string generateComposeConfig(const std::string &base_file, const std::string &cont_name,
+                                   const std::string &docker_tag, const std::string &executable,
+                                   const std::string &start_string, int device, int port, int port_offset,
+                                   bool deploy_mode) {
+    std::ifstream infile(base_file);
+    if (!infile.is_open()) {
+        spdlog::get("container_agent")->error("Failed to open base compose file: {}", base_file);
+        return "";
+    }
+    std::stringstream buffer;
+    buffer << infile.rdbuf();
+    std::string yaml_content = buffer.str();
+
+    auto replaceAll = [](std::string &str, const std::string &from, const std::string &to) {
+        size_t start_pos = 0;
+        while ((start_pos = str.find(from, start_pos)) != std::string::npos) {
+            str.replace(start_pos, from.length(), to);
+            start_pos += to.length();
+        }
+    };
+
+    replaceAll(yaml_content, "${CONTAINER_NAME}", cont_name);
+    replaceAll(yaml_content, "${DOCKER_TAG}", docker_tag);
+    replaceAll(yaml_content, "${EXECUTABLE}", executable);
+    replaceAll(yaml_content, "${START_STRING}", start_string);
+    replaceAll(yaml_content, "${DEVICE}", std::to_string(device));
+    replaceAll(yaml_content, "${PORT}", std::to_string(port));
+    replaceAll(yaml_content, "${PORT_OFFSET}", std::to_string(port_offset));
+    replaceAll(yaml_content, "${LOGGING_ARGS}", deploy_mode ? "--logging_mode 1" : "--verbose 0 --logging_mode 2");
+
+    std::string tmp_file = COMPOSE_PATH + cont_name + ".yml";
+    std::ofstream outfile(tmp_file);
+    if (!outfile.is_open()) {
+        spdlog::get("container_agent")->error("Failed to write temporary compose file: {}", tmp_file);
+        return "";
+    }
+    outfile << yaml_content;
+    outfile.close();
+
+    return tmp_file;
 }

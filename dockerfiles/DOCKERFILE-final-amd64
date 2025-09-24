@@ -5,15 +5,11 @@ ARG VERSION=Release
 
 USER root
 
-ENV TZ=Asia/Seoul
-RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
-
 RUN mkdir /app/build -p
 COPY ./cmake /app/cmake
-COPY ./src /app/src
 COPY ./libs /app/libs
 COPY ./CMakeLists.txt /app/CMakeLists.txt
 WORKDIR /app/build
-RUN cmake -DCMAKE_BUILD_TYPE=VERSION .. -DSYSTEM_NAME=FCPO
+RUN cmake -DON_HOST=OFF -DDEVICE_ARCH=amd64 -DSYSTEM_NAME=FCPO -DCMAKE_BUILD_TYPE=VERSION ..
 RUN make -j$(nproc)
 COPY ./jsons /app/jsons

@@ -8,10 +8,11 @@
     "yolov5_batch_size": 2,
     "edge_batch_size": 4,
     "server_batch_size": 8,
-    "scheduling_interval_sec": 360,
-    "rescaling_interval_sec": 30,
+    "scheduling_interval_sec": 300,
+    "rescaling_interval_sec": 300,
     "scale_up_interval_threshold_sec": 150,
     "scale_down_interval_threshold_sec": 240,
+    "cluster_count": 5,
     "initial_pipelines": [
         {
             "pipeline_name": "traffic4",
@@ -41,6 +42,7 @@
     "theta": 1.1,
     "sigma": 10.0,
     "phi": 2.0,
+    "rho": 1.0,
     "update_steps": 100,
     "update_step_incs": 10,
     "federated_steps": 10,

@@ -2,42 +2,29 @@
 #define PIPEPLUSPLUS_CONTROLLER_H
 
 #include "microservice.h"
-#include <grpcpp/grpcpp.h>
 #include <thread>
-#include "controlcommands.grpc.pb.h"
-#include "controlmessages.grpc.pb.h"
 #include <pqxx/pqxx>
 #include "absl/strings/str_format.h"
 #include "absl/flags/parse.h"
 #include "absl/flags/flag.h"
 #include <random>
 #include "fcpo_learning.h"
+#include "bandwidth_predictor/bandwidth_predictor.h"
 
-using grpc::Status;
-using grpc::CompletionQueue;
-using grpc::ClientContext;
-using grpc::ClientAsyncResponseReader;
-using grpc::ServerBuilder;
-using grpc::ServerContext;
-using grpc::ServerCompletionQueue;
-using controlcommands::LoopRange;
-using controlcommands::ContainerConfig;
-using controlcommands::ContainerLink;
-using controlcommands::ContainerInts;
-using controlmessages::ControlMessages;
+using controlmessages::LoopRange;
+using controlmessages::ContainerConfig;
+using controlmessages::ContainerLink;
+using controlmessages::ContainerInts;
 using controlmessages::ConnectionConfigs;
 using controlmessages::SystemInfo;
 using controlmessages::DummyMessage;
-using indevicecommands::FlData;
-using indevicecommands::TimeKeeping;
-using indevicecommands::ContainerSignal;
-using EmptyMessage = google::protobuf::Empty;
+using indevicemessages::FlData;
+using indevicemessages::TimeKeeping;
+using indevicemessages::ContainerSignal;
 
 ABSL_DECLARE_FLAG(std::string, ctrl_configPath);
 ABSL_DECLARE_FLAG(uint16_t, ctrl_verbose);
 ABSL_DECLARE_FLAG(uint16_t, ctrl_loggingMode);
-
-// typedef std::vector<std::pair<ModelType, std::vector<std::pair<ModelType, int>>>> Pipeline;
 
 struct ContainerHandle;
 struct PipelineModel;
@@ -88,7 +75,7 @@ struct GPUPortion {
     GPUPortion(std::uint64_t start, std::uint64_t end, ContainerHandle *container, GPULane *lane)
         : start(start), end(end), container(container), lane(lane) {}
 
-    bool assignContainer(ContainerHandle *container);
+    bool assignContainer(ContainerHandle *cont);
 };
 
 struct GPUHandle {
@@ -120,13 +107,14 @@ struct TaskHandle;
 struct NodeHandle {
     std::string name;
     std::string ip;
-    std::shared_ptr<ControlCommands::Stub> stub;
-    CompletionQueue *cq;
     SystemDeviceType type;
     int next_free_port;
     std::map<std::string, ContainerHandle *> containers;
     // The latest network entries to determine the network conditions and latencies of transferring data
     std::map<std::string, NetworkEntryType> latestNetworkEntries = {};
+    // Transmission Latency History is used for bandwidth prediction to forcast network conditions
+    std::vector<float> transmissionLatencyHistory;
+    float transmissionLatencyPrediction;
     // GPU Handle;
     std::vector<GPUHandle*> gpuHandles;
     //
@@ -147,15 +135,11 @@ struct NodeHandle {
 
     NodeHandle(const std::string& name,
                const std::string& ip,
-               std::shared_ptr<ControlCommands::Stub> stub,
-               grpc::CompletionQueue* cq,
                SystemDeviceType type,
                int next_free_port,
                std::map<std::string, ContainerHandle*> containers)
         : name(name),
           ip(ip),
-          stub(std::move(stub)),
-          cq(cq),
           type(type),
           next_free_port(next_free_port),
           containers(std::move(containers)) {}
@@ -166,8 +150,6 @@ struct NodeHandle {
         std::lock_guard<std::mutex> lock2(other.nodeHandleMutex, std::adopt_lock);
         name = other.name;
         ip = other.ip;
-        stub = other.stub;
-        cq = other.cq;
         type = other.type;
         next_free_port = other.next_free_port;
         containers = other.containers;
@@ -181,8 +163,6 @@ struct NodeHandle {
             std::lock_guard<std::mutex> lock2(other.nodeHandleMutex, std::adopt_lock);
             name = other.name;
             ip = other.ip;
-            stub = other.stub;
-            cq = other.cq;
             type = other.type;
             next_free_port = other.next_free_port;
             containers = other.containers;
@@ -200,6 +180,7 @@ struct ContainerHandle {
     bool mergable;
     std::vector<int> dimensions;
     uint64_t pipelineSLO;
+    json fcpo_conf = "";
 
     float arrival_rate;
 
@@ -259,7 +240,7 @@ struct ContainerHandle {
 
     ContainerHandle() = default;
 
-        // Constructor
+    // Constructor
     ContainerHandle(const std::string& name,
                 unsigned int replica_id,
                 int class_of_interest,
@@ -865,6 +846,15 @@ public:
         return elements;
     }
 
+    std::vector<std::tuple<std::string, std::string, nlohmann::json>> getFLConnections() {
+        std::lock_guard<std::mutex> lock(containersMutex);
+        std::vector<std::tuple<std::string, std::string, nlohmann::json>> elements;
+        for (auto &c: list) {
+            elements.push_back(std::make_tuple(c.first, c.second->device_agent->name, c.second->fcpo_conf));
+        }
+        return elements;
+    }
+
     std::map<std::string, ContainerHandle *> getMap() {
         std::lock_guard<std::mutex> lock(containersMutex);
         return list;
@@ -883,14 +873,7 @@ private:
 class Controller {
 public:
     Controller(int argc, char **argv);
-
     ~Controller();
-
-    void HandleRecvRpcs();
-
-    void Scheduling();
-
-    void Rescaling();
 
     void Init() {
         for (auto &t: initialTasks) {
@@ -903,7 +886,6 @@ public:
         }
         isPipelineInitialised = true;
     }
-
     void InitRemain() {
         for (auto &t: remainTasks) {
             if (!t.added) {
@@ -912,81 +894,22 @@ public:
             if (t.added) {
                 // Remove the task from the remain list
                 remainTasks.erase(std::remove_if(remainTasks.begin(), remainTasks.end(),
-                                                [&t](const TaskDescription::TaskStruct &task) {
-                                                    return task.name == t.name;
-                                                }), remainTasks.end());
+                                                 [&t](const TaskDescription::TaskStruct &task) {
+                                                     return task.name == t.name;
+                                                 }), remainTasks.end());
             }
         }
     }
-
-    void addRemainTask(const TaskDescription::TaskStruct &task) {
-        remainTasks.push_back(task);
-    }
-
     bool AddTask(const TaskDescription::TaskStruct &task);
+    void addRemainTask(const TaskDescription::TaskStruct &task) {remainTasks.push_back(task);}
 
-    ContainerHandle *TranslateToContainer(PipelineModel *model, NodeHandle *device, unsigned int i);
-
-    void ApplyScheduling();
-
-    void ScaleUp(PipelineModel *model, uint8_t numIncReps);
-
-    void ScaleDown(PipelineModel *model, uint8_t numDecReps);
-
+    void Scheduling();
+    void HandleControlMessages();
     [[nodiscard]] bool isRunning() const { return running; };
-
     void Stop() { running = false; };
-
-    void readInitialObjectCount(
-        const std::string& path 
-    );
-
 private:
-    void initiateGPULanes(NodeHandle &node);
 
-    NetworkEntryType initNetworkCheck(NodeHandle &node, uint32_t minPacketSize = 1000, uint32_t maxPacketSize = 1228800, uint32_t numLoops = 20);
-    uint8_t incNumReplicas(const PipelineModel *model);
-    uint8_t decNumReplicas(const PipelineModel *model);
-
-    void calculateQueueSizes(ContainerHandle &model, const ModelType modelType);
-    uint64_t calculateQueuingLatency(const float &arrival_rate, const float &preprocess_rate);
-
-    void queryingProfiles(TaskHandle *task);
-
-    void estimateModelLatency(PipelineModel *currModel);
-    void estimateModelNetworkLatency(PipelineModel *currModel);
-    void estimatePipelineLatency(PipelineModel *currModel, const uint64_t start2HereLatency);
-
-    void estimateModelTiming(PipelineModel *currModel, const uint64_t start2HereDutyCycle);
-
-    void crossDeviceWorkloadDistributor(TaskHandle *task, uint64_t slo);
-    void shiftModelToEdge(PipelineModelListType &pipeline, PipelineModel *currModel, uint64_t slo, const std::string& edgeDevice);
-
-    bool mergeArrivalProfiles(ModelArrivalProfile &mergedProfile, const ModelArrivalProfile &toBeMergedProfile, const std::string &device, const std::string &upstreamDevice);
-    bool mergeProcessProfiles(
-        PerDeviceModelProfileType &mergedProfile,
-        float arrivalRate1,
-        const PerDeviceModelProfileType &toBeMergedProfile,
-        float arrivalRate2,
-        const std::string &device
-    );
-    bool mergeModels(PipelineModel *mergedModel, PipelineModel *tobeMergedModel, const std::string &device);
-    TaskHandle* mergePipelines(const std::string& taskName);
-    void mergePipelines();
-
-    bool containerColocationTemporalScheduling(ContainerHandle *container);
-    bool modelColocationTemporalScheduling(PipelineModel *pipelineModel, int replica_id);
-    void colocationTemporalScheduling();
-
-    void basicGPUScheduling(std::vector<ContainerHandle *> new_containers);
-
-    PipelineModelListType getModelsByPipelineType(PipelineType type, const std::string &startDevice, const std::string &pipelineName = "", const std::string &streamName = "");
-
-    void checkNetworkConditions();
-
-    void readConfigFile(const std::string &config_path);
-
-    void queryInDeviceNetworkEntries(NodeHandle *node);
+    /////////////////////////////////////////// PRIVATE STRUCTURES ///////////////////////////////////////////
 
     struct TimingControl {
         uint64_t schedulingIntervalSec;
@@ -1000,174 +923,145 @@ private:
         ClockType nextRescalingTime = std::chrono::system_clock::time_point::max();
     };
 
-    TimingControl ctrl_controlTimings;
+    /////////////////////////////////////////// PRIVATE FUNCTIONS ///////////////////////////////////////////
 
-    class RequestHandler {
-    public:
-        RequestHandler(ControlMessages::AsyncService *service, ServerCompletionQueue *cq, Controller *c)
-                : service(service), cq(cq), status(CREATE), controller(c) {}
+    // CONFIGS
+    void readConfigFile(const std::string &config_path);
+    void readInitialObjectCount(const std::string& path);
+    PipelineModelListType getModelsByPipelineType(PipelineType type, const std::string &startDevice,
+                                                  const std::string &pipelineName = "", const std::string &streamName = "");
+    std::vector<std::string> getPipelineNames();
 
-        virtual ~RequestHandler() = default;
+    // STARTUP
+    void ApplyScheduling();
+    ContainerHandle *TranslateToContainer(PipelineModel *model, NodeHandle *device, unsigned int i);
 
-        virtual void Proceed() = 0;
+    // CWD
+    void crossDeviceWorkloadDistributor(TaskHandle *task, uint64_t slo);
+    void shiftModelToEdge(PipelineModelListType &pipeline, PipelineModel *currModel, uint64_t slo, const std::string& edgeDevice);
 
-    protected:
-        enum CallStatus {
-            CREATE, PROCESS, FINISH
-        };
-        ControlMessages::AsyncService *service;
-        ServerCompletionQueue *cq;
-        ServerContext ctx;
-        CallStatus status;
-        Controller *controller;
-    };
+    // PIPELINE SCALING
+    void Rescaling();
+    void ScaleUp(PipelineModel *model, uint8_t numIncReps);
+    void ScaleDown(PipelineModel *model, uint8_t numDecReps);
+    uint8_t incNumReplicas(const PipelineModel *model);
+    uint8_t decNumReplicas(const PipelineModel *model);
 
-    class DeviseAdvertisementHandler : public RequestHandler {
-    public:
-        DeviseAdvertisementHandler(ControlMessages::AsyncService *service, ServerCompletionQueue *cq,
-                                   Controller *c)
-                : RequestHandler(service, cq, c), responder(&ctx) {
-            Proceed();
-        }
-
-        void Proceed() final;
-
-    private:
-        ConnectionConfigs request;
-        SystemInfo reply;
-        grpc::ServerAsyncResponseWriter<SystemInfo> responder;
-    };
-
+    // GPU HANDLING
+    void basicGPUScheduling(std::vector<ContainerHandle *> new_containers);
     void initialiseGPU(NodeHandle *node, int numGPUs, std::vector<int> memLimits);
-
-    class DummyDataRequestHandler : public RequestHandler {
-    public:
-        DummyDataRequestHandler(ControlMessages::AsyncService *service, ServerCompletionQueue *cq,
-                                   Controller *c)
-                : RequestHandler(service, cq, c), responder(&ctx) {
-            Proceed();
-        }
-
-        void Proceed() final;
-
-    private:
-        DummyMessage request;
-        EmptyMessage reply;
-        grpc::ServerAsyncResponseWriter<EmptyMessage> responder;
-    };
-
-    class ForwardFLRequestHandler : public RequestHandler {
-    public:
-        ForwardFLRequestHandler(ControlMessages::AsyncService *service, ServerCompletionQueue *cq,
-                                Controller *c)
-                : RequestHandler(service, cq, c), responder(&ctx) {
-            Proceed();
-        }
-
-        void Proceed() final;
-
-    private:
-        FlData request;
-        EmptyMessage reply;
-        grpc::ServerAsyncResponseWriter<EmptyMessage> responder;
-    };
-
-    void StartContainer(ContainerHandle *container, bool easy_allocation = true);
-
-    void MoveContainer(ContainerHandle *container, NodeHandle *new_device);
-
-    static void AdjustUpstream(int port, ContainerHandle *upstr, NodeHandle *new_device,
-                               const std::string &dwnstr, AdjustUpstreamMode mode, const std::string &old_link = "");
-
-    static void SyncDatasource(ContainerHandle *prev, ContainerHandle *curr);
-
-    void AdjustBatchSize(ContainerHandle *msvc, int new_bs);
-
-    void AdjustCudaDevice(ContainerHandle *msvc, GPUHandle *new_device);
-
-    void AdjustResolution(ContainerHandle *msvc, std::vector<int> new_resolution);
-
-    void StopContainer(ContainerHandle *container, NodeHandle *device, bool forced = false);
-
-    void AdjustTiming(ContainerHandle *container);
-
-    // void optimizeBatchSizeStep(
-    //         const Pipeline &models,
-    //         std::map<ModelType, int> &batch_sizes, std::map<ModelType, int> &estimated_infer_times, int nObjects);
-
-    bool running;
-    ClockType startTime;
-    std::string ctrl_experimentName;
-    std::string ctrl_systemName;
-    std::vector<TaskDescription::TaskStruct> initialTasks;
-    std::vector<TaskDescription::TaskStruct> remainTasks;
-    uint16_t ctrl_runtime;
-    uint16_t ctrl_port_offset;
-
-    std::string ctrl_logPath;
-    uint16_t ctrl_loggingMode;
-    uint16_t ctrl_verbose;
-
-    ContainerLibType ctrl_containerLib;
-    DeviceInfoType ctrl_sysDeviceInfo = {
-        {Virtual, "virtual"},
-        {Server, "server"},
-        {OnPremise, "onprem"},
-        {OrinAGX, "orinagx"},
-        {OrinNX, "orinnx"},
-        {OrinNano, "orinano"},
-        {AGXXavier, "agxavier"},
-        {NXXavier, "nxavier"}
-    };
-    
-    Devices devices;
-
-    Tasks ctrl_unscheduledPipelines, ctrl_savedUnscheduledPipelines, ctrl_scheduledPipelines, ctrl_pastScheduledPipelines;
-
-    Containers containers;
-
-    std::map<std::string, NetworkEntryType> network_check_buffer;
-
-    ControlMessages::AsyncService service;
-    std::unique_ptr<grpc::Server> server;
-    std::unique_ptr<ServerCompletionQueue> cq;
-
-    std::unique_ptr<pqxx::connection> ctrl_metricsServerConn = nullptr;
-    MetricsServerConfigs ctrl_metricsServerConfigs;
-    std::string ctrl_sinkNodeIP;
-
-    std::vector<spdlog::sink_ptr> ctrl_loggerSinks = {};
-    std::shared_ptr<spdlog::logger> ctrl_logger;
-
-    std::map<std::string, NetworkEntryType> ctrl_inDeviceNetworkEntries;
-
-    std::uint64_t ctrl_schedulingIntervalSec;
-    ClockType ctrl_nextSchedulingTime = std::chrono::system_clock::now();
-    ClockType ctrl_currSchedulingTime = std::chrono::system_clock::now();
-
-    std::map<std::string, std::map<std::string, float>> ctrl_initialRequestRates;
-
-    uint16_t ctrl_systemFPS;
-
-    // Fixed batch sizes for SOTAs that don't provide dynamic batching
-    std::map<std::string, BatchSizeType> ctrl_initialBatchSizes;
-
-    std::atomic<bool> isPipelineInitialised = false;
-
-    uint16_t ctrl_numGPULanes = NUM_LANES_PER_GPU * NUM_GPUS, ctrl_numGPUPortions;
-
+    void initiateGPULanes(NodeHandle &node);
     void insertFreeGPUPortion(GPUPortionList &portionList, GPUPortion *freePortion);
     bool removeFreeGPUPortion(GPUPortionList &portionList, GPUPortion *freePortion);
     std::pair<GPUPortion *, GPUPortion *> insertUsedGPUPortion(GPUPortionList &portionList, ContainerHandle *container, GPUPortion *toBeDividedFreePortion);
     bool reclaimGPUPortion(GPUPortion *toBeReclaimedPortion);
     GPUPortion* findFreePortionForInsertion(GPUPortionList &portionList, ContainerHandle *container);
+
+    // CORAL
+    bool containerColocationTemporalScheduling(ContainerHandle *container);
+    bool modelColocationTemporalScheduling(PipelineModel *pipelineModel, int replica_id);
+    void colocationTemporalScheduling();
+
+    // CONTAINER MANAGEMENT
+    void StartContainer(ContainerHandle *container, bool easy_allocation = true);
+    void MoveContainer(ContainerHandle *container, NodeHandle *new_device);
+    void StopContainer(ContainerHandle *container, NodeHandle *device, bool forced = false);
+    void AdjustUpstream(int port, ContainerHandle *upstr, NodeHandle *new_device,
+                               const std::string &dwnstr, AdjustUpstreamMode mode, const std::string &old_link = "");
+    void SyncDatasource(ContainerHandle *prev, ContainerHandle *curr);
+    void AdjustBatchSize(ContainerHandle *msvc, int new_bs);
+    void AdjustCudaDevice(ContainerHandle *msvc, GPUHandle *new_device);
+    void AdjustResolution(ContainerHandle *msvc, std::vector<int> new_resolution);
+    void AdjustTiming(ContainerHandle *container);
+
+    // PROFILING DATA & MONITORING
+    void queryingProfiles(TaskHandle *task);
+    void queryInDeviceNetworkEntries(NodeHandle *node);
+    void calculateQueueSizes(ContainerHandle &model, const ModelType modelType);
+    uint64_t calculateQueuingLatency(float &arrival_rate, const float &preprocess_rate);
+    NetworkEntryType initNetworkCheck(NodeHandle &node, uint32_t minPacketSize = 1000, uint32_t maxPacketSize = 1228800, uint32_t numLoops = 20);
+    void checkNetworkConditions();
+
+    // PERFORMANCE ESTIMATION
+    void estimateModelLatency(PipelineModel *currModel);
+    void estimateModelNetworkLatency(PipelineModel *currModel);
+    void estimatePipelineLatency(PipelineModel *currModel, const uint64_t start2HereLatency);
+    void estimateModelTiming(PipelineModel *currModel, const uint64_t start2HereDutyCycle);
     void estimatePipelineTiming();
     void estimateTimeBudgetLeft(PipelineModel *currModel);
 
-    Tasks ctrl_mergedPipelines;
+    // PIPELINE MERGING
+    bool mergeArrivalProfiles(ModelArrivalProfile &mergedProfile, const ModelArrivalProfile &toBeMergedProfile, const std::string &device, const std::string &upstreamDevice);
+    bool mergeProcessProfiles(
+            PerDeviceModelProfileType &mergedProfile,
+            float arrivalRate1,
+            const PerDeviceModelProfileType &toBeMergedProfile,
+            float arrivalRate2,
+            const std::string &device);
+    bool mergeModels(PipelineModel *mergedModel, PipelineModel *tobeMergedModel, const std::string &device);
+    TaskHandle* mergePipelines(const std::string& taskName);
+    void mergePipelines();
 
+    // CONTROL MESSAGING
+    void handleDeviseAdvertisement(const std::string &msg);
+    void handleDummyDataRequest(const std::string &msg);
+    void handleForwardFLRequest(const std::string &msg);
+    void sendMessageToDevice(const std::string &topik, const std::string &type, const std::string &content);
+
+    /////////////////////////////////////////// PRIVATE VARIABLES ///////////////////////////////////////////
+
+    // RUNTIME VARIABLES
+    bool running;
+    std::atomic<bool> isPipelineInitialised = false;
+    ClockType startTime = std::chrono::system_clock::time_point();
+    std::uint64_t ctrl_schedulingIntervalSec;
+    ClockType ctrl_nextSchedulingTime = std::chrono::system_clock::now();
+    ClockType ctrl_currSchedulingTime = std::chrono::system_clock::now();
+    Tasks ctrl_unscheduledPipelines, ctrl_savedUnscheduledPipelines, ctrl_scheduledPipelines,
+          ctrl_pastScheduledPipelines, ctrl_mergedPipelines;
+    Devices devices;
+    Containers containers;
+    std::vector<spdlog::sink_ptr> ctrl_loggerSinks = {};
+    std::shared_ptr<spdlog::logger> ctrl_logger;
+    uint16_t ctrl_numGPULanes = NUM_LANES_PER_GPU * NUM_GPUS, ctrl_numGPUPortions;
+
+    // EXPERIMENT CONFIG
+    std::string ctrl_experimentName;
+    std::string ctrl_systemName;
+    std::vector<TaskDescription::TaskStruct> initialTasks;
+    std::vector<TaskDescription::TaskStruct> remainTasks;
+    uint16_t ctrl_systemFPS;
+    uint16_t ctrl_runtime;
+    uint16_t ctrl_clusterID, ctrl_clusterCount;
+    uint16_t ctrl_port_offset;
+    std::map<std::string, BatchSizeType> ctrl_initialBatchSizes;
+    TimingControl ctrl_controlTimings;
+    ContainerLibType ctrl_containerLib;
+    std::string ctrl_sinkNodeIP;
+
+    // LOGGING
+    std::string ctrl_logPath;
+    uint16_t ctrl_loggingMode;
+    uint16_t ctrl_verbose;
+
+    // MESSAGING & NETWORK
+    context_t ctx;
+    socket_t server_socket;
+    socket_t message_queue;
+    std::unordered_map<std::string, std::function<void(const std::string&)>> handlers;
+
+    // PROFILING DATA & METRICS
+    std::unique_ptr<pqxx::connection> ctrl_metricsServerConn = nullptr;
+    MetricsServerConfigs ctrl_metricsServerConfigs;
+    std::map<std::string, NetworkEntryType> network_check_buffer;
+    std::map<std::string, NetworkEntryType> ctrl_inDeviceNetworkEntries;
+    std::map<std::string, std::map<std::string, float>> ctrl_initialRequestRates;
+
+    // FCPO
     FCPOServer *ctrl_fcpo_server;
     json ctrl_fcpo_config;
+
+    BandwidthPredictor ctrl_bandwidth_predictor;
 };
 
 
