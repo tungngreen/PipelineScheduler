@@ -53,8 +53,8 @@ find_package(controller CONFIG REQUIRED)
 set(baseprocessors_DIR "${CMAKE_CURRENT_BINARY_DIR}/../processing_engine/baseprocessors")
 find_package(baseprocessors CONFIG REQUIRED)
 
-set(micro_optimization_DIR "${CMAKE_CURRENT_BINARY_DIR}/../micro_optimization")
-find_package(micro_optimization CONFIG REQUIRED)
+set(local_optimization_DIR "${CMAKE_CURRENT_BINARY_DIR}/../local_optimization")
+find_package(local_optimization CONFIG REQUIRED)
 
 # Defines the headers for this library.
 # https://cmake.org/cmake/help/v3.11/command/target_include_directories.html
@@ -90,7 +90,7 @@ target_link_libraries(container_agent
         controller
         communicator
         baseprocessors
-        micro_optimization
+        local_optimization
 )
 
 # add_executable(ContainerAgent container_agent.cpp)

@@ -41,61 +41,61 @@ message ("Building controller for system: ${SYSTEM_NAME}")
 if(SYSTEM_NAME STREQUAL "PPP")
         set(HEADER_FILES
                 ${HEADER_FILES}
-                systems/scheduling-ppp.h
+                systems/scheduling_ppp.h
         )
         set(SOURCE_FILES
                 ${SOURCE_FILES}
-                systems/scheduling-ppp.cpp
+                systems/scheduling_ppp.cpp
         )
 elseif (SYSTEM_NAME STREQUAL "FCPO")
         set(HEADER_FILES
                 ${HEADER_FILES}
-                systems/scheduling-fcpo.h
+                systems/scheduling_fcpo.h
         )
 
         set(SOURCE_FILES
                 ${SOURCE_FILES}
-                systems/scheduling-fcpo.cpp
+                systems/scheduling_fcpo.cpp
         )
 elseif (SYSTEM_NAME STREQUAL "JLF")
         set(HEADER_FILES
                 ${HEADER_FILES}
-                systems/scheduling-jlf.h
+                systems/scheduling_jlf.h
         )
 
         set(SOURCE_FILES
                 ${SOURCE_FILES}
-                systems/scheduling-jlf.cpp
+                systems/scheduling_jlf.cpp
         )
 elseif (SYSTEM_NAME STREQUAL "DIS")
         set(HEADER_FILES
                 ${HEADER_FILES}
-                systems/scheduling-dis.h
+                systems/scheduling_dis.h
         )
 
         set(SOURCE_FILES
                 ${SOURCE_FILES}
-                systems/scheduling-dis.cpp
+                systems/scheduling_dis.cpp
         )
 elseif (SYSTEM_NAME STREQUAL "RIM")
         set(HEADER_FILES
                 ${HEADER_FILES}
-                systems/scheduling-rim.h
+                systems/scheduling_rim.h
         )
 
         set(SOURCE_FILES
                 ${SOURCE_FILES}
-                systems/scheduling-rim.cpp
+                systems/scheduling_rim.cpp
         )
 elseif (SYSTEM_NAME STREQUAL "TUTTI")
         set(HEADER_FILES
                 ${HEADER_FILES}
-                systems/scheduling-tuti.h
+                systems/scheduling_tuti.h
         )
 
         set(SOURCE_FILES
                 ${SOURCE_FILES}
-                systems/scheduling-tuti.cpp
+                systems/scheduling_tuti.cpp
         )
 elseif (SYSTEM_NAME STREQUAL "APIS")
     set(HEADER_FILES
@@ -131,8 +131,8 @@ target_compile_features(controller
 # we can have multiple versions installed at the same time.
 set(PROJECT_PREFIX controller)
 
-set(micro_optimization_DIR "${CMAKE_CURRENT_BINARY_DIR}/../micro_optimization")
-find_package(micro_optimization CONFIG REQUIRED)
+set(local_optimization_DIR "${CMAKE_CURRENT_BINARY_DIR}/../local_optimization")
+find_package(local_optimization CONFIG REQUIRED)
 
 set(microservice_DIR "${CMAKE_CURRENT_BINARY_DIR}/../microservice")
 find_package(microservice CONFIG REQUIRED)
@@ -162,7 +162,7 @@ target_link_libraries(controller
         ${_REFLECTION}
         ${_PROTOBUF_LIBPROTOBUF}
         ${CMAKE_THREAD_LIBS_INIT}
-        micro_optimization
+        local_optimization
         microservice
         # ${LIGHTGBM_LIBRARY}
 )

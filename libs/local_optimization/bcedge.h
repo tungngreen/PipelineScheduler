@@ -1,4 +1,4 @@
-#include "micro_optimization.h"
+#include "local_optimization.h"
 
 #ifndef PIPEPLUSPLUS_BCEDGE_H
 #define PIPEPLUSPLUS_BCEDGE_H

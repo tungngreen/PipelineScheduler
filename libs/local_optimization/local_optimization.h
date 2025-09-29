@@ -1,25 +1,17 @@
-#include "misc.h"
+#include <misc.h>
 #include <fstream>
 #include <torch/torch.h>
 #include <boost/algorithm/string.hpp>
 #include <random>
 #include <cmath>
 #include <chrono>
-#include "indevicecommands.grpc.pb.h"
 #include "indevicemessages.grpc.pb.h"
-#include "controlcommands.grpc.pb.h"
+#include "controlmessages.grpc.pb.h"
 
 #ifndef PIPEPLUSPLUS_MICRO_OPTIMIZATION_H
 #define PIPEPLUSPLUS_MICRO_OPTIMIZATION_H
 
-using controlcommands::ControlCommands;
-using grpc::Status;
-using grpc::CompletionQueue;
-using grpc::ClientContext;
-using grpc::ClientAsyncResponseReader;
-using indevicemessages::InDeviceMessages;
-using indevicecommands::FlData;
-using EmptyMessage = google::protobuf::Empty;
+using indevicemessages::FlData;
 using T = torch::Tensor;
 
 enum threadingAction {
@@ -42,3 +34,6 @@ const std::unordered_map<std::string, torch::Dtype> DTYPE_MAP = {
 };
 
 #endif //PIPEPLUSPLUS_MICRO_OPTIMIZATION_H
+
+using indevicemessages::FlData;
+using T = torch::Tensor;
