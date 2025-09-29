@@ -12,6 +12,7 @@ ABSL_FLAG(uint16_t, logging_mode, 0, "0:stdout, 1:file, 2:both");
 ABSL_FLAG(std::string, log_dir, "../logs", "Log path for the container");
 ABSL_FLAG(uint16_t, profiling_mode, 0,
           "flag to make the model running in profiling mode 0:deployment, 1:profiling, 2:empty_profiling");
+ABSL_FLAG(bool, restart, false, "Whether the container should restart after finishing the current input stream (for datasource only)");
 
 std::atomic<bool> CONT_RUN(true);
 
@@ -121,6 +122,7 @@ void manageJsonConfigs(json &configs) {
         containerConfigs->at("cont_pipeline")[i]["msvc_deviceIndex"] = containerConfigs->at("cont_device");
         containerConfigs->at("cont_pipeline")[i]["msvc_containerLogPath"] = logPath;
         containerConfigs->at("cont_pipeline")[i]["msvc_RUNMODE"] = runmode;
+        containerConfigs->at("cont_pipeline")[i]["msvc_RESTART"] = containerConfigs->at("cont_RESTART");
         containerConfigs->at(
                 "cont_pipeline")[i]["cont_metricsScrapeIntervalMillisec"] = metricsServerConfigs["metricsServer_metricsReportIntervalMillisec"];
         containerConfigs->at("cont_pipeline")[i]["msvc_numWarmUpBatches"] = containerConfigs->at("cont_numWarmUpBatches");
@@ -166,6 +168,7 @@ json loadRunArgs(int argc, char **argv) {
     uint16_t loggingMode = absl::GetFlag(FLAGS_logging_mode);
     std::string logPath = absl::GetFlag(FLAGS_log_dir);
     uint16_t profiling_mode = absl::GetFlag(FLAGS_profiling_mode);
+    bool restart = absl::GetFlag(FLAGS_restart);
 
     RUNMODE runmode = static_cast<RUNMODE>(profiling_mode);
 
@@ -176,6 +179,7 @@ json loadRunArgs(int argc, char **argv) {
     configs.at("container")["cont_logLevel"] = logLevel;
     configs.at("container")["cont_logPath"] = logPath;
     configs.at("container")["cont_RUNMODE"] = runmode;
+    configs.at("container")["cont_RESTART"] = restart;
     configs.at("container")["cont_loggingMode"] = loggingMode;
     configs.at("container")["cont_port"] = absl::GetFlag(FLAGS_port);
 

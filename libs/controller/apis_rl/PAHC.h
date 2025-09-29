@@ -1,0 +1,10 @@
+#ifndef PIPEPLUSPLUS_PAHC_H
+#define PIPEPLUSPLUS_PAHC_H
+
+
+class PAHC {
+
+};
+
+
+#endif //PIPEPLUSPLUS_PAHC_H

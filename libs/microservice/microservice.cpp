@@ -23,6 +23,7 @@ void msvcconfigs::from_json(const json &j, msvcconfigs::BaseMicroserviceConfigs 
     j.at("msvc_deviceIndex").get_to(val.msvc_deviceIndex);
     j.at("msvc_containerLogPath").get_to(val.msvc_containerLogPath);
     j.at("msvc_RUNMODE").get_to(val.msvc_RUNMODE);
+    j.at("msvc_RESTART").get_to(val.msvc_RESTART);
     j.at("msvc_upstreamMicroservices").get_to(val.msvc_upstreamMicroservices);
     j.at("msvc_dnstreamMicroservices").get_to(val.msvc_dnstreamMicroservices);
 }
@@ -78,6 +79,7 @@ void Microservice::loadConfigs(const json &jsonConfigs, bool isConstructing) {
     PAUSE_THREADS = true;
     msvc_deviceIndex = configs.msvc_deviceIndex;
     msvc_RUNMODE = configs.msvc_RUNMODE;
+    msvc_RESTART = configs.msvc_RESTART;
 
     if (msvc_taskName != "dsrc" && msvc_taskName != "datasource") {
         msvc_allocationMode = static_cast<AllocationMode>(jsonConfigs.at("msvc_allocationMode"));
@@ -190,6 +192,7 @@ Microservice::Microservice(const Microservice &other) {
 
     // Modes
     msvc_RUNMODE = other.msvc_RUNMODE;
+    msvc_RESTART = other.msvc_RESTART;
     msvc_DROP_MODE = other.msvc_DROP_MODE;
     msvc_DROP_MODE = other.msvc_DROP_MODE;
     msvc_allocationMode = other.msvc_allocationMode;

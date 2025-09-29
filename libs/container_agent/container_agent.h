@@ -31,6 +31,7 @@ ABSL_DECLARE_FLAG(uint16_t, verbose);
 ABSL_DECLARE_FLAG(uint16_t, logging_mode);
 ABSL_DECLARE_FLAG(std::string, log_dir);
 ABSL_DECLARE_FLAG(uint16_t, profiling_mode);
+ABSL_DECLARE_FLAG(bool, restart);
 
 using json = nlohmann::ordered_json;
 

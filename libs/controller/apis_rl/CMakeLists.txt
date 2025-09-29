@@ -28,13 +28,13 @@ message ("Building controller for system: ${SYSTEM_NAME}")
 # Only public header files go here.
 set(
         HEADER_FILES
-        meta_bandit.h
+        PAHC.h
 )
 
 # All source files and private header files go here.
 set(
         SOURCE_FILES
-        meta_bandit.cpp
+        PAHC.cpp
 )
 
 # Here we define the library.

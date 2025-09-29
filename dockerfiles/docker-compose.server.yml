@@ -18,4 +18,4 @@ services:
     command: >
       ${EXECUTABLE} --json '${START_STRING}' --device ${DEVICE}
       --port ${PORT} --port_offset ${PORT_OFFSET}
-      --log_dir ../logs ${LOGGING_ARGS}
+      --log_dir ../logs ${LOGGING_ARGS} --restart 1

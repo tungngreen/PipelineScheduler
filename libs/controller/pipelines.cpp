@@ -4,7 +4,9 @@ std::vector<std::string> Controller::getPipelineNames() {
     return {"traffic", "people", "indoor", "surveillancerobot", "campusdrone", "factoryrobot", "factorycctv"};
 }
 
-PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, const std::string &startDevice, const std::string &pipelineName, const std::string &streamName) {
+PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, const std::string &startDevice, 
+                                                          const std::string &pipelineName, const std::string &streamName, 
+                                                          const std::string &edgeNode) {
     std::string sourceName = streamName;
     if (ctrl_initialRequestRates.find(sourceName) == ctrl_initialRequestRates.end()) {
         for (auto [key, rates]: ctrl_initialRequestRates) {
@@ -20,7 +22,7 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
             datasource->possibleDevices = {startDevice};
 
             auto *yolov5n = new PipelineModel{
-                    "server",
+                    edgeNode,
                     "yolov5n",
                     ModelType::Yolov5n,
                     {},
@@ -30,9 +32,9 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
                     {},
                     {{datasource, -1}}
             };
-            yolov5n->possibleDevices = {startDevice, "server"};
+            yolov5n->possibleDevices = {startDevice, edgeNode};
             if (ctrl_systemName == "tuti") {
-                yolov5n->possibleDevices = {"server"};
+                yolov5n->possibleDevices = {edgeNode};
             }
             datasource->downstreams.push_back({yolov5n, -1});
 
@@ -40,10 +42,10 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
             PipelineModel *yolov5n512 = nullptr;
             PipelineModel *yolov5s = nullptr;
             if (ctrl_systemName == "jlf") {
-                yolov5n->possibleDevices = {"server"};
+                yolov5n->possibleDevices = {edgeNode};
 
                 yolov5n320 = new PipelineModel{
-                        "server",
+                        edgeNode,
                         "yolov5n320",
                         ModelType::Yolov5n320,
                         {},
@@ -53,11 +55,11 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
                         {},
                         {{datasource, -1}}
                 };
-                yolov5n320->possibleDevices = {"server"};
+                yolov5n320->possibleDevices = {edgeNode};
 
 
                 yolov5n512 = new PipelineModel{
-                        "server",
+                        edgeNode,
                         "yolov5n512",
                         ModelType::Yolov5n512,
                         {},
@@ -67,10 +69,10 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
                         {},
                         {{datasource, -1}}
                 };
-                yolov5n512->possibleDevices = {"server"};
+                yolov5n512->possibleDevices = {edgeNode};
 
                 yolov5s= new PipelineModel{
-                        "server",
+                        edgeNode,
                         "yolov5s",
                         ModelType::Yolov5s,
                         {},
@@ -80,11 +82,11 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
                         {},
                         {{datasource, -1}}
                 };
-                yolov5s->possibleDevices = {"server"};
+                yolov5s->possibleDevices = {edgeNode};
             }
 
             auto *retina1face = new PipelineModel{
-                    "server",
+                    edgeNode,
                     "retina1face",
                     ModelType::Retinaface,
                     {},
@@ -94,11 +96,11 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
                     {},
                     {{yolov5n, 0}}
             };
-            retina1face->possibleDevices = {"server"};
+            retina1face->possibleDevices = {edgeNode};
             yolov5n->downstreams.push_back({retina1face, 0});
 
             if (ctrl_systemName == "jlf") {
-                retina1face->possibleDevices = {"server"};
+                retina1face->possibleDevices = {edgeNode};
                 retina1face->upstreams = {{yolov5n, 0}, {yolov5n320, 0}, {yolov5n512, 0}, {yolov5s, 0}};
                 yolov5n320->downstreams.push_back({retina1face, 0});
                 yolov5n512->downstreams.push_back({retina1face, 0});
@@ -106,7 +108,7 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
             }
 
             auto *arcface = new PipelineModel{
-                    "server",
+                    edgeNode,
                     "arcface",
                     ModelType::Arcface,
                     {},
@@ -116,11 +118,11 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
                     {},
                     {{retina1face, -1}}
             };
-            arcface->possibleDevices = {"server"};
+            arcface->possibleDevices = {edgeNode};
             retina1face->downstreams.push_back({arcface, -1});
 
             auto *carbrand = new PipelineModel{
-                    "server",
+                    edgeNode,
                     "carbrand",
                     ModelType::CarBrand,
                     {},
@@ -130,11 +132,11 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
                     {},
                     {{yolov5n, 2}}
             };
-            carbrand->possibleDevices = {startDevice, "server"};
+            carbrand->possibleDevices = {startDevice, edgeNode};
             yolov5n->downstreams.push_back({carbrand, 2});
 
             if (ctrl_systemName == "jlf") {
-                carbrand->possibleDevices = {"server"};
+                carbrand->possibleDevices = {edgeNode};
                 carbrand->upstreams = {{yolov5n, 2}, {yolov5n320, 2}, {yolov5n512, 2}, {yolov5s, 2}};
                 yolov5n320->downstreams.push_back({carbrand, 2});
                 yolov5n512->downstreams.push_back({carbrand, 2});
@@ -142,7 +144,7 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
             }
 
             auto *platedet = new PipelineModel{
-                    "server",
+                    edgeNode,
                     "platedet",
                     ModelType::PlateDet,
                     {},
@@ -152,11 +154,11 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
                     {},
                     {{yolov5n, 2}}
             };
-            platedet->possibleDevices = {startDevice, "server"};
+            platedet->possibleDevices = {startDevice, edgeNode};
             yolov5n->downstreams.push_back({platedet, 2});
 
             if (ctrl_systemName == "jlf") {
-                platedet->possibleDevices = {"server"};
+                platedet->possibleDevices = {edgeNode};
                 platedet->upstreams = {{yolov5n, 2}, {yolov5n320, 2}, {yolov5n512, 2}, {yolov5s, 2}};
                 yolov5n320->downstreams.push_back({platedet, 2});
                 yolov5n512->downstreams.push_back({platedet, 2});
@@ -188,7 +190,7 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
             }
 
             if (ctrl_systemName == "jlf") {
-                arcface->possibleDevices = {"server"};
+                arcface->possibleDevices = {edgeNode};
                 return {datasource, yolov5n, yolov5n320, yolov5n512, yolov5s, retina1face, arcface, carbrand, platedet, sink};
             }
             return {datasource, yolov5n, retina1face, arcface, carbrand, platedet, sink};
@@ -211,7 +213,7 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
             datasource->downstreams.push_back({retinamtface, -1});
 
             auto *emotionnet = new PipelineModel{
-                    "server",
+                    edgeNode,
                     "emotionnet",
                     ModelType::Emotionnet,
                     {},
@@ -221,11 +223,11 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
                     {},
                     {{retinamtface, -1}}
             };
-            emotionnet->possibleDevices = {"server"};
+            emotionnet->possibleDevices = {edgeNode};
             retinamtface->downstreams.push_back({emotionnet, -1});
 
             auto *age = new PipelineModel{
-                    "server",
+                    edgeNode,
                     "age",
                     ModelType::Age,
                     {},
@@ -235,11 +237,11 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
                     {},
                     {{retinamtface, -1}}
             };
-            age->possibleDevices = {"server"};
+            age->possibleDevices = {edgeNode};
             retinamtface->downstreams.push_back({age, -1});
 
             auto *gender = new PipelineModel{
-                    "server",
+                    edgeNode,
                     "gender",
                     ModelType::Gender,
                     {},
@@ -249,11 +251,11 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
                     {},
                     {{retinamtface, -1}}
             };
-            gender->possibleDevices = {"server"};
+            gender->possibleDevices = {edgeNode};
             retinamtface->downstreams.push_back({gender, -1});
 
             auto *arcface = new PipelineModel{
-                    "server",
+                    edgeNode,
                     "arcface",
                     ModelType::Arcface,
                     {},
@@ -263,7 +265,7 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
                     {},
                     {{retinamtface, -1}}
             };
-            arcface->possibleDevices = {"server"};
+            arcface->possibleDevices = {edgeNode};
             retinamtface->downstreams.push_back({arcface, -1});
 
             auto *sink = new PipelineModel{
@@ -298,7 +300,7 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
             datasource->possibleDevices = {startDevice};
 
             auto *yolov5n = new PipelineModel{
-                    "server",
+                    edgeNode,
                     "yolov5n",
                     ModelType::Yolov5n,
                     {},
@@ -308,9 +310,9 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
                     {},
                     {{datasource, -1}}
             };
-            yolov5n->possibleDevices = {startDevice, "server"};
+            yolov5n->possibleDevices = {startDevice, edgeNode};
             if (ctrl_systemName == "tuti") {
-                yolov5n->possibleDevices = {"server"};
+                yolov5n->possibleDevices = {edgeNode};
             }
             datasource->downstreams.push_back({yolov5n, -1});
 
@@ -318,10 +320,10 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
             PipelineModel *yolov5n512 = nullptr;
             PipelineModel *yolov5s = nullptr;
             if (ctrl_systemName == "jlf") {
-                yolov5n->possibleDevices = {"server"};
+                yolov5n->possibleDevices = {edgeNode};
 
                 yolov5n320 = new PipelineModel{
-                        "server",
+                        edgeNode,
                         "yolov5n320",
                         ModelType::Yolov5n320,
                         {},
@@ -331,11 +333,11 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
                         {},
                         {{datasource, -1}}
                 };
-                yolov5n320->possibleDevices = {"server"};
+                yolov5n320->possibleDevices = {edgeNode};
 
 
                 yolov5n512 = new PipelineModel{
-                        "server",
+                        edgeNode,
                         "yolov5n512",
                         ModelType::Yolov5n512,
                         {},
@@ -345,10 +347,10 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
                         {},
                         {{datasource, -1}}
                 };
-                yolov5n512->possibleDevices = {"server"};
+                yolov5n512->possibleDevices = {edgeNode};
 
                 yolov5s = new PipelineModel{
-                        "server",
+                        edgeNode,
                         "yolov5s",
                         ModelType::Yolov5s,
                         {},
@@ -358,11 +360,11 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
                         {},
                         {{datasource, -1}}
                 };
-                yolov5s->possibleDevices = {"server"};
+                yolov5s->possibleDevices = {edgeNode};
             }
 
             auto *retina1face = new PipelineModel{
-                    "server",
+                    edgeNode,
                     "retina1face",
                     ModelType::Retinaface,
                     {},
@@ -372,11 +374,11 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
                     {},
                     {{yolov5n, 0}}
             };
-            retina1face->possibleDevices = {"server"};
+            retina1face->possibleDevices = {edgeNode};
             yolov5n->downstreams.push_back({retina1face, 0});
 
             if (ctrl_systemName == "jlf") {
-                retina1face->possibleDevices = {"server"};
+                retina1face->possibleDevices = {edgeNode};
                 retina1face->upstreams = {{yolov5n,    0}, {yolov5n320, 0}, {yolov5n512, 0}, {yolov5s,    0}};
                 yolov5n320->downstreams.push_back({retina1face, 0});
                 yolov5n512->downstreams.push_back({retina1face, 0});
@@ -384,7 +386,7 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
             }
 
             auto *movenet = new PipelineModel{
-                    "server",
+                    edgeNode,
                     "movenet",
                     ModelType::Movenet,
                     {},
@@ -394,11 +396,11 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
                     {},
                     {{yolov5n, 0}}
             };
-            movenet->possibleDevices = {startDevice, "server"};
+            movenet->possibleDevices = {startDevice, edgeNode};
             yolov5n->downstreams.push_back({movenet, 0});
 
             if (ctrl_systemName == "jlf") {
-                movenet->possibleDevices = {"server"};
+                movenet->possibleDevices = {edgeNode};
                 movenet->upstreams = {{yolov5n,    0}, {yolov5n320, 0}, {yolov5n512, 0}, {yolov5s,    0}};
                 yolov5n320->downstreams.push_back({movenet, 0});
                 yolov5n512->downstreams.push_back({movenet, 0});
@@ -406,7 +408,7 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
             }
 
             auto *gender = new PipelineModel{
-                    "server",
+                    edgeNode,
                     "gender",
                     ModelType::Gender,
                     {},
@@ -416,11 +418,11 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
                     {},
                     {{retina1face, -1}}
             };
-            gender->possibleDevices = {startDevice, "server"};
+            gender->possibleDevices = {startDevice, edgeNode};
             retina1face->downstreams.push_back({gender, -1});
 
             auto *age = new PipelineModel{
-                    "server",
+                    edgeNode,
                     "age",
                     ModelType::Age,
                     {},
@@ -430,7 +432,7 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
                     {},
                     {{retina1face, -1}}
             };
-            age->possibleDevices = {startDevice, "server"};
+            age->possibleDevices = {startDevice, edgeNode};
             retina1face->downstreams.push_back({age, -1});
 
             auto *sink = new PipelineModel{
@@ -458,8 +460,8 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
             }
 
             if (ctrl_systemName == "jlf") {
-                gender->possibleDevices = {"server"};
-                age->possibleDevices = {"server"};
+                gender->possibleDevices = {edgeNode};
+                age->possibleDevices = {edgeNode};
                 return {datasource, yolov5n, yolov5n320, yolov5n512, yolov5s, retina1face, movenet, gender, age, sink};
             }
             return {datasource, yolov5n, retina1face, movenet, gender, age, sink};
@@ -469,7 +471,7 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
             datasource->possibleDevices = {startDevice};
 
             auto *yolov5n = new PipelineModel{
-                    "server",
+                    edgeNode,
                     "yolov5n",
                     ModelType::Yolov5n,
                     {},
@@ -479,9 +481,9 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
                     {},
                     {{datasource, -1}}
             };
-            yolov5n->possibleDevices = {startDevice, "server"};
+            yolov5n->possibleDevices = {startDevice, edgeNode};
             if (ctrl_systemName == "tuti") {
-                yolov5n->possibleDevices = {"server"};
+                yolov5n->possibleDevices = {edgeNode};
             }
             datasource->downstreams.push_back({yolov5n, -1});
 
@@ -489,10 +491,10 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
             PipelineModel *yolov5n512 = nullptr;
             PipelineModel *yolov5s = nullptr;
             if (ctrl_systemName == "jlf") {
-                yolov5n->possibleDevices = {"server"};
+                yolov5n->possibleDevices = {edgeNode};
 
                 yolov5n320 = new PipelineModel{
-                        "server",
+                        edgeNode,
                         "yolov5n320",
                         ModelType::Yolov5n320,
                         {},
@@ -502,11 +504,11 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
                         {},
                         {{datasource, -1}}
                 };
-                yolov5n320->possibleDevices = {"server"};
+                yolov5n320->possibleDevices = {edgeNode};
 
 
                 yolov5n512 = new PipelineModel{
-                        "server",
+                        edgeNode,
                         "yolov5n512",
                         ModelType::Yolov5n512,
                         {},
@@ -516,10 +518,10 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
                         {},
                         {{datasource, -1}}
                 };
-                yolov5n512->possibleDevices = {"server"};
+                yolov5n512->possibleDevices = {edgeNode};
 
                 yolov5s= new PipelineModel{
-                        "server",
+                        edgeNode,
                         "yolov5s",
                         ModelType::Yolov5s,
                         {},
@@ -529,11 +531,11 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
                         {},
                         {{datasource, -1}}
                 };
-                yolov5s->possibleDevices = {"server"};
+                yolov5s->possibleDevices = {edgeNode};
             }
 
             auto *arcface = new PipelineModel{
-                    "server",
+                    edgeNode,
                     "arcface",
                     ModelType::Arcface,
                     {},
@@ -543,7 +545,7 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
                     {},
                     {{yolov5n, 0}}
             };
-            arcface->possibleDevices = {"server"};
+            arcface->possibleDevices = {edgeNode};
             yolov5n->downstreams.push_back({arcface, -1});
             if (ctrl_systemName == "jlf") {
                 arcface->upstreams = {{yolov5n, 0}, {yolov5n320, 0}, {yolov5n512, 0}, {yolov5s, 0}};
@@ -553,7 +555,7 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
             }
 
             auto *age = new PipelineModel{
-                    "server",
+                    edgeNode,
                     "age",
                     ModelType::Age,
                     {},
@@ -563,7 +565,7 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
                     {},
                     {{yolov5n, 0}}
             };
-            age->possibleDevices = {"server"};
+            age->possibleDevices = {edgeNode};
             yolov5n->downstreams.push_back({age, -1});
             if (ctrl_systemName == "jlf") {
                 age->upstreams = {{yolov5n, 0}, {yolov5n320, 0}, {yolov5n512, 0}, {yolov5s, 0}};
@@ -573,7 +575,7 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
             }
 
             auto *gender = new PipelineModel{
-                    "server",
+                    edgeNode,
                     "gender",
                     ModelType::Gender,
                     {},
@@ -583,7 +585,7 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
                     {},
                     {{yolov5n, 0}}
             };
-            gender->possibleDevices = {"server"};
+            gender->possibleDevices = {edgeNode};
             yolov5n->downstreams.push_back({gender, -1});
             if (ctrl_systemName == "jlf") {
                 gender->upstreams = {{yolov5n, 0}, {yolov5n320, 0}, {yolov5n512, 0}, {yolov5s, 0}};
@@ -616,7 +618,7 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
             }
 
             if (ctrl_systemName == "jlf") {
-                arcface->possibleDevices = {"server"};
+                arcface->possibleDevices = {edgeNode};
                 return {datasource, yolov5n, yolov5n320, yolov5n512, yolov5s, arcface, gender, age, sink};
             }
             return {datasource, yolov5n, arcface, gender, age, sink};
@@ -626,7 +628,7 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
             datasource->possibleDevices = {startDevice};
 
             auto *yolov5n = new PipelineModel{
-                    "server",
+                    edgeNode,
                     "yolov5n",
                     ModelType::Yolov5n,
                     {},
@@ -636,9 +638,9 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
                     {},
                     {{datasource, -1}}
             };
-            yolov5n->possibleDevices = {startDevice, "server"};
+            yolov5n->possibleDevices = {startDevice, edgeNode};
             if (ctrl_systemName == "tuti") {
-                yolov5n->possibleDevices = {"server"};
+                yolov5n->possibleDevices = {edgeNode};
             }
             datasource->downstreams.push_back({yolov5n, -1});
 
@@ -646,10 +648,10 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
             PipelineModel *yolov5n512 = nullptr;
             PipelineModel *yolov5s = nullptr;
             if (ctrl_systemName == "jlf") {
-                yolov5n->possibleDevices = {"server"};
+                yolov5n->possibleDevices = {edgeNode};
 
                 yolov5n320 = new PipelineModel{
-                        "server",
+                        edgeNode,
                         "yolov5n320",
                         ModelType::Yolov5n320,
                         {},
@@ -659,11 +661,11 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
                         {},
                         {{datasource, -1}}
                 };
-                yolov5n320->possibleDevices = {"server"};
+                yolov5n320->possibleDevices = {edgeNode};
 
 
                 yolov5n512 = new PipelineModel{
-                        "server",
+                        edgeNode,
                         "yolov5n512",
                         ModelType::Yolov5n512,
                         {},
@@ -673,10 +675,10 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
                         {},
                         {{datasource, -1}}
                 };
-                yolov5n512->possibleDevices = {"server"};
+                yolov5n512->possibleDevices = {edgeNode};
 
                 yolov5s= new PipelineModel{
-                        "server",
+                        edgeNode,
                         "yolov5s",
                         ModelType::Yolov5s,
                         {},
@@ -686,11 +688,11 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
                         {},
                         {{datasource, -1}}
                 };
-                yolov5s->possibleDevices = {"server"};
+                yolov5s->possibleDevices = {edgeNode};
             }
 
             auto *platedet = new PipelineModel{
-                    "server",
+                    edgeNode,
                     "platedet",
                     ModelType::PlateDet,
                     {},
@@ -700,10 +702,10 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
                     {},
                     {{yolov5n, 2}}
             };
-            platedet->possibleDevices = {startDevice, "server"};
+            platedet->possibleDevices = {startDevice, edgeNode};
             yolov5n->downstreams.push_back({platedet, 2});
             if (ctrl_systemName == "jlf") {
-                platedet->possibleDevices = {"server"};
+                platedet->possibleDevices = {edgeNode};
                 platedet->upstreams = {{yolov5n, 2},{yolov5n320, 2},{yolov5n512, 2},{yolov5s, 2}};
                 yolov5n320->downstreams.push_back({platedet, 2});
                 yolov5n512->downstreams.push_back({platedet, 2});
@@ -711,7 +713,7 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
             }
 
             auto *movenet = new PipelineModel{
-                    "server",
+                    edgeNode,
                     "movenet",
                     ModelType::Movenet,
                     {},
@@ -721,11 +723,11 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
                     {},
                     {{yolov5n, 0}}
             };
-            movenet->possibleDevices = {startDevice, "server"};
+            movenet->possibleDevices = {startDevice, edgeNode};
             yolov5n->downstreams.push_back({movenet, 0});
 
             if (ctrl_systemName == "jlf") {
-                movenet->possibleDevices = {"server"};
+                movenet->possibleDevices = {edgeNode};
                 movenet->upstreams = {{yolov5n,    0}, {yolov5n320, 0}, {yolov5n512, 0}, {yolov5s,    0}};
                 yolov5n320->downstreams.push_back({movenet, 0});
                 yolov5n512->downstreams.push_back({movenet, 0});
@@ -763,7 +765,7 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
             datasource->possibleDevices = {startDevice};
 
             auto *yolov5n = new PipelineModel{
-                    "server",
+                    edgeNode,
                     "yolov5n",
                     ModelType::Yolov5n,
                     {},
@@ -773,9 +775,9 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
                     {},
                     {{datasource, -1}}
             };
-            yolov5n->possibleDevices = {startDevice, "server"};
+            yolov5n->possibleDevices = {startDevice, edgeNode};
             if (ctrl_systemName == "tuti") {
-                yolov5n->possibleDevices = {"server"};
+                yolov5n->possibleDevices = {edgeNode};
             }
             datasource->downstreams.push_back({yolov5n, -1});
 
@@ -783,10 +785,10 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
             PipelineModel *yolov5n512 = nullptr;
             PipelineModel *yolov5s = nullptr;
             if (ctrl_systemName == "jlf") {
-                yolov5n->possibleDevices = {"server"};
+                yolov5n->possibleDevices = {edgeNode};
 
                 yolov5n320 = new PipelineModel{
-                        "server",
+                        edgeNode,
                         "yolov5n320",
                         ModelType::Yolov5n320,
                         {},
@@ -796,11 +798,11 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
                         {},
                         {{datasource, -1}}
                 };
-                yolov5n320->possibleDevices = {"server"};
+                yolov5n320->possibleDevices = {edgeNode};
 
 
                 yolov5n512 = new PipelineModel{
-                        "server",
+                        edgeNode,
                         "yolov5n512",
                         ModelType::Yolov5n512,
                         {},
@@ -810,10 +812,10 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
                         {},
                         {{datasource, -1}}
                 };
-                yolov5n512->possibleDevices = {"server"};
+                yolov5n512->possibleDevices = {edgeNode};
 
                 yolov5s= new PipelineModel{
-                        "server",
+                        edgeNode,
                         "yolov5s",
                         ModelType::Yolov5s,
                         {},
@@ -823,11 +825,11 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
                         {},
                         {{datasource, -1}}
                 };
-                yolov5s->possibleDevices = {"server"};
+                yolov5s->possibleDevices = {edgeNode};
             }
 
             auto *labledet = new PipelineModel{
-                    "server",
+                    edgeNode,
                     "platedet",
                     ModelType::PlateDet,
                     {},
@@ -837,10 +839,10 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
                     {},
                     {{yolov5n, 2}}
             };
-            labledet->possibleDevices = {startDevice, "server"};
+            labledet->possibleDevices = {startDevice, edgeNode};
             yolov5n->downstreams.push_back({labledet, 2});
             if (ctrl_systemName == "jlf") {
-                labledet->possibleDevices = {"server"};
+                labledet->possibleDevices = {edgeNode};
                 labledet->upstreams = {{yolov5n, 2},{yolov5n320, 2},{yolov5n512, 2},{yolov5s, 2}};
                 yolov5n320->downstreams.push_back({labledet, 2});
                 yolov5n512->downstreams.push_back({labledet, 2});
@@ -848,7 +850,7 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
             }
 
             auto *obstacle = new PipelineModel{
-                    "server",
+                    edgeNode,
                     "carbrand",
                     ModelType::CarBrand,
                     {},
@@ -858,7 +860,7 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
                     {},
                     {{yolov5n, -1}}
             };
-            obstacle->possibleDevices = {"server"};
+            obstacle->possibleDevices = {edgeNode};
             yolov5n->downstreams.push_back({obstacle, -1});
             if (ctrl_systemName == "jlf") {
                 obstacle->upstreams = {{yolov5n, -1}, {yolov5n320, -1}, {yolov5n512, -1}, {yolov5s, -1}};
@@ -898,7 +900,7 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
             datasource->possibleDevices = {startDevice};
 
             auto *yolov5n = new PipelineModel{
-                    "server",
+                    edgeNode,
                     "yolov5n",
                     ModelType::Yolov5n,
                     {},
@@ -908,9 +910,9 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
                     {},
                     {{datasource, -1}}
             };
-            yolov5n->possibleDevices = {startDevice, "server"};
+            yolov5n->possibleDevices = {startDevice, edgeNode};
             if (ctrl_systemName == "tuti") {
-                yolov5n->possibleDevices = {"server"};
+                yolov5n->possibleDevices = {edgeNode};
             }
             datasource->downstreams.push_back({yolov5n, -1});
 
@@ -918,10 +920,10 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
             PipelineModel *yolov5n512 = nullptr;
             PipelineModel *yolov5s = nullptr;
             if (ctrl_systemName == "jlf") {
-                yolov5n->possibleDevices = {"server"};
+                yolov5n->possibleDevices = {edgeNode};
 
                 yolov5n320 = new PipelineModel{
-                        "server",
+                        edgeNode,
                         "yolov5n320",
                         ModelType::Yolov5n320,
                         {},
@@ -931,11 +933,11 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
                         {},
                         {{datasource, -1}}
                 };
-                yolov5n320->possibleDevices = {"server"};
+                yolov5n320->possibleDevices = {edgeNode};
 
 
                 yolov5n512 = new PipelineModel{
-                        "server",
+                        edgeNode,
                         "yolov5n512",
                         ModelType::Yolov5n512,
                         {},
@@ -945,10 +947,10 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
                         {},
                         {{datasource, -1}}
                 };
-                yolov5n512->possibleDevices = {"server"};
+                yolov5n512->possibleDevices = {edgeNode};
 
                 yolov5s= new PipelineModel{
-                        "server",
+                        edgeNode,
                         "yolov5s",
                         ModelType::Yolov5s,
                         {},
@@ -958,11 +960,11 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
                         {},
                         {{datasource, -1}}
                 };
-                yolov5s->possibleDevices = {"server"};
+                yolov5s->possibleDevices = {edgeNode};
             }
 
             auto *retina1face = new PipelineModel{
-                    "server",
+                    edgeNode,
                     "retina1face",
                     ModelType::Retinaface,
                     {},
@@ -972,11 +974,11 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
                     {},
                     {{yolov5n, 0}}
             };
-            retina1face->possibleDevices = {"server"};
+            retina1face->possibleDevices = {edgeNode};
             yolov5n->downstreams.push_back({retina1face, 0});
 
             if (ctrl_systemName == "jlf") {
-                retina1face->possibleDevices = {"server"};
+                retina1face->possibleDevices = {edgeNode};
                 retina1face->upstreams = {{yolov5n, 0}, {yolov5n320, 0}, {yolov5n512, 0}, {yolov5s, 0}};
                 yolov5n320->downstreams.push_back({retina1face, 0});
                 yolov5n512->downstreams.push_back({retina1face, 0});
@@ -984,7 +986,7 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
             }
 
             auto *arcface = new PipelineModel{
-                    "server",
+                    edgeNode,
                     "arcface",
                     ModelType::Arcface,
                     {},
@@ -994,11 +996,11 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
                     {},
                     {{retina1face, -1}}
             };
-            arcface->possibleDevices = {"server"};
+            arcface->possibleDevices = {edgeNode};
             retina1face->downstreams.push_back({arcface, -1});
 
             auto *activity = new PipelineModel{
-                    "server",
+                    edgeNode,
                     "movenet",
                     ModelType::Movenet,
                     {},
@@ -1008,11 +1010,11 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
                     {},
                     {{yolov5n, 0}}
             };
-            activity->possibleDevices = {startDevice, "server"};
+            activity->possibleDevices = {startDevice, edgeNode};
             yolov5n->downstreams.push_back({activity, 0});
 
             if (ctrl_systemName == "jlf") {
-                activity->possibleDevices = {"server"};
+                activity->possibleDevices = {edgeNode};
                 activity->upstreams = {{yolov5n,    0}, {yolov5n320, 0}, {yolov5n512, 0}, {yolov5s,    0}};
                 yolov5n320->downstreams.push_back({activity, 0});
                 yolov5n512->downstreams.push_back({activity, 0});
@@ -1041,7 +1043,7 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
             }
 
             if (ctrl_systemName == "jlf") {
-                arcface->possibleDevices = {"server"};
+                arcface->possibleDevices = {edgeNode};
                 return {datasource, yolov5n, yolov5n320, yolov5n512, yolov5s, retina1face, arcface, activity, sink};
             }
             return {datasource, yolov5n, retina1face, arcface, activity, sink};
@@ -1051,7 +1053,7 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
             datasource->possibleDevices = {startDevice};
 
             auto *vlm = new PipelineModel{};
-            vlm->possibleDevices = {"server"};
+            vlm->possibleDevices = {edgeNode};
 
             auto *sink = new PipelineModel{
                     "sink",

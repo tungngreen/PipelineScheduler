@@ -48,9 +48,9 @@ int main(int argc, char **argv) {
         std::cout << "Enter SLO in ns: ";
         std::cin >> task.slo;
         std::cout << "Enter total path to source file: ";
-        std::cin >> task.source;
+        std::cin >> task.stream;
         std::cout << "Enter name of source device: ";
-        std::cin >> task.device;
+        std::cin >> task.srcDevice;
         bool added = controller->AddTask(task);
         if (!added) {
             std::cout << "Failed to add task" << std::endl;

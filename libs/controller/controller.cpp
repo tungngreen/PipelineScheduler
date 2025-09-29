@@ -500,9 +500,13 @@ void TaskDescription::from_json(const nlohmann::json &j, TaskDescription::TaskSt
     j.at("pipeline_name").get_to(val.name);
     j.at("pipeline_target_slo").get_to(val.slo);
     j.at("pipeline_type").get_to(val.type);
-    j.at("video_source").get_to(val.source);
-    j.at("pipeline_source_device").get_to(val.device);
-    val.fullName = val.name + "_" + val.device;
+    j.at("video_source").get_to(val.stream);
+    j.at("pipeline_source_device").get_to(val.srcDevice);
+    if (j.contains("pipeline_edge_node"))
+        j.at("pipeline_edge_node").get_to(val.edgeNode);
+    else
+        val.edgeNode = "server";
+    val.fullName = val.name + "_" + val.srcDevice;
 }
 
 // ============================================================================================================================================ //
@@ -672,25 +676,25 @@ MemUsageType ContainerHandle::getExpectedTotalMemUsage() const {
 
 bool Controller::AddTask(const TaskDescription::TaskStruct &t) {
     std::cout << "Adding task: " << t.name << std::endl;
-    TaskHandle *task = new TaskHandle{t.name, t.type, t.source, t.device, t.slo, {}, 0};
+    TaskHandle *task = new TaskHandle{t.name, t.type, t.stream, t.srcDevice, t.slo, {}, 0};
 
     std::map<std::string, NodeHandle*> deviceList = devices.getMap();
 
-    if (deviceList.find(t.device) == deviceList.end()) {
-        spdlog::error("Device {0:s} is not connected", t.device);
+    if (deviceList.find(t.srcDevice) == deviceList.end()) {
+        spdlog::error("Device {0:s} is not connected", t.srcDevice);
         return false;
     }
 
-    while (!deviceList.at(t.device)->initialNetworkCheck) {
-        spdlog::get("container_agent")->info("Waiting for device {0:s} to finish network check", t.device);
+    while (!deviceList.at(t.srcDevice)->initialNetworkCheck) {
+        spdlog::get("container_agent")->info("Waiting for device {0:s} to finish network check", t.srcDevice);
         std::this_thread::sleep_for(std::chrono::milliseconds(100));
     }
 
-    task->tk_src_device = t.device;
+    task->tk_src_device = t.srcDevice;
 
-    task->tk_pipelineModels = getModelsByPipelineType(t.type, t.device, t.name, t.source);
+    task->tk_pipelineModels = getModelsByPipelineType(t.type, t.srcDevice, t.name, t.stream, t.edgeNode);
     for (auto &model: task->tk_pipelineModels) {
-        model->datasourceName = {t.source};
+        model->datasourceName = {t.stream};
         model->task = task;
     }
 

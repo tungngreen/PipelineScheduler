@@ -705,8 +705,9 @@ namespace TaskDescription {
         std::string fullName;
         int slo;
         PipelineType type;
-        std::string source;
-        std::string device;
+        std::string stream;
+        std::string srcDevice;
+        std::string edgeNode;
         bool added = false;
     };
 
@@ -929,7 +930,7 @@ private:
     void readConfigFile(const std::string &config_path);
     void readInitialObjectCount(const std::string& path);
     PipelineModelListType getModelsByPipelineType(PipelineType type, const std::string &startDevice,
-                                                  const std::string &pipelineName = "", const std::string &streamName = "");
+                                                  const std::string &pipelineName = "", const std::string &streamName = "", const std::string &edgeNode = "server");
     std::vector<std::string> getPipelineNames();
 
     // STARTUP

@@ -578,6 +578,7 @@ namespace msvcconfigs {
         std::string msvc_containerLogPath;
         // Run mode
         RUNMODE msvc_RUNMODE = RUNMODE::DEPLOYMENT;
+        bool msvc_RESTART = false;
         // List of upstream microservices
         std::list<NeighborMicroserviceConfigs> msvc_upstreamMicroservices;
         std::list<NeighborMicroserviceConfigs> msvc_dnstreamMicroservices;
@@ -1173,6 +1174,7 @@ protected:
      * Default to be deployment.
      */
     RUNMODE msvc_RUNMODE = RUNMODE::DEPLOYMENT;
+    bool msvc_RESTART = false;
 
     DROP_MODE msvc_DROP_MODE = DROP_MODE::NO_DROP;
 
