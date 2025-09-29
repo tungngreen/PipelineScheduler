@@ -61,6 +61,7 @@ void Microservice::loadConfigs(const json &jsonConfigs, bool isConstructing) {
     msvc_systemName = jsonConfigs.at("msvc_systemName");
     msvc_BATCH_MODE = jsonConfigs.at("msvc_batchMode");
     msvc_maxBatchSize = jsonConfigs.at("msvc_maxBatchSize");
+    msvc_batchWaitLimit = jsonConfigs.at("msvc_batchTimeout");
     msvc_DROP_MODE = jsonConfigs.at("msvc_dropMode");
     msvc_timeBudgetLeft = jsonConfigs.at("msvc_timeBudgetLeft");
     msvc_pipelineSLO = jsonConfigs.at("msvc_pipelineSLO");

@@ -78,7 +78,7 @@ void Sender::Process() {
         auto request = msvc_InQueue[0]->pop1(msvc_name);
         // Meaning the the timeout in pop() has been reached and no request was actually popped
         // before comparing, check if the re_travelPath size = 0, if so, continue
-        if (request.req_travelPath.size() == 0) continue;
+        if (request.req_travelPath.empty()) continue;
         if (strcmp(request.req_travelPath[0].c_str(), "empty") == 0) continue;
             /**
              * @brief ONLY IN PROFILING MODE

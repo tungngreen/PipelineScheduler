@@ -31,11 +31,13 @@ face-recognition/
 cmake-test/
 cmake-build-debug/
 cmake-build-default/
+dockerfiles/tmp/
 /models
 model_profiles
 logs
 videos
 */env/*
+analyze/*.txt
 
 data
 curve

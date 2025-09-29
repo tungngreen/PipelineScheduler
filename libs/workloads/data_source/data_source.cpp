@@ -20,25 +20,3 @@ void DataSourceAgent::runService(const json &pipeConfigs, const json &configs) {
     std::this_thread::sleep_for(std::chrono::milliseconds(1000));
     exit(0);
 }
-
-
-void DataSourceAgent::SetStartFrameRequestHandler::Proceed() {
-    if (status == CREATE) {
-        status = PROCESS;
-        service->RequestSetStartFrame(&ctx, &request, &responder, cq, cq, this);
-    } else if (status == PROCESS) {
-        msvcs->front()->SetCurrFrameID(request.value() - 1);
-        msvcs->front()->setReady();
-        status = FINISH;
-        responder.Finish(reply, Status::OK, this);
-    } else {
-        GPR_ASSERT(status == FINISH);
-        delete this;
-    }
-}
-
-void DataSourceAgent::HandleRecvRpcs() {
-    auto msvcsList = getAllMicroservices();
-    new SetStartFrameRequestHandler(&service, server_cq.get(), &msvcsList);
-    ContainerAgent::HandleRecvRpcs();
-}

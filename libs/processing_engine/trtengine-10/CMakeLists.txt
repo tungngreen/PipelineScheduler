@@ -58,14 +58,14 @@ target_include_directories(trtengine
         PRIVATE
             # Used only when building the library:
             src)
+
+message(STATUS "TensorRT_LIBRARIES: ${TensorRT_LIBRARIES}")
 target_link_libraries(trtengine
         PUBLIC
         ${OpenCV_LIBS}
         ${CUDA_LIBRARIES}
         ${TensorRT_LIBRARIES}
         ${CMAKE_THREAD_LIBS_INIT}
-        nvinfer
-        nvinfer_plugin
         misc
 )
 

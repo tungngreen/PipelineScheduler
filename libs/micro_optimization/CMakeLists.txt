@@ -63,10 +63,9 @@ target_include_directories(micro_optimization
 
 target_link_libraries(micro_optimization
         PUBLIC
-        control_comm_grpc_proto
-        device_comm_grpc_proto
+        cppzmq
+        control_mess_grpc_proto
         device_mess_grpc_proto
-        ${_GRPC_GRPCPP}
         ${_REFLECTION}
         ${_PROTOBUF_LIBPROTOBUF}
         ${PostgreSQL_LIBRARIES}

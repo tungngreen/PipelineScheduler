@@ -1,138 +1,147 @@
-# Use the base image
 ARG JETPACK_VERSION="r36.4.0"
-
 FROM nvcr.io/nvidia/l4t-jetpack:${JETPACK_VERSION}
 
-# Install required packages
-RUN apt update && apt install -y \
-        build-essential \
-        wget \
-        vim \
-        && rm -rf /var/llib/apt/list/*
-
-RUN wget https://cmake.org/files/v3.25/cmake-3.25.2-linux-aarch64.sh -q -O /tmp/cmake-install.sh
-RUN chmod u+x /tmp/cmake-install.sh
-RUN mkdir /opt/cmake-3.25.1
-RUN /tmp/cmake-install.sh --skip-license --prefix=/opt/cmake-3.25.1
-RUN ln -s /opt/cmake-3.25.1/bin/* /usr/local/bin
-
-# Install gRPC 1.62.0
-ARG GRPC_INSTALL_DIR=/grpc
-RUN mkdir -p ${GRPC_INSTALL_DIR}
-RUN apt-get update
-RUN apt-get -y install autoconf libtool git
-RUN git clone --recurse-submodules -b v1.62.0 --depth 1 --shallow-submodules https://github.com/grpc/grpc /grpc-src
-RUN cd /grpc-src && \
-    mkdir -p third_party/abseil-cpp/cmake/build && \
-    cd third_party/abseil-cpp/cmake/build && \
-    cmake -DCMAKE_BUILD_TYPE=Release -DCMAKE_POSITION_INDEPENDENT_CODE=TRUE ../.. && \
-    make "-j${GRPC_CPP_DISTRIBTEST_BUILD_COMPILER_JOBS}" install
-
-RUN cd /grpc-src && \
-    mkdir -p "third_party/cares/cares/cmake/build" && \
-    cd third_party/cares/cares/cmake/build && \
-    cmake -DCMAKE_BUILD_TYPE=Release ../.. && \
-    make "-j${GRPC_CPP_DISTRIBTEST_BUILD_COMPILER_JOBS}" install
-
-RUN cd /grpc-src && \
-    mkdir -p "third_party/protobuf/cmake/build" && \
-    cd "third_party/protobuf/cmake/build" && \
-    cmake -Dprotobuf_BUILD_SHARED_LIBS=ON -Dprotobuf_BUILD_TESTS=OFF -DCMAKE_BUILD_TYPE=Release -Dprotobuf_ABSL_PROVIDER=package ../.. && \
-    make "-j4" install
-
-
-RUN cd /grpc-src && \
-    mkdir -p "third_party/re2/cmake/build" && \
-    cd "third_party/re2/cmake/build" && \
-    cmake -DCMAKE_BUILD_TYPE=Release -DCMAKE_POSITION_INDEPENDENT_CODE=TRUE ../.. && \
-    make "-j${GRPC_CPP_DISTRIBTEST_BUILD_COMPILER_JOBS}" install
-
-RUN cd /grpc-src && \
-    mkdir -p "third_party/zlib/cmake/build" && \
-    cd "third_party/zlib/cmake/build" && \
-    cmake -DCMAKE_BUILD_TYPE=Release ../.. && \
-    make "-j${GRPC_CPP_DISTRIBTEST_BUILD_COMPILER_JOBS}" install
-
-RUN apt-get update && apt-get install -y libssl-dev
-
-RUN cd /grpc-src && \
-    git submodule update --init && \
-    mkdir -p cmake/build && \
-    cd cmake/build && \
-    cmake -DgRPC_INSTALL=ON                \
-              -DCMAKE_BUILD_TYPE=Release       \
-              -DgRPC_ABSL_PROVIDER=package     \
-              -DgRPC_CARES_PROVIDER=package    \
-              -DgRPC_PROTOBUF_PROVIDER=package \
-              -DgRPC_RE2_PROVIDER=package      \
-              -DgRPC_SSL_PROVIDER=package      \
-              -DgRPC_ZLIB_PROVIDER=package     \
-              -DBUILD_DEPS=ON \
-              -DCMAKE_INSTALL_PREFIX=$GRPC_INSTALL_DIR \
-      ../.. && \
-    make -j$(nproc) && \
-    make install
-ENV PATH="${PATH}:${GRPC_INSTALL_DIR}/bin"
-
-# Install Boost
-RUN apt update
-RUN apt-get install build-essential g++ python3-dev autotools-dev libicu-dev libbz2-dev libboost-all-dev -y
-
-# Install spdlog
-RUN apt install libspdlog-dev libpqxx-dev -y
-
-# Install posgresql-client
-RUN apt install postgresql-client -y
-
-RUN apt update
-RUN apt install gdb python3-pip -y
-
-# Install LibcuSPARSElt for torch higher than 2.1
-ENV LIBSPARSE_LT=libsparselt
-ENV LIBSPARSE_LT_LINK=https://developer.download.nvidia.com/compute/cusparselt/redist/libcusparse_lt/linux-aarch64/libcusparse_lt-linux-aarch64-0.6.3.2-archive.tar.xz
-RUN wget -O ${LIBSPARSE_LT}.tar.xz ${LIBSPARSE_LT_LINK}
-RUN mkdir ${LIBSPARSE_LT} && tar --strip-components=1 -xvf ${LIBSPARSE_LT}.tar.xz -C /${LIBSPARSE_LT} && rm libsparselt.tar.xz
-
-ENV LD_LIBRARY_PATH="/${LIBSPARSE_LT}/lib:$LD_LIBRARY_PATH"
-RUN pip3 install numpy==1.26.1
-ENV TORCH_VERSION=torch-2.5.0a0+872d972e41.nv24.08.17622132-cp310-cp310-linux_aarch64.whl
-ENV TORCH_LINK=https://developer.download.nvidia.com/compute/redist/jp/v61/pytorch/torch-2.5.0a0+872d972e41.nv24.08.17622132-cp310-cp310-linux_aarch64.whl
-
-RUN wget -O ${TORCH_VERSION} ${TORCH_LINK} 
-RUN pip3 install ${TORCH_VERSION}
-
-# Install OpenCV built with GPU Support
-ENV OPENCV_VERSION=4.10.0
-RUN apt -y purge *libopencv*
-RUN apt-get install -y unzip libgtk2.0-dev pkg-config libavcodec-dev libavformat-dev libswscale-dev libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev libtbb2 libtbb-dev libjpeg-dev libpng-dev libtiff-dev libv4l-dev v4l-utils qv4l2
-RUN wget -O opencv.zip https://github.com/opencv/opencv/archive/refs/tags/${OPENCV_VERSION}.zip && unzip opencv.zip
-RUN wget -O opencv_contrib.zip https://github.com/opencv/opencv_contrib/archive/refs/tags/${OPENCV_VERSION}.zip && unzip opencv_contrib.zip
-RUN mkdir opencv-${OPENCV_VERSION}/release
-RUN cd opencv-${OPENCV_VERSION}/release && cmake -D WITH_CUDA=ON -D WITH_CUDNN=ON -D CUDA_ARCH_BIN="8.7" -D CUDA_ARCH_PTX="" -D OPENCV_GENERATE_PKGCONFIG=ON -D OPENCV_EXTRA_MODULES_PATH=../../opencv_contrib-${OPENCV_VERSION}/modules -D WITH_GSTREAMER=ON -D WITH_LIBV4L=ON -D BUILD_opencv_python3=ON -D BUILD_TESTS=OFF -D BUILD_PERF_TESTS=OFF -D BUILD_EXAMPLES=OFF -D CMAKE_BUILD_TYPE=RELEASE -D CMAKE_INSTALL_PREFIX=/usr/local .. && make -j$(nproc) install
-
-# Install Jtop
-RUN pip3 install -U jetson-stats --force
-
-# Install spdlog version 1.5.0
-# Remove the old version
-RUN apt remove -y libspdlog-dev
-
-# Install the new version
-RUN git clone --branch v1.5.0 https://github.com/gabime/spdlog.git
-RUN cd spdlog && \
-    mkdir build && \
-    cd build && \
-    cmake -DCMAKE_BUILD_TYPE=Release -DCMAKE_POSITION_INDEPENDENT_CODE=ON -DSPDLOG_BUILD_TESTS=OFF .. && \
-    make -j$(nproc) && \
-    make install && \
-    cd ../.. && \
-    rm -rf spdlog
-
-RUN apt install libopenblas-dev -y 
-
-# Set Correct Timezone
 ENV TZ=Asia/Seoul
 RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
+
+# --------------------------------------------------
+# Core build tools & dependencies
+# --------------------------------------------------
+RUN apt-get update --fix-missing && \
+    apt-get -y purge '*libopencv*' libspdlog-dev && \
+    apt-get install -y --no-install-recommends \
+        autoconf \
+        autotools-dev \
+        build-essential \
+        cmake \
+        g++ \
+        gdb \
+        git \
+        libavcodec-dev \
+        libavformat-dev \
+        libboost-all-dev \
+        libbz2-dev \
+        libgstreamer1.0-dev \
+        libgstreamer-plugins-base1.0-dev \
+        libgtk2.0-dev \
+        libicu-dev \
+        libjpeg-dev \
+        libopenblas-dev \
+        libpng-dev \
+        libpqxx-dev \
+        libssl-dev \
+        libswscale-dev \
+        libtbb-dev \
+        libtbb2 \
+        libtiff-dev \
+        libtool \
+        libv4l-dev \
+        pkg-config \
+        postgresql-client \
+        python3-dev \
+        python3-pip \
+        unzip \
+        v4l-utils \
+        vim \
+        wget \
+        qv4l2 && \
+    rm -rf /var/lib/apt/lists/*
+
+# --------------------------------------------------
+# Python dependencies (numpy and jtop)
+# --------------------------------------------------
+RUN pip3 install --no-cache-dir numpy==1.26.1 && \
+    pip3 install --no-cache-dir -U jetson-stats
+
+# --------------------------------------------------
+# CMake 3.25.2
+# --------------------------------------------------
+RUN wget -q https://cmake.org/files/v3.25/cmake-3.25.2-linux-aarch64.sh -O /tmp/cmake-install.sh && \
+    chmod +x /tmp/cmake-install.sh && \
+    mkdir -p /opt/cmake-3.25.2 && \
+    /tmp/cmake-install.sh --skip-license --prefix=/opt/cmake-3.25.2 && \
+    ln -s /opt/cmake-3.25.2/bin/* /usr/local/bin && \
+    rm -f /tmp/cmake-install.sh
+
+# --------------------------------------------------
+# gRPC (lean build)
+# --------------------------------------------------
+ARG GRPC_INSTALL_DIR=/grpc
+RUN git clone --recurse-submodules -b v1.62.0 --depth 1 --shallow-submodules https://github.com/grpc/grpc /grpc-src && \
+    cd /grpc-src && mkdir -p third_party/abseil-cpp/cmake/build && cd third_party/abseil-cpp/cmake/build && \
+    cmake -DCMAKE_BUILD_TYPE=Release -DCMAKE_POSITION_INDEPENDENT_CODE=TRUE ../.. && make "-j${GRPC_CPP_DISTRIBTEST_BUILD_COMPILER_JOBS}" install && \
+    cd /grpc-src && mkdir -p "third_party/cares/cares/cmake/build" && cd third_party/cares/cares/cmake/build && \
+    cmake -DCMAKE_BUILD_TYPE=Release ../.. && make "-j${GRPC_CPP_DISTRIBTEST_BUILD_COMPILER_JOBS}" install && \
+    cd /grpc-src && mkdir -p "third_party/protobuf/cmake/build" && cd "third_party/protobuf/cmake/build" && \
+    cmake -Dprotobuf_BUILD_SHARED_LIBS=ON -Dprotobuf_BUILD_TESTS=OFF -DCMAKE_BUILD_TYPE=Release -Dprotobuf_ABSL_PROVIDER=package ../.. && make "-j4" install && \
+    cd /grpc-src && mkdir -p "third_party/re2/cmake/build" && cd "third_party/re2/cmake/build" && \
+    cmake -DCMAKE_BUILD_TYPE=Release -DCMAKE_POSITION_INDEPENDENT_CODE=TRUE ../.. && make "-j${GRPC_CPP_DISTRIBTEST_BUILD_COMPILER_JOBS}" install && \
+    cd /grpc-src && mkdir -p "third_party/zlib/cmake/build" && cd "third_party/zlib/cmake/build" && \
+    cmake -DCMAKE_BUILD_TYPE=Release ../.. && make "-j${GRPC_CPP_DISTRIBTEST_BUILD_COMPILER_JOBS}" install && \
+    cd /grpc-src && git submodule update --init && mkdir -p cmake/build && cd cmake/build && \
+    cmake -DgRPC_INSTALL=ON -DCMAKE_BUILD_TYPE=Release -DgRPC_ABSL_PROVIDER=package -DgRPC_CARES_PROVIDER=package    \
+          -DgRPC_PROTOBUF_PROVIDER=package -DgRPC_RE2_PROVIDER=package -DgRPC_SSL_PROVIDER=package \
+          -DgRPC_ZLIB_PROVIDER=package -DBUILD_DEPS=ON -DCMAKE_INSTALL_PREFIX=$GRPC_INSTALL_DIR \
+      ../.. && make -j$(nproc) install && rm -rf /grpc-src
+ENV PATH=${PATH}:${GRPC_INSTALL_DIR}/bin
+
+# --------------------------------------------------
+# OpenCV + contrib
+# --------------------------------------------------
+ENV OPENCV_VERSION=4.10.0
+RUN wget -q -O opencv.zip https://github.com/opencv/opencv/archive/refs/tags/${OPENCV_VERSION}.zip && \
+    unzip -q opencv.zip && \
+    wget -q -O opencv_contrib.zip https://github.com/opencv/opencv_contrib/archive/refs/tags/${OPENCV_VERSION}.zip && \
+    unzip -q opencv_contrib.zip && \
+    mkdir -p opencv-${OPENCV_VERSION}/release && cd opencv-${OPENCV_VERSION}/release && \
+    cmake -DOPENCV_EXTRA_MODULES_PATH=../../opencv_contrib-${OPENCV_VERSION}/modules \
+          -DWITH_CUDA=ON -DWITH_CUDNN=ON -DCUDA_ARCH_BIN="8.7" -DCUDA_ARCH_PTX="" \
+          -DWITH_GSTREAMER=ON -DWITH_LIBV4L=ON -DBUILD_opencv_python3=ON \
+          -DBUILD_TESTS=OFF -DBUILD_PERF_TESTS=OFF -DBUILD_EXAMPLES=OFF \
+          -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr/local .. && \
+    make -j"$(nproc)" install && \
+    cd / && rm -rf opencv*zip opencv-${OPENCV_VERSION} opencv_contrib-${OPENCV_VERSION}
+
+# --------------------------------------------------
+# cppzmq
+# --------------------------------------------------
+RUN git clone --depth 1 https://github.com/zeromq/libzmq.git && \
+    cd libzmq && mkdir build && cd build && cmake .. && make -j"$(nproc)" install && \
+    cd / && rm -rf libzmq && \
+    git clone --depth 1 https://github.com/zeromq/cppzmq.git && \
+    cd cppzmq && mkdir build && cd build && cmake -DCPPZMQ_BUILD_TESTS=OFF .. && make -j"$(nproc)" install && \
+    cd / && rm -rf cppzmq
+
+# --------------------------------------------------
+# Boost 1.84.0
+# --------------------------------------------------
+RUN wget -q https://archives.boost.io/release/1.84.0/source/boost_1_84_0.tar.gz && \
+    tar -xzf boost_1_84_0.tar.gz && cd boost_1_84_0 && \
+    ./bootstrap.sh --prefix=/usr && ./b2 -j"$(nproc)" install && \
+    cd / && rm -rf boost_1_84_0 boost_1_84_0.tar.gz
+
+# --------------------------------------------------
+# Spdlog
+# --------------------------------------------------
+RUN git clone --branch v1.5.0 --depth 1 https://github.com/gabime/spdlog.git && \
+    cd spdlog && mkdir build && cd build && \
+    cmake -DCMAKE_BUILD_TYPE=Release -DCMAKE_POSITION_INDEPENDENT_CODE=ON -DSPDLOG_BUILD_TESTS=OFF .. && \
+    make -j"$(nproc)" install && \
+    cd / && rm -rf spdlog
+
+# --------------------------------------------------
+# LibTorch + cuSPARSElt
+# --------------------------------------------------
+ARG LIBSPARSE_LT=libsparselt
+ARG LIBSPARSE_LT_LINK=https://developer.download.nvidia.com/compute/cusparselt/redist/libcusparse_lt/linux-aarch64/libcusparse_lt-linux-aarch64-0.6.3.2-archive.tar.xz
+ENV LD_LIBRARY_PATH="/${LIBSPARSE_LT}/lib:$LD_LIBRARY_PATH"
+ARG TORCH_VERSION=torch-2.5.0a0+872d972e41.nv24.08.17622132-cp310-cp310-linux_aarch64.whl
+ARG TORCH_LINK=https://developer.download.nvidia.com/compute/redist/jp/v61/pytorch/torch-2.5.0a0+872d972e41.nv24.08.17622132-cp310-cp310-linux_aarch64.whl
+RUN wget -q -O ${LIBSPARSE_LT}.tar.xz ${LIBSPARSE_LT_LINK} && \
+    mkdir ${LIBSPARSE_LT} && tar --strip-components=1 -xvf ${LIBSPARSE_LT}.tar.xz -C /${LIBSPARSE_LT} && \
+    rm -f ${LIBSPARSE_LT}.tar.xz && \
+    wget -q -O ${TORCH_VERSION} ${TORCH_LINK} && pip3 install ${TORCH_VERSION} && rm -f ${TORCH_VERSION}
+
 
 WORKDIR /app/build
 CMD [ "/bin/bash" ]

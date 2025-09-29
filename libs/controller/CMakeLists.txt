@@ -24,82 +24,92 @@ if (CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
             FORCE)
 endif (CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
 
+# Only public header files go here.
+set(HEADER_FILES
+        controller.h
+        bandwidth_predictor/bandwidth_predictor.h
+)
+# All source files and private header files go here.
+set(SOURCE_FILES
+        controller.cpp
+        pipelines.cpp
+        bandwidth_predictor/bandwidth_predictor.cpp
+)
+
+
 message ("Building controller for system: ${SYSTEM_NAME}")
 if(SYSTEM_NAME STREQUAL "PPP")
-        set(
-                HEADER_FILES
-                controller.h
-                systems/scheduling_ppp.h
+        set(HEADER_FILES
+                ${HEADER_FILES}
+                systems/scheduling-ppp.h
         )
-
-        set(
-                SOURCE_FILES
-                controller.cpp
-                systems/scheduling_ppp.cpp
+        set(SOURCE_FILES
+                ${SOURCE_FILES}
+                systems/scheduling-ppp.cpp
         )
 elseif (SYSTEM_NAME STREQUAL "FCPO")
-        set(
-                HEADER_FILES
-                controller.h
-                systems/scheduling_fcpo.h
+        set(HEADER_FILES
+                ${HEADER_FILES}
+                systems/scheduling-fcpo.h
         )
 
-        set(
-                SOURCE_FILES
-                controller.cpp
-                systems/scheduling_fcpo.cpp
+        set(SOURCE_FILES
+                ${SOURCE_FILES}
+                systems/scheduling-fcpo.cpp
         )
 elseif (SYSTEM_NAME STREQUAL "JLF")
-        set(
-                HEADER_FILES
-                controller.h
-                systems/scheduling_jlf.h
+        set(HEADER_FILES
+                ${HEADER_FILES}
+                systems/scheduling-jlf.h
         )
 
-        set(
-                SOURCE_FILES
-                controller.cpp
-                systems/scheduling_jlf.cpp
+        set(SOURCE_FILES
+                ${SOURCE_FILES}
+                systems/scheduling-jlf.cpp
         )
 elseif (SYSTEM_NAME STREQUAL "DIS")
-        set(
-                HEADER_FILES
-                controller.h
-                systems/scheduling_dis.h
+        set(HEADER_FILES
+                ${HEADER_FILES}
+                systems/scheduling-dis.h
         )
 
-        set(
-                SOURCE_FILES
-                controller.cpp
-                systems/scheduling_dis.cpp
+        set(SOURCE_FILES
+                ${SOURCE_FILES}
+                systems/scheduling-dis.cpp
         )
 elseif (SYSTEM_NAME STREQUAL "RIM")
-        set(
-                HEADER_FILES
-                controller.h
-                systems/scheduling_rim.h
+        set(HEADER_FILES
+                ${HEADER_FILES}
+                systems/scheduling-rim.h
         )
 
-        set(
-                SOURCE_FILES
-                controller.cpp
-                systems/scheduling_rim.cpp
+        set(SOURCE_FILES
+                ${SOURCE_FILES}
+                systems/scheduling-rim.cpp
+        )
+elseif (SYSTEM_NAME STREQUAL "TUTTI")
+        set(HEADER_FILES
+                ${HEADER_FILES}
+                systems/scheduling-tuti.h
+        )
+
+        set(SOURCE_FILES
+                ${SOURCE_FILES}
+                systems/scheduling-tuti.cpp
         )
 elseif (SYSTEM_NAME STREQUAL "APIS")
-        set(
-                HEADER_FILES
-                controller.h
-                systems/scheduling_apis.h
-        )
+    set(HEADER_FILES
+            ${HEADER_FILES}
+            systems/scheduling_apis.h
+    )
 
-        set(
-                SOURCE_FILES
-                controller.cpp
-                systems/scheduling_apis.cpp
-        )
+    set(SOURCE_FILES
+            ${SOURCE_FILES}
+            systems/scheduling_apis.cpp
+    )
 
-        set(apis_rl_DIR "${CMAKE_CURRENT_BINARY_DIR}/apis_rl")
-        find_package(apis_rl CONFIG REQUIRED)
+    set(apis_rl_DIR "${CMAKE_CURRENT_BINARY_DIR}/apis_rl")
+    find_package(apis_rl CONFIG REQUIRED)
 endif()
 
 # Here we define the library.
@@ -144,12 +154,11 @@ target_include_directories(controller
 
 target_link_libraries(controller
         PUBLIC
-        device_comm_grpc_proto
-        control_comm_grpc_proto
+        cppzmq
+        device_mess_grpc_proto
         control_mess_grpc_proto
         absl::flags
         absl::flags_parse
-        ${_GRPC_GRPCPP}
         ${_REFLECTION}
         ${_PROTOBUF_LIBPROTOBUF}
         ${CMAKE_THREAD_LIBS_INIT}
