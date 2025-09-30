@@ -1,4 +1,4 @@
-#include "scheduling_fcpo.h"
+#include "scheduling_apis.h"
 
 // ==================================================================Scheduling==================================================================
 // ==============================================================================================================================================
@@ -108,6 +108,8 @@ void Controller::queryingProfiles(TaskHandle *task) {
 }
 
 void Controller::Scheduling() {
+    //const std::string& exp_name, uint state_size, uint weights_size, torch::Dtype precision, uint update_steps
+    ApisRL = new PAHC(ctrl_experimentName, 11, 4, torch::kFloat32, 256);
     while (running) {
         Stopwatch schedulingSW;
         schedulingSW.start();
@@ -158,12 +160,51 @@ void Controller::Scheduling() {
         ctrl_scheduledPipelines = ctrl_mergedPipelines;
         ApplyScheduling();
 
+        // -------------- APIS RL INTEGRATION CODE START -----------------
+        for (auto *task : ctrl_scheduledPipelines.getList()) {
+            for (auto &subTaskPair : task->tk_subTasks) {
+                for (auto &container: subTaskPair.second) {
+                    if (localCRLAgents.find(container->name) == localCRLAgents.end())
+                        localCRLAgents[container->name] = {container->position_in_pipeline, container->name, ctrl_fcpo_server->getUtilityWeights()};
+                    // Assign Reward
+                    ApisRL->rewardCallback((double) task->tk_slo / (double) task->tk_lastLatency - 1.0,
+                                           task->tk_lastThroughput / (double) ctrl_systemFPS - 1.0,
+                                           (double) task->tk_memSlo / (double) (container->getExpectedTotalMemUsage() + task->tk_memSlo) - 1.0);
+                    // Set State
+                    BatchInferProfile tmp = container->pipelineModel->processProfiles.at(getDeviceTypeName(container->device_agent->type)).batchInfer.at(container->batch_size);
+                    ApisRL->setState((double) container->position_in_pipeline,
+                                      (double) container->pipelineModel->type,
+                                      (double) task->tk_type,
+                                      (double) task->tk_lastLatency / (double) task->tk_slo,
+                                      (double) (tmp.p95prepLat + tmp.p95inferLat + tmp.p95postLat) / 10000.0,
+                                      (double) localCRLAgents[container->name].weights[0],
+                                      (double) task->tk_lastThroughput / (double) ctrl_systemFPS,
+                                      (double) localCRLAgents[container->name].weights[1],
+                                      (double) container->getExpectedTotalMemUsage() / 1000.0,
+                                      (double) localCRLAgents[container->name].weights[2],
+                                      (double) localCRLAgents[container->name].weights[3]);
+
+                    // Take Action and Communicate to Agent
+                    std::vector<float> weight_updates = ApisRL->runStep();
+                    localCRLAgents[container->name].updateUtilityWeights(weight_updates);
+                    CrlUtilityWeights request;
+                    request.set_name(container->name);
+                    request.set_theta(localCRLAgents[container->name].weights[0]);
+                    request.set_sigma(localCRLAgents[container->name].weights[1]);
+                    request.set_phi(localCRLAgents[container->name].weights[2]);
+                    request.set_rho(localCRLAgents[container->name].weights[3]);
+                    sendMessageToDevice(container->device_agent->name, MSG_TYPE[CRL_WEIGHTS], request.SerializeAsString());
+                }
+            }
+        }
+
+        // --------------- APIS RL INTEGRATION CODE END ------------------
+
         if (ctrl_systemName == "fcpo" || ctrl_systemName== "apis") {
             ctrl_fcpo_server->updateCluster(ctrl_clusterID, containers.getFLConnections());
         }
         ctrl_clusterID = (ctrl_clusterID + 1) % ctrl_clusterCount;
 
-        ctrl_controlTimings.nextRescalingTime = ctrl_controlTimings.currSchedulingTime + std::chrono::seconds(ctrl_controlTimings.rescalingIntervalSec);
         schedulingSW.stop();
         uint64_t sleepTime = std::chrono::duration_cast<TimePrecisionType>(ctrl_controlTimings.nextSchedulingTime - std::chrono::system_clock::now()).count();
         if (startTime == std::chrono::system_clock::time_point()) startTime = std::chrono::system_clock::now();

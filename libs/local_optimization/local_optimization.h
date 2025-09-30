@@ -42,7 +42,7 @@ public:
             :  timestamps(capacity), states(capacity), log_probs(capacity), values(capacity), rewards(capacity),
                capacity(capacity), current_index(0), await_reward(false), valid_history(false), is_full(false) {}
 
-    void add(const T& state, const T& log_prob, const T& value) {
+    virtual void add(const T& state, const T& log_prob, const T& value) {
         if (is_full) {
             double distance = distance_metric(state, states[current_index]);
 
@@ -64,7 +64,7 @@ public:
         valid_history = false;
     }
 
-    void add_reward(const double x){
+    virtual void add_reward(const double x){
         if (!is_full) {
             rewards[current_index] = x;
             current_index = (current_index + 1) % capacity;
@@ -79,22 +79,22 @@ public:
 
     [[nodiscard]] std::vector<T> get_states() const {
         if (is_full)  return states;
-        return {states.begin(), states.begin() + current_index};
+        return {states.begin(), states.begin() + current_index - 1};
     }
 
     [[nodiscard]] std::vector<T> get_log_probs() const {
         if (is_full) return log_probs;
-        return {log_probs.begin(), log_probs.begin() + current_index};
+        return {log_probs.begin(), log_probs.begin() + current_index - 1};
     }
 
     [[nodiscard]] std::vector<T> get_values() const {
         if (is_full) return values;
-        return {values.begin(), values.begin() + current_index};
+        return {values.begin(), values.begin() + current_index  - 1};
     }
 
-    [[nodiscard]] std::vector<double> get_rewards() const {
+    [[nodiscard]] virtual std::vector<double> get_rewards() const {
         if (is_full) return rewards;
-        return {rewards.begin(), rewards.begin() + current_index};
+        return {rewards.begin(), rewards.begin() + current_index  - 1};
     }
 
     void clear() {

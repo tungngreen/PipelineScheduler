@@ -65,3 +65,9 @@ message LoopRange {
   int32 max = 2;
   int32 repetitions = 3;
 }
+
+message SinkMetrics {
+  string name = 1;
+  int64 avg_latency = 2;
+  int32 throughput = 3;
+}

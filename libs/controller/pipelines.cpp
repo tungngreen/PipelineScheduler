@@ -18,7 +18,7 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
     }
     switch (type) {
         case PipelineType::Traffic: {
-            auto *datasource = new PipelineModel{startDevice, "datasource", ModelType::DataSource, {}, true, {}, {}};
+            auto *datasource = new PipelineModel{startDevice, "datasource", ModelType::DataSource, {}, 0, true, {}, {}};
             datasource->possibleDevices = {startDevice};
 
             auto *yolov5n = new PipelineModel{
@@ -26,6 +26,7 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
                     "yolov5n",
                     ModelType::Yolov5n,
                     {},
+                    1,
                     true,
                     {},
                     {},
@@ -49,6 +50,7 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
                         "yolov5n320",
                         ModelType::Yolov5n320,
                         {},
+                        1,
                         true,
                         {},
                         {},
@@ -63,6 +65,7 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
                         "yolov5n512",
                         ModelType::Yolov5n512,
                         {},
+                        1,
                         true,
                         {},
                         {},
@@ -76,6 +79,7 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
                         "yolov5s",
                         ModelType::Yolov5s,
                         {},
+                        1,
                         true,
                         {},
                         {},
@@ -90,6 +94,7 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
                     "retina1face",
                     ModelType::Retinaface,
                     {},
+                    2,
                     false,
                     {},
                     {},
@@ -112,6 +117,7 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
                     "arcface",
                     ModelType::Arcface,
                     {},
+                    5,
                     false,
                     {},
                     {},
@@ -126,6 +132,7 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
                     "carbrand",
                     ModelType::CarBrand,
                     {},
+                    3,
                     false,
                     {},
                     {},
@@ -148,6 +155,7 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
                     "platedet",
                     ModelType::PlateDet,
                     {},
+                    4,
                     false,
                     {},
                     {},
@@ -170,6 +178,7 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
                     "sink",
                     ModelType::Sink,
                     {},
+                    0,
                     false,
                     {},
                     {},
@@ -196,13 +205,14 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
             return {datasource, yolov5n, retina1face, arcface, carbrand, platedet, sink};
         }
         case PipelineType::Indoor: {
-            auto *datasource = new PipelineModel{startDevice, "datasource", ModelType::DataSource, {}, true, {}, {}};
+            auto *datasource = new PipelineModel{startDevice, "datasource", ModelType::DataSource, {}, 0, true, {}, {}};
             datasource->possibleDevices = {startDevice};
             auto *retinamtface = new PipelineModel{
                     startDevice,
                     "retinamtface",
                     ModelType::RetinaMtface,
                     {},
+                    1,
                     true,
                     {},
                     {},
@@ -217,6 +227,7 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
                     "emotionnet",
                     ModelType::Emotionnet,
                     {},
+                    1,
                     false,
                     {},
                     {},
@@ -231,6 +242,7 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
                     "age",
                     ModelType::Age,
                     {},
+                    2,
                     false,
                     {},
                     {},
@@ -245,6 +257,7 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
                     "gender",
                     ModelType::Gender,
                     {},
+                    3,
                     false,
                     {},
                     {},
@@ -259,6 +272,7 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
                     "arcface",
                     ModelType::Arcface,
                     {},
+                    4,
                     false,
                     {},
                     {},
@@ -273,6 +287,7 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
                     "sink",
                     ModelType::Sink,
                     {},
+                    0,
                     false,
                     {},
                     {},
@@ -296,7 +311,7 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
             return {datasource, retinamtface, emotionnet, age, gender, arcface, sink};
         }
         case PipelineType::Building_Security: {
-            auto *datasource = new PipelineModel{startDevice, "datasource", ModelType::DataSource, {}, true, {}, {}};
+            auto *datasource = new PipelineModel{startDevice, "datasource", ModelType::DataSource, {}, 0, true, {}, {}};
             datasource->possibleDevices = {startDevice};
 
             auto *yolov5n = new PipelineModel{
@@ -304,6 +319,7 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
                     "yolov5n",
                     ModelType::Yolov5n,
                     {},
+                    1,
                     true,
                     {},
                     {},
@@ -327,6 +343,7 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
                         "yolov5n320",
                         ModelType::Yolov5n320,
                         {},
+                        1,
                         true,
                         {},
                         {},
@@ -341,6 +358,7 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
                         "yolov5n512",
                         ModelType::Yolov5n512,
                         {},
+                        1,
                         true,
                         {},
                         {},
@@ -354,6 +372,7 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
                         "yolov5s",
                         ModelType::Yolov5s,
                         {},
+                        1,
                         true,
                         {},
                         {},
@@ -368,6 +387,7 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
                     "retina1face",
                     ModelType::Retinaface,
                     {},
+                    1,
                     false,
                     {},
                     {},
@@ -390,6 +410,7 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
                     "movenet",
                     ModelType::Movenet,
                     {},
+                    2,
                     false,
                     {},
                     {},
@@ -412,6 +433,7 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
                     "gender",
                     ModelType::Gender,
                     {},
+                    3,
                     false,
                     {},
                     {},
@@ -426,6 +448,7 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
                     "age",
                     ModelType::Age,
                     {},
+                    4,
                     false,
                     {},
                     {},
@@ -440,6 +463,7 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
                     "sink",
                     ModelType::Sink,
                     {},
+                    0,
                     false,
                     {},
                     {},
@@ -467,7 +491,7 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
             return {datasource, yolov5n, retina1face, movenet, gender, age, sink};
         }
         case PipelineType::Surveillance_Robot: {
-            auto *datasource = new PipelineModel{startDevice, "datasource", ModelType::DataSource, {}, true, {}, {}};
+            auto *datasource = new PipelineModel{startDevice, "datasource", ModelType::DataSource, {}, 0, true, {}, {}};
             datasource->possibleDevices = {startDevice};
 
             auto *yolov5n = new PipelineModel{
@@ -475,6 +499,7 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
                     "yolov5n",
                     ModelType::Yolov5n,
                     {},
+                    1,
                     true,
                     {},
                     {},
@@ -498,6 +523,7 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
                         "yolov5n320",
                         ModelType::Yolov5n320,
                         {},
+                        1,
                         true,
                         {},
                         {},
@@ -512,6 +538,7 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
                         "yolov5n512",
                         ModelType::Yolov5n512,
                         {},
+                        1,
                         true,
                         {},
                         {},
@@ -525,6 +552,7 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
                         "yolov5s",
                         ModelType::Yolov5s,
                         {},
+                        1,
                         true,
                         {},
                         {},
@@ -539,6 +567,7 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
                     "arcface",
                     ModelType::Arcface,
                     {},
+                    1,
                     false,
                     {},
                     {},
@@ -559,6 +588,7 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
                     "age",
                     ModelType::Age,
                     {},
+                    2,
                     false,
                     {},
                     {},
@@ -579,6 +609,7 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
                     "gender",
                     ModelType::Gender,
                     {},
+                    3,
                     false,
                     {},
                     {},
@@ -599,6 +630,7 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
                     "sink",
                     ModelType::Sink,
                     {},
+                    0,
                     false,
                     {},
                     {},
@@ -624,7 +656,7 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
             return {datasource, yolov5n, arcface, gender, age, sink};
         }
         case PipelineType::Surveillance_Campus: {
-            auto *datasource = new PipelineModel{startDevice, "datasource", ModelType::DataSource, {}, true, {}, {}};
+            auto *datasource = new PipelineModel{startDevice, "datasource", ModelType::DataSource, {}, 0, true, {}, {}};
             datasource->possibleDevices = {startDevice};
 
             auto *yolov5n = new PipelineModel{
@@ -632,6 +664,7 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
                     "yolov5n",
                     ModelType::Yolov5n,
                     {},
+                    1,
                     true,
                     {},
                     {},
@@ -655,6 +688,7 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
                         "yolov5n320",
                         ModelType::Yolov5n320,
                         {},
+                        1,
                         true,
                         {},
                         {},
@@ -669,6 +703,7 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
                         "yolov5n512",
                         ModelType::Yolov5n512,
                         {},
+                        1,
                         true,
                         {},
                         {},
@@ -682,6 +717,7 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
                         "yolov5s",
                         ModelType::Yolov5s,
                         {},
+                        1,
                         true,
                         {},
                         {},
@@ -696,6 +732,7 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
                     "platedet",
                     ModelType::PlateDet,
                     {},
+                    1,
                     false,
                     {},
                     {},
@@ -717,6 +754,7 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
                     "movenet",
                     ModelType::Movenet,
                     {},
+                    2,
                     false,
                     {},
                     {},
@@ -739,6 +777,7 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
                     "sink",
                     ModelType::Sink,
                     {},
+                    0,
                     false,
                     {},
                     {},
@@ -761,7 +800,7 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
             return {datasource, yolov5n, platedet, movenet, sink};
         }
         case PipelineType::Factory_Robot: {
-            auto *datasource = new PipelineModel{startDevice, "datasource", ModelType::DataSource, {}, true, {}, {}};
+            auto *datasource = new PipelineModel{startDevice, "datasource", ModelType::DataSource, {}, 0, true, {}, {}};
             datasource->possibleDevices = {startDevice};
 
             auto *yolov5n = new PipelineModel{
@@ -769,6 +808,7 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
                     "yolov5n",
                     ModelType::Yolov5n,
                     {},
+                    1,
                     true,
                     {},
                     {},
@@ -792,6 +832,7 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
                         "yolov5n320",
                         ModelType::Yolov5n320,
                         {},
+                        1,
                         true,
                         {},
                         {},
@@ -806,6 +847,7 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
                         "yolov5n512",
                         ModelType::Yolov5n512,
                         {},
+                        1,
                         true,
                         {},
                         {},
@@ -819,6 +861,7 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
                         "yolov5s",
                         ModelType::Yolov5s,
                         {},
+                        1,
                         true,
                         {},
                         {},
@@ -828,25 +871,26 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
                 yolov5s->possibleDevices = {edgeNode};
             }
 
-            auto *labledet = new PipelineModel{
+            auto *labeldet = new PipelineModel{
                     edgeNode,
                     "platedet",
                     ModelType::PlateDet,
                     {},
+                    1,
                     false,
                     {},
                     {},
                     {},
                     {{yolov5n, 2}}
             };
-            labledet->possibleDevices = {startDevice, edgeNode};
-            yolov5n->downstreams.push_back({labledet, 2});
+            labeldet->possibleDevices = {startDevice, edgeNode};
+            yolov5n->downstreams.push_back({labeldet, 2});
             if (ctrl_systemName == "jlf") {
-                labledet->possibleDevices = {edgeNode};
-                labledet->upstreams = {{yolov5n, 2},{yolov5n320, 2},{yolov5n512, 2},{yolov5s, 2}};
-                yolov5n320->downstreams.push_back({labledet, 2});
-                yolov5n512->downstreams.push_back({labledet, 2});
-                yolov5s->downstreams.push_back({labledet, 2});
+                labeldet->possibleDevices = {edgeNode};
+                labeldet->upstreams = {{yolov5n, 2},{yolov5n320, 2},{yolov5n512, 2},{yolov5s, 2}};
+                yolov5n320->downstreams.push_back({labeldet, 2});
+                yolov5n512->downstreams.push_back({labeldet, 2});
+                yolov5s->downstreams.push_back({labeldet, 2});
             }
 
             auto *obstacle = new PipelineModel{
@@ -854,6 +898,7 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
                     "carbrand",
                     ModelType::CarBrand,
                     {},
+                    2,
                     false,
                     {},
                     {},
@@ -874,29 +919,30 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
                     "sink",
                     ModelType::Sink,
                     {},
+                    0,
                     false,
                     {},
                     {},
                     {},
-                    {{labledet, -1}, {obstacle, -1}}
+                    {{labeldet, -1}, {obstacle, -1}}
             };
             sink->possibleDevices = {"sink"};
-            labledet->downstreams.push_back({sink, -1});
+            labeldet->downstreams.push_back({sink, -1});
             obstacle->downstreams.push_back({sink, -1});
 
             if (!sourceName.empty()) {
                 yolov5n->arrivalProfiles.arrivalRates = ctrl_initialRequestRates[sourceName][yolov5n->name];
-                labledet->arrivalProfiles.arrivalRates = ctrl_initialRequestRates[sourceName][labledet->name];
+                labeldet->arrivalProfiles.arrivalRates = ctrl_initialRequestRates[sourceName][labeldet->name];
                 obstacle->arrivalProfiles.arrivalRates = ctrl_initialRequestRates[sourceName][obstacle->name];
             }
 
             if (ctrl_systemName == "jlf") {
-                return {datasource, yolov5n, yolov5n320, yolov5n512, yolov5s, labledet, obstacle, sink};
+                return {datasource, yolov5n, yolov5n320, yolov5n512, yolov5s, labeldet, obstacle, sink};
             }
-            return {datasource, yolov5n, labledet, obstacle, sink};
+            return {datasource, yolov5n, labeldet, obstacle, sink};
         }
         case PipelineType::Factory_CCTV: {
-            auto *datasource = new PipelineModel{startDevice, "datasource", ModelType::DataSource, {}, true, {}, {}};
+            auto *datasource = new PipelineModel{startDevice, "datasource", ModelType::DataSource, {}, 0, true, {}, {}};
             datasource->possibleDevices = {startDevice};
 
             auto *yolov5n = new PipelineModel{
@@ -904,6 +950,7 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
                     "yolov5n",
                     ModelType::Yolov5n,
                     {},
+                    1,
                     true,
                     {},
                     {},
@@ -927,6 +974,7 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
                         "yolov5n320",
                         ModelType::Yolov5n320,
                         {},
+                        1,
                         true,
                         {},
                         {},
@@ -941,6 +989,7 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
                         "yolov5n512",
                         ModelType::Yolov5n512,
                         {},
+                        1,
                         true,
                         {},
                         {},
@@ -954,6 +1003,7 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
                         "yolov5s",
                         ModelType::Yolov5s,
                         {},
+                        1,
                         true,
                         {},
                         {},
@@ -990,6 +1040,7 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
                     "arcface",
                     ModelType::Arcface,
                     {},
+                    1,
                     false,
                     {},
                     {},
@@ -1004,6 +1055,7 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
                     "movenet",
                     ModelType::Movenet,
                     {},
+                    2,
                     false,
                     {},
                     {},
@@ -1026,6 +1078,7 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
                     "sink",
                     ModelType::Sink,
                     {},
+                    0,
                     false,
                     {},
                     {},
@@ -1049,7 +1102,7 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
             return {datasource, yolov5n, retina1face, arcface, activity, sink};
         }
         case PipelineType::Smart_Glasses: {
-            auto *datasource = new PipelineModel{startDevice, "datasource", ModelType::DataSource, {}, true, {}, {}};
+            auto *datasource = new PipelineModel{startDevice, "datasource", ModelType::DataSource, {}, 0, true, {}, {}};
             datasource->possibleDevices = {startDevice};
 
             auto *vlm = new PipelineModel{};
@@ -1060,6 +1113,7 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
                     "sink",
                     ModelType::Sink,
                     {},
+                    0,
                     false,
                     {},
                     {},

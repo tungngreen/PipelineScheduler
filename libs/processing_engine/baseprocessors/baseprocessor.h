@@ -599,6 +599,12 @@ public:
     BaseMicroserviceConfigs loadConfigsFromJson(const json &jsonConfigs);
 
     virtual void loadConfigs(const json &jsonConfigs, bool isConstructing = false) override;
+
+    virtual MsvcSLOType getAggLatency() override {
+        return agg_Latency.exchange(0);
+    }
+private:
+    std::atomic<MsvcSLOType> agg_Latency;
 };
 
 #endif //BASEPROCESSOR_H

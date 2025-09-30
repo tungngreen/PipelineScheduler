@@ -15,6 +15,7 @@ using controlmessages::LoopRange;
 using controlmessages::ContainerConfig;
 using controlmessages::ContainerLink;
 using controlmessages::ContainerInts;
+using controlmessages::SinkMetrics;
 using controlmessages::ConnectionConfigs;
 using controlmessages::SystemInfo;
 using controlmessages::DummyMessage;
@@ -174,6 +175,7 @@ struct NodeHandle {
 
 struct ContainerHandle {
     std::string name;
+    int position_in_pipeline;
     int replica_id;
     int class_of_interest;
     ModelType model;
@@ -242,6 +244,7 @@ struct ContainerHandle {
 
     // Constructor
     ContainerHandle(const std::string& name,
+                int position_in_pipeline,
                 unsigned int replica_id,
                 int class_of_interest,
                 ModelType model,
@@ -260,6 +263,7 @@ struct ContainerHandle {
                 const std::vector<QueueLengthType>& queueSizes = {},
                 uint64_t timeBudgetLeft = 9999999999)
     : name(name),
+      position_in_pipeline(position_in_pipeline),
       replica_id(replica_id),
       class_of_interest(class_of_interest),
       model(model),
@@ -285,6 +289,7 @@ struct ContainerHandle {
         std::lock_guard<std::mutex> lock2(other.containerHandleMutex, std::adopt_lock);
 
         name = other.name;
+        position_in_pipeline = other.position_in_pipeline;
         replica_id = other.replica_id;
         class_of_interest = other.class_of_interest;
         model = other.model;
@@ -327,6 +332,7 @@ struct ContainerHandle {
             std::lock_guard<std::mutex> lock1(containerHandleMutex, std::adopt_lock);
             std::lock_guard<std::mutex> lock2(other.containerHandleMutex, std::adopt_lock);
             name = other.name;
+            position_in_pipeline = other.position_in_pipeline;
             replica_id = other.replica_id;
             class_of_interest = other.class_of_interest;
             model = other.model;
@@ -371,6 +377,7 @@ struct PipelineModel {
     std::string name;
     ModelType type;
     TaskHandle *task;
+    int position_in_pipeline;
     // Whether the upstream is on another device
     bool isSplitPoint;
     //
@@ -441,6 +448,7 @@ struct PipelineModel {
                   const std::string& name = "",
                   ModelType type = ModelType::DataSource,
                   TaskHandle *task = nullptr,
+                  int position_in_pipeline = 0,
                   bool isSplitPoint = false,
                   const ModelArrivalProfile& arrivalProfiles = ModelArrivalProfile(),
                   const PerDeviceModelProfileType& processProfiles = PerDeviceModelProfileType(),
@@ -462,6 +470,7 @@ struct PipelineModel {
           name(name),
           type(type),
           task(task),
+          position_in_pipeline(position_in_pipeline),
           isSplitPoint(isSplitPoint),
           arrivalProfiles(arrivalProfiles),
           processProfiles(processProfiles),
@@ -490,6 +499,7 @@ struct PipelineModel {
         name = other.name;
         type = other.type;
         task = other.task;
+        position_in_pipeline = other.position_in_pipeline;
         isSplitPoint = other.isSplitPoint;
         arrivalProfiles = other.arrivalProfiles;
         processProfiles = other.processProfiles;
@@ -535,6 +545,7 @@ struct PipelineModel {
             name = other.name;
             type = other.type;
             task = other.task;
+            position_in_pipeline = other.position_in_pipeline;
             isSplitPoint = other.isSplitPoint;
             arrivalProfiles = other.arrivalProfiles;
             processProfiles = other.processProfiles;
@@ -581,9 +592,11 @@ struct TaskHandle {
     PipelineType tk_type;
     std::string tk_source;
     std::string tk_src_device;
-    int tk_slo;
+    MsvcSLOType tk_slo;
+    int tk_memSlo;
     ClockType tk_startTime;
-    int tk_lastLatency;
+    MsvcSLOType tk_lastLatency;
+    float tk_lastThroughput;
     std::map<std::string, std::vector<ContainerHandle*>> tk_subTasks;
     PipelineModelListType tk_pipelineModels;
     mutable std::mutex tk_mutex;
@@ -605,15 +618,16 @@ struct TaskHandle {
                const std::string& tk_source,
                const std::string& tk_src_device,
                int tk_slo,
-               ClockType tk_startTime,
-               int tk_lastLatency)
+               ClockType tk_startTime)
     : tk_name(tk_name),
       tk_type(tk_type),
       tk_source(tk_source),
       tk_src_device(tk_src_device),
       tk_slo(tk_slo),
+      tk_memSlo(1),
       tk_startTime(tk_startTime),
-      tk_lastLatency(tk_lastLatency) {}
+      tk_lastLatency(0),
+      tk_lastThroughput(0.0) {}
 
     TaskHandle(const TaskHandle& other) {
         std::lock(tk_mutex, other.tk_mutex);
@@ -625,8 +639,10 @@ struct TaskHandle {
         tk_source = other.tk_source;
         tk_src_device = other.tk_src_device;
         tk_slo = other.tk_slo;
+        tk_memSlo = other.tk_memSlo;
         tk_startTime = other.tk_startTime;
         tk_lastLatency = other.tk_lastLatency;
+        tk_lastThroughput = other.tk_lastThroughput;
         tk_subTasks = other.tk_subTasks;
         tk_pipelineModels = {};
         for (auto& model : other.tk_pipelineModels) {
@@ -665,8 +681,10 @@ struct TaskHandle {
             tk_source = other.tk_source;
             tk_src_device = other.tk_src_device;
             tk_slo = other.tk_slo;
+            tk_memSlo = other.tk_memSlo;
             tk_startTime = other.tk_startTime;
             tk_lastLatency = other.tk_lastLatency;
+            tk_lastThroughput = other.tk_lastThroughput;
             tk_subTasks = other.tk_subTasks;
             tk_pipelineModels = {};
             for (auto& model : other.tk_pipelineModels) {
@@ -1007,6 +1025,7 @@ private:
     void handleDeviseAdvertisement(const std::string &msg);
     void handleDummyDataRequest(const std::string &msg);
     void handleForwardFLRequest(const std::string &msg);
+    void handleSinkMetrics(const std::string &msg);
     void sendMessageToDevice(const std::string &topik, const std::string &type, const std::string &content);
 
     /////////////////////////////////////////// PRIVATE VARIABLES ///////////////////////////////////////////

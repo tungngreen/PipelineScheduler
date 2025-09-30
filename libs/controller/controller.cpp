@@ -626,7 +626,8 @@ Controller::Controller(int argc, char **argv) {
     handlers = {
         {MSG_TYPE[DEVICE_ADVERTISEMENT], std::bind(&Controller::handleDeviseAdvertisement, this, std::placeholders::_1)},
         {MSG_TYPE[DUMMY_DATA], std::bind(&Controller::handleDummyDataRequest, this, std::placeholders::_1)},
-        {MSG_TYPE[START_FL], std::bind(&Controller::handleForwardFLRequest, this, std::placeholders::_1)}
+        {MSG_TYPE[START_FL], std::bind(&Controller::handleForwardFLRequest, this, std::placeholders::_1)},
+        {MSG_TYPE[SINK_METRICS], std::bind(&Controller::handleSinkMetrics, this, std::placeholders::_1)}
     };
     server_address = absl::StrFormat("tcp://*:%d", CONTROLLER_MESSAGE_QUEUE_PORT + ctrl_port_offset);
     message_queue = socket_t(ctx, ZMQ_PUB);
@@ -676,7 +677,7 @@ MemUsageType ContainerHandle::getExpectedTotalMemUsage() const {
 
 bool Controller::AddTask(const TaskDescription::TaskStruct &t) {
     std::cout << "Adding task: " << t.name << std::endl;
-    TaskHandle *task = new TaskHandle{t.name, t.type, t.stream, t.srcDevice, t.slo, {}, 0};
+    TaskHandle *task = new TaskHandle{t.name, t.type, t.stream, t.srcDevice, t.slo, {}};
 
     std::map<std::string, NodeHandle*> deviceList = devices.getMap();
 
@@ -953,7 +954,7 @@ ContainerHandle *Controller::TranslateToContainer(PipelineModel *model, NodeHand
         if (model->batchSize < model->datasourceName.size()) model->batchSize = model->datasourceName.size();
     } // ensure minimum global batch size setting for these configurations for a good comparison
 
-    auto *container = new ContainerHandle{containerName, i,
+    auto *container = new ContainerHandle{containerName, model->position_in_pipeline, i,
                                           class_of_interest,
                                           ModelTypeReverseList[modelName],
                                           CheckMergable(modelName),
@@ -1483,6 +1484,17 @@ void Controller::handleForwardFLRequest(const std::string& msg) {
             break;
         }
     }
+}
+
+void Controller::handleSinkMetrics(const std::string& msg) {
+    SinkMetrics request;
+    if (!request.ParseFromString(msg)) {
+        spdlog::get("container_agent")->error("Failed to parse sink metrics with msg: {}", msg);
+        return;
+    }
+    TaskHandle *task = ctrl_scheduledPipelines.getTask(request.name());
+    task->tk_lastLatency = request.avg_latency();
+    task->tk_lastThroughput = request.throughput();
 }
 
 void Controller::sendMessageToDevice(const std::string &topik, const std::string &type, const std::string &content) {

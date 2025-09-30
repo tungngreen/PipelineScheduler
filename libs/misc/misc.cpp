@@ -16,6 +16,7 @@ std::unordered_map<MESSAGE_TYPE_VALUES, std::string> MSG_TYPE = {
         {CONTAINER_START, "CONT_START"},
         {MSVC_START_REPORT, "MSVC_START"},
         {CONTEXT_METRICS, "CXT_MET"},
+        {SINK_METRICS, "SK_MET"},
         {ADJUST_UPSTREAM, "ADJ_UPSTR"},
         {UPDATE_SENDER, "UPD_SENDER"},
         {SYNC_DATASOURCES, "SYNC_DS"},

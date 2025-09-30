@@ -15,6 +15,7 @@ BaseSink::BaseSink(const json &jsonConfigs) : Microservice(jsonConfigs) {
     msvc_name = "sink";
     msvc_toReloadConfigs = false;
     spdlog::get("container_agent")->info("{0:s} is created.", __func__);
+    agg_Latency = 0;
 }
 
 void BaseSink::sink() {
@@ -95,6 +96,7 @@ void BaseSink::sink() {
                 msvc_logFile << std::chrono::duration_cast<TimePrecisionType>(inferTimeReport.req_origGenTime[0].at(j) - inferTimeReport.req_origGenTime[0].at(j-1)).count() << ",";
             }
             msvc_logFile << std::chrono::duration_cast<TimePrecisionType>(inferTimeReport.req_origGenTime[0].back() - inferTimeReport.req_origGenTime[0].front()).count() << std::endl;
+            agg_Latency += std::chrono::duration_cast<TimePrecisionType>(inferTimeReport.req_origGenTime[0].at(1) - inferTimeReport.req_origGenTime[0].at(0)).count();
         }
     }
     msvc_logFile.close();

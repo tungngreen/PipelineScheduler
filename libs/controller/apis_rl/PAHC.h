@@ -10,46 +10,67 @@ public:
     PAHC_ExperienceBuffer(size_t capacity)
             : ExperienceBuffer(capacity), weights(capacity) {}
 
-    void add(const T& state, const T& log_prob, const T& value, const T& weight) {
+    virtual void add(const T& state, const T& log_prob, const T& weight) final {
         if (is_full) {
             double distance = distance_metric(state, states[current_index]);
 
             if (distance > 0.5) {
                 spdlog::trace("Distance: {}", distance);
-                //set current index to the index of the oldest timestamp
-                current_index = std::distance(timestamps.begin(),
-                                              std::min_element(timestamps.begin(), timestamps.end()));
-                await_reward = true;
+                reward_index = reward_index - 1;
+                if (reward_index < 0) {
+                    reward_index = 0;
+                    return;
+                }
+                current_index = capacity - 1;
+                // remove the oldest entry by shifting all elements to the left
+                for (size_t i = 0; i < current_index; ++i) {
+                    timestamps[i] = timestamps[i + 1];
+                    states[i] = states[i + 1];
+                    log_probs[i] = log_probs[i + 1];
+                    weights[i] = weights[i + 1];
+                    rewards[i] = rewards[i + 1];
+                }
             } else {
                 return;
             }
         }
         timestamps[current_index] = std::chrono::system_clock::now();
         states[current_index] = state;
-
         log_probs[current_index] = log_prob;
-        values[current_index] = value;
         weights[current_index] = weight;
-        valid_history = false;
+
+        current_index = (current_index + 1) % capacity;
+        if (current_index == 0) is_full = true;
+    }
+
+    virtual void add_reward(const double x) final {
+        if (reward_index == capacity) return;
+        rewards[reward_index] = x;
+        reward_index = (reward_index + 1) % capacity;
+        if (reward_index == 0) reward_index = capacity;
+    }
+
+    [[nodiscard]] virtual std::vector<double> get_rewards() const final {
+        return {rewards.begin(), rewards.begin() + reward_index - 1};
     }
 
     [[nodiscard]] std::vector<T> get_weights() const {
         if (is_full) return weights;
-        return {weights.begin(), weights.begin() + current_index};
+        return {weights.begin(), weights.begin() + current_index - 1};
     }
 
     void clear_partially() { // remove first 20% of experiences
         current_index = capacity * 0.8;
+        reward_index = current_index;
         std::rotate(timestamps.begin(), timestamps.begin() + capacity * 0.2, timestamps.end());
         std::rotate(states.begin(), states.begin() + capacity * 0.2, states.end());
         std::rotate(log_probs.begin(), log_probs.begin() + capacity * 0.2, log_probs.end());
-        std::rotate(values.begin(), values.begin() + capacity * 0.2, values.end());
         std::rotate(weights.begin(), weights.begin() + capacity * 0.2, weights.end());
-        valid_history = false;
         is_full = false;
     }
 
 private:
+    int reward_index;
     std::vector<T> weights;
 };
 
@@ -140,7 +161,8 @@ public:
 
     std::vector<float> runStep();
     void rewardCallback(double throughput, double latency, double memory_use);
-    void setState(double agentID);
+    void setState(double agentID, double agentType, double pipeType, double pipeLatency, double localLatency,
+                  double theta, double pipeThroughput, double sigma, double memoryUse, double phi, double rho);
 private:
     T selectAction();
     void update();

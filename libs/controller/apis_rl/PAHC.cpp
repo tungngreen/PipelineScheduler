@@ -113,9 +113,15 @@ void PAHC::rewardCallback(double throughput, double latency, double memory_use) 
     }
 }
 
-void PAHC::setState(double agentID) {
-    spdlog::get("container_agent")->trace("RL Agent State: ");
-    state = torch::tensor({agentID}, precision);
+void PAHC::setState(double agentID, double agentType, double pipeType, double pipeLatency, double localLatency,
+                    double theta, double pipeThroughput, double sigma, double memoryUse, double phi, double rho) {
+    spdlog::get("container_agent")->trace("RL Agent State: agentID: {}, agentType: {}, pipeType: {}, pipeLatency: {}, "
+                                          "localLatency: {}, theta: {}, pipeThroughput: {}, sigma: {}, memoryUse: {}, "
+                                          "phi: {}, rho: {}",
+                                          agentID, agentType, pipeType, pipeLatency, localLatency, theta, pipeThroughput,
+                                          sigma, memoryUse, phi, rho);
+    state = torch::tensor({agentID, agentType, pipeType, pipeLatency, localLatency, theta, pipeThroughput, sigma,
+                           memoryUse, phi, rho}, precision);
     new_states.push_back(state);
 }
 
@@ -128,7 +134,7 @@ T PAHC::selectAction() {
 
     if (update_steps > 0 ) {
         log_prob = (-0.5 * ((raw_W - mean) / std).pow(2) - log_std - 0.5 * std::log(2 * M_PI) - torch::log(1.0 - W.pow(2) + 1e-6)).sum(1, true);
-        experiences.add(state, log_prob, mean, W);
+        experiences.add(state, log_prob, W);
     }
     return W;
 }
@@ -142,10 +148,11 @@ void PAHC::update() {
     auto actions = torch::stack(experiences.get_weights());
     auto log_probs = torch::stack(experiences.get_log_probs());
 
-    if (experiences.get_rewards().size() < experiences.get_states().size()) {
-        states.slice(0, 1, states.size(0), 1);
-        actions.slice(0, 1, actions.size(0), 1);
-        log_probs.slice(0, 1, log_probs.size(0), 1);
+    int x = experiences.get_states().size() - experiences.get_rewards().size();
+    if (x > 0) {
+        states.narrow(0, 0, states.size(0) - x);
+        actions.narrow(0, 0, actions.size(0) - x);
+        log_probs.narrow(0, 0, log_probs.size(0) - x);
     }
 
     // --- CRITIC UPDATE (L_Q) ---

@@ -1071,6 +1071,10 @@ public:
         return {};
     }
 
+    virtual MsvcSLOType getAggLatency() {
+        return 0;
+    }
+
     void stopThread() {
         STOP_THREADS = true;
     }

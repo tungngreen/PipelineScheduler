@@ -38,17 +38,17 @@ public:
 
     [[nodiscard]] std::vector<int> get_timeout() const {
         if (is_full) return timeouts;
-        return {timeouts.begin(), timeouts.begin() + current_index};
+        return {timeouts.begin(), timeouts.begin() + current_index - 1};
     }
 
     [[nodiscard]] std::vector<int> get_batching() const {
         if (is_full)  return batchings;
-        return {batchings.begin(), batchings.begin() + current_index};
+        return {batchings.begin(), batchings.begin() + current_index - 1};
     }
 
     [[nodiscard]] std::vector<int> get_scaling() const {
         if (is_full)  return scalings;
-        return {scalings.begin(), scalings.begin() + current_index};
+        return {scalings.begin(), scalings.begin() + current_index - 1};
     }
 private:
     std::vector<int> timeouts, batchings, scalings;
@@ -243,6 +243,10 @@ public:
                 {"federated_steps", federated_steps},
                 {"seed", seed}
         };
+    }
+
+    std::vector<float> getUtilityWeights() {
+        return {(float) theta, (float) sigma, (float) phi, (float) rho};
     }
 
 private:

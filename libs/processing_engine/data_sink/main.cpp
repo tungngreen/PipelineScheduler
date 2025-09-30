@@ -1,9 +1,11 @@
 #include "receiver.h"
 #include "basesink.cpp"
 #include "misc.h"
+#include "controlmessages.grpc.pb.h"
 
 ABSL_FLAG(std::string, name, "", "base name of container");
-ABSL_FLAG(std::string, json, "{\"experimentName\": \"none\", \"pipelineName\": \"none\", \"systemName\": \"none\"}",
+ABSL_FLAG(std::string, json, "{\"experimentName\": \"none\", \"pipelineName\": \"none\", \"systemName\": \"none\","
+                             "\"taskName\": \"none\", \"controllerIP\": \"none\"}",
           "json experiment configs");
 ABSL_FLAG(std::string, log_dir, "../logs", "Log path for the container");
 ABSL_FLAG(uint16_t, port, 0, "receiving port for the sink");
@@ -11,7 +13,7 @@ ABSL_FLAG(uint16_t, verbose, 2, "verbose level 0:trace, 1:debug, 2:info, 3:warn,
 ABSL_FLAG(uint16_t, logging_mode, 0, "0:stdout, 1:file, 2:both");
 //dummy flags to make command sync with other containers
 ABSL_FLAG(std::optional<int16_t>, device, 0, "UNUSED FOR SINK - NO EFFECT");
-ABSL_FLAG(std::optional<uint16_t>, port_offset, 0, "UNUSED FOR SINK - NO EFFECT");
+ABSL_FLAG(std::optional<uint16_t>, port_offset, 0, "port offset for control communication");
 
 int main(int argc, char **argv) {
     absl::ParseCommandLine(argc, argv);
@@ -37,6 +39,16 @@ int main(int argc, char **argv) {
             loggerSinks,
             logger
     );
+    std::string taskName = j.contains("taskName") ? j["taskName"].get<std::string>() : "none";
+    std::string controllerIP = j.contains("controllerIP") ? j["controllerIP"].get<std::string>() : "none";
+    context_t controller_ctx;
+    socket_t controller_socket;
+    if (controllerIP != "none") {
+        controller_ctx = context_t(1);
+        std::string server_address = absl::StrFormat("tcp://%s:%d", controllerIP, CONTROLLER_RECEIVE_PORT + absl::GetFlag(FLAGS_port_offset).value());
+        controller_socket = socket_t(controller_ctx, ZMQ_REQ);
+        controller_socket.connect(server_address);
+    }
 
     std::string common_end = "\", \"msvc_maxBatchSize\": 64, \"msvc_allocationMode\": 1, \"msvc_numWarmUpBatches\": 0, "
                              "\"msvc_batchMode\": 0, \"msvc_dropMode\": 0, \"msvc_timeBudgetLeft\": 9999999, "
@@ -89,7 +101,21 @@ int main(int argc, char **argv) {
     std::cout << "Start Running" << std::endl;
 
     while (true) {
-        std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+        std::this_thread::sleep_for(std::chrono::seconds(1));
+        uint32_t arrival_rate = receiver->getPerSecondArrivalRecord().numRequests;
+        MsvcSLOType agg_Latency = sink->getAggLatency();
+        float avg_latency = (float) agg_Latency / (float) arrival_rate;
+        logger->info("Arrival rate: {0:d} requests/s with avg latency: {1:.2f} ms", arrival_rate, avg_latency / 1000.f);
+        if (controllerIP != "none") {
+            controlmessages::SinkMetrics request;
+            request.set_name(taskName);
+            request.set_avg_latency(avg_latency);
+            request.set_throughput(arrival_rate);
+            std::string message = MSG_TYPE[SINK_METRICS] + " " + request.SerializeAsString();
+            message_t zmq_msg(message.size());
+            memcpy(zmq_msg.data(), message.data(), message.size());
+            controller_socket.send(zmq_msg, send_flags::dontwait);
+        }
     }
     return 0;
 }

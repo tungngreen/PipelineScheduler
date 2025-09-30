@@ -245,7 +245,9 @@ if (ON_HOST STREQUAL "BOTH" OR (NOT (ON_HOST STREQUAL "ON")))
         ${TensorRT_INCLUDE_DIRS}
         $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/../libs/protobufprotocols>)
     target_link_libraries(PipePlusPlusSink PUBLIC
+        cppzmq
         data_grpc_proto
+        control_mess_grpc_proto
         ${OpenCV_LIBS}
         ${CUDA_LIBRARIES}
         ${CMAKE_THREAD_LIBS_INIT}
