@@ -1047,6 +1047,8 @@ void Controller::StartContainer(ContainerHandle *container, bool easy_allocation
         start_config["experimentName"] = ctrl_experimentName;
         start_config["systemName"] = ctrl_systemName;
         start_config["pipelineName"] = pipelineName;
+        start_config["taskName"] = container->task->tk_name;
+        start_config["controllerIP"] = "<IP>";
         control_port = container->recv_port;
     } else {
         start_config = ctrl_containerLib[modelName].templateConfig;

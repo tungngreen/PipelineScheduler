@@ -193,6 +193,7 @@ protected:
     std::shared_ptr<spdlog::logger> dev_logger;
 
     // MESSAGING & NETWORK
+    std::string controller_url;
     context_t controller_ctx;
     socket_t controller_socket;
     socket_t controller_message_queue;

@@ -127,7 +127,8 @@ DeviceAgent::DeviceAgent() {
     dev_startTime = std::chrono::high_resolution_clock::now();
 }
 
-DeviceAgent::DeviceAgent(const std::string &controller_url) : DeviceAgent() {
+DeviceAgent::DeviceAgent(const std::string &ctrl_url) : DeviceAgent() {
+    controller_url = ctrl_url;
     in_device_ctx = context_t(dev_type == Server ? 2 : 1);
     std::string server_address = absl::StrFormat("tcp://*:%d", IN_DEVICE_RECEIVE_PORT + dev_system_port_offset);
     in_device_socket = socket_t(in_device_ctx, ZMQ_REP);
@@ -442,6 +443,9 @@ void DeviceAgent::CreateContainer(const std::string &msg) {
     }
     spdlog::get("container_agent")->info("Creating container: {}", c.name());
     try {
+        if (c.name().find("sink") != std::string::npos) {
+            c.set_json_config(replaceSubstring(c.json_config(), "<IP>", controller_url));
+        }
         std::string command = runCompose(c.executable(), c.name(), c.json_config(), c.device(), c.control_port());
         std::string target = absl::StrFormat("%s:%d", "localhost", c.control_port());
         if (c.name().find("sink") != std::string::npos) {
