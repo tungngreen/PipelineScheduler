@@ -1,2 +1,2 @@
 #include "controller.h"
-#include "meta_bandit.h"
+#include "PAHC.h"

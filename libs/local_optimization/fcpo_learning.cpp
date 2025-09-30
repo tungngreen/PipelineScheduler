@@ -37,7 +37,7 @@ FCPOAgent::FCPOAgent(std::string& cont_name, uint state_size, uint timeout_size,
     last_batching = 0;
     last_slo = 0.0;
     steps_counter = 0;
-    experiences = ExperienceBuffer(200);
+    experiences = FCPO_ExperienceBuffer(200);
 }
 
 void FCPOAgent::update() {

@@ -55,8 +55,8 @@ target_compile_features(apis_rl
 # we can have multiple versions installed at the same time.
 set(PROJECT_PREFIX apis_rl)
 
-set(misc_DIR "${CMAKE_CURRENT_BINARY_DIR}/../../misc")
-find_package(misc CONFIG REQUIRED)
+set(local_optimization_DIR "${CMAKE_CURRENT_BINARY_DIR}/../../local_optimization")
+find_package(local_optimization CONFIG REQUIRED)
 
 # Defines the headers for this library.
 # https://cmake.org/cmake/help/v3.11/command/target_include_directories.html
@@ -73,13 +73,7 @@ target_include_directories(apis_rl
 
 target_link_libraries(apis_rl
         PUBLIC
-        absl::flags
-        absl::flags_parse
-        ${_GRPC_GRPCPP}
-        ${_REFLECTION}
-        ${_PROTOBUF_LIBPROTOBUF}
-        ${CMAKE_THREAD_LIBS_INIT}
-        misc
+        local_optimization
 )
 
 # Here we configure variables specifying the target directories.
