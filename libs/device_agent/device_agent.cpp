@@ -96,6 +96,7 @@ DeviceAgent::DeviceAgent() {
         {MSG_TYPE[CONTAINER_STOP], std::bind(static_cast<void (DeviceAgent::*)(const std::string&)>
                                             (&DeviceAgent::StopContainer), this, std::placeholders::_1)},
         {MSG_TYPE[RETURN_FL], std::bind(&DeviceAgent::ReturnFL, this, std::placeholders::_1)},
+        {MSG_TYPE[CRL_WEIGHTS], std::bind(&DeviceAgent::ForwardUtilityWeights, this, std::placeholders::_1)},
         {MSG_TYPE[DEVICE_SHUTDOWN], std::bind(&DeviceAgent::Shutdown, this, std::placeholders::_1)}
     };
 
@@ -805,6 +806,21 @@ void DeviceAgent::ReturnFL(const std::string &msg) {
         return;
     }
     sendMessageToContainer(request.name(), MSG_TYPE[RETURN_FL], msg);
+}
+
+void DeviceAgent::ForwardUtilityWeights(const std::string &msg) {
+    CrlUtilityWeights request;
+    if (!request.ParseFromString(msg)){
+        spdlog::get("container_agent")->error("Failed forwarding utility weights to container with msg: {}", msg);
+        return;
+    }
+
+    //check if cont_name is in containers
+    if (containers.find(request.name()) == containers.end()) {
+        spdlog::get("container_agent")->error("ForwardUtilityWeights: Container {} not found!", request.name());
+        return;
+    }
+    sendMessageToContainer(request.name(), MSG_TYPE[CRL_WEIGHTS], msg);
 }
 
 void DeviceAgent::Shutdown(const std::string &msg) {

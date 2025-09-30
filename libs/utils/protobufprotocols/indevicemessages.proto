@@ -54,6 +54,14 @@ message BCEdgeConfig {
   int32 shared_mem_config = 2;
 }
 
+message CrlUtilityWeights {
+  string name = 1;
+  float theta = 2;
+  float sigma = 3;
+  float phi = 4;
+  float rho = 5;
+}
+
 message ProcessData {
   string msvc_name = 1;
   uint32 pid = 2;

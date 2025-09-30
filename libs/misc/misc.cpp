@@ -27,6 +27,7 @@ std::unordered_map<MESSAGE_TYPE_VALUES, std::string> MSG_TYPE = {
 
         {START_FL, "FL_START"},
         {RETURN_FL, "RET_FL"},
+        {CRL_WEIGHTS, "CRLW"},
         {BCEDGE_UPDATE, "BCEDGE_UPD"}
 };
 

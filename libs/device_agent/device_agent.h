@@ -108,6 +108,7 @@ protected:
     void UpdateTimeKeeping(const std::string &msg);
     void ForwardFL(const std::string &msg);
     void ReturnFL(const std::string &msg);
+    void ForwardUtilityWeights(const std::string &msg);
     void StopContainer(const std::string &msg);
     void StopContainer(ContainerSignal request);
 

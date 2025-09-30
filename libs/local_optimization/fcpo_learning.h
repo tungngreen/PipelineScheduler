@@ -142,6 +142,7 @@ public:
     void setState(double curr_timeout, double curr_batch, double curr_scaling,  double arrival, double pre_queue_size,
                   double inf_queue_size, double post_queue_size, double slo, double memory_use);
     void federatedUpdateCallback(const std::string &msg);
+    void updateUtilityWeights(const std::string &msg);
 
 private:
     void update();
@@ -149,6 +150,7 @@ private:
     void reset() {
         cumu_reward = 0.0;
         first = true;
+        penalty = false;
         experiences.clear();
     }
     void selectAction();

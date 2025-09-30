@@ -545,7 +545,7 @@ ContainerAgent::ContainerAgent(const json& configs) {
         spdlog::get("container_agent")->info("{0:s} created arrival table and process table.", cont_name);
     }
 
-    if (cont_systemName == "fcpo" || cont_systemName == "bce") {
+    if (cont_systemName == "fcpo" || cont_systemName == "apis" || cont_systemName == "bce") {
         cont_localOptimizationIntervalMillisec = 1000;
     } else if (cont_systemName == "edvi") {
         cont_localOptimizationIntervalMillisec = 200;
@@ -584,7 +584,7 @@ ContainerAgent::ContainerAgent(const json& configs) {
     if (hasDataReader && !isDataSource) for (auto &reader : cont_msvcsGroups["receiver"].msvcList) {
             reader->msvc_dataShape = {{-1, -1, -1}};
     }
-    if (cont_systemName == "fcpo" && !isDataSource) {
+    if ((cont_systemName == "fcpo" || cont_systemName == "apis") && !isDataSource) {
         nlohmann::json rl_conf = configs["fcpo"];
         cont_fcpo_agent = new FCPOAgent(cont_name, rl_conf["state_size"], rl_conf["timeout_size"],
                                         rl_conf["batch_size"], rl_conf["threads_size"], &sending_socket,
@@ -596,6 +596,7 @@ ContainerAgent::ContainerAgent(const json& configs) {
                                         rl_conf["clip_epsilon"], rl_conf["penalty_weight"], rl_conf["theta"],
                                         rl_conf["sigma"] ,rl_conf["phi"], rl_conf["rho"] , rl_conf["seed"]);
         handlers.emplace(MSG_TYPE[RETURN_FL], std::bind(&FCPOAgent::federatedUpdateCallback, cont_fcpo_agent, std::placeholders::_1));
+        handlers.emplace(MSG_TYPE[CRL_WEIGHTS], std::bind(&FCPOAgent::updateUtilityWeights, cont_fcpo_agent, std::placeholders::_1));
     }
 
     std::thread receiver(&ContainerAgent::HandleControlMessages, this);
@@ -1017,7 +1018,7 @@ void ContainerAgent::collectRuntimeMetrics() {
         }
 
         if (timePointCastMillisecond(startTime) >= timePointCastMillisecond(cont_nextOptimizationMetricsTime)) {
-            if (cont_systemName == "fcpo") {
+            if ((cont_systemName == "fcpo" || cont_systemName == "apis")) {
                 tmp_lateCount = 0;
                 for (auto &recv: cont_msvcsGroups["receiver"].msvcList) tmp_lateCount += recv->GetDroppedReqCount();
                 cont_late_drops += tmp_lateCount;

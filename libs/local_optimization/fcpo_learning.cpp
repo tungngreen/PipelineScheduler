@@ -217,6 +217,22 @@ void FCPOAgent::federatedUpdateCallback(const std::string &msg) {
         reset();
 }
 
+void FCPOAgent::updateUtilityWeights(const std::string &msg) {
+    CrlUtilityWeights response;
+    if (!response.ParseFromString(msg)) {
+        spdlog::get("container_agent")->error("Failed to parse utility weight update: {}", msg);
+        return;
+    }
+    theta = response.theta();
+    sigma = response.sigma();
+    phi = response.phi();
+    rho = response.rho();
+
+    steps_counter = 0;
+    federated_steps_counter = 1;
+    reset();
+}
+
 void FCPOAgent::rewardCallback(double throughput, double latency, double oversize, double memory_use) {
     if (update_steps > 0 ) {
         if (first) { // First reward is not valid and needs to be discarded

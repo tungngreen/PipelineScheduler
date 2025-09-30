@@ -158,7 +158,7 @@ void Controller::Scheduling() {
         ctrl_scheduledPipelines = ctrl_mergedPipelines;
         ApplyScheduling();
 
-        if (ctrl_systemName == "fcpo") {
+        if (ctrl_systemName == "fcpo" || ctrl_systemName== "apis") {
             ctrl_fcpo_server->updateCluster(ctrl_clusterID, containers.getFLConnections());
         }
         ctrl_clusterID = (ctrl_clusterID + 1) % ctrl_clusterCount;

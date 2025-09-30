@@ -493,7 +493,7 @@ void Controller::readConfigFile(const std::string &path) {
     ctrl_controlTimings.scaleUpIntervalThresholdSec = j["scale_up_interval_threshold_sec"];
     ctrl_controlTimings.scaleDownIntervalThresholdSec = j["scale_down_interval_threshold_sec"];
     initialTasks = j["initial_pipelines"];
-    if (ctrl_systemName == "fcpo") ctrl_fcpo_config = j["fcpo_parameters"];
+    if (ctrl_systemName == "fcpo" || ctrl_systemName== "apis") ctrl_fcpo_config = j["fcpo_parameters"];
 }
 
 void TaskDescription::from_json(const nlohmann::json &j, TaskDescription::TaskStruct &val) {
@@ -638,7 +638,7 @@ Controller::Controller(int argc, char **argv) {
                                             DATA_BASE_PORT + ctrl_port_offset, {});
     devices.addDevice("sink", sink_node);
 
-    if (ctrl_systemName == "fcpo") {
+    if (ctrl_systemName == "fcpo" || ctrl_systemName== "apis") {
         ctrl_fcpo_server = new FCPOServer(ctrl_systemName + "_" + ctrl_experimentName, ctrl_fcpo_config, ctrl_clusterCount, &message_queue);
     }
 
@@ -647,7 +647,7 @@ Controller::Controller(int argc, char **argv) {
 
 Controller::~Controller() {
     running = false;
-    if (ctrl_systemName == "fcpo") ctrl_fcpo_server->stop();
+    if (ctrl_systemName == "fcpo" || ctrl_systemName== "apis") ctrl_fcpo_server->stop();
     for (auto msvc: containers.getList()) {
         StopContainer(msvc, msvc->device_agent, true);
     }
@@ -949,7 +949,7 @@ ContainerHandle *Controller::TranslateToContainer(PipelineModel *model, NodeHand
     // the name of the container type to look it up in the container library
     std::string containerTypeName = modelName + "_" + getDeviceTypeName(device->type);
 
-    if (ctrl_systemName == "ppp" || ctrl_systemName == "fcpo" || ctrl_systemName == "bce") {
+    if (ctrl_systemName == "ppp" || ctrl_systemName == "fcpo" || ctrl_systemName== "apis" || ctrl_systemName == "bce") {
         if (model->batchSize < model->datasourceName.size()) model->batchSize = model->datasourceName.size();
     } // ensure minimum global batch size setting for these configurations for a good comparison
 
@@ -1061,7 +1061,7 @@ void Controller::StartContainer(ContainerHandle *container, bool easy_allocation
         if (ctrl_systemName == "ppp" || ctrl_systemName == "bce") {
             //TODO: set back to 2 after OURs working again with batcher
             start_config["container"]["cont_batchMode"] = 0;
-        } if (ctrl_systemName == "fcpo") {
+        } if (ctrl_systemName == "fcpo" || ctrl_systemName== "apis") {
             start_config["container"]["cont_batchMode"] = 1;
         } if (ctrl_systemName == "ppp" || ctrl_systemName == "jlf") {
             start_config["container"]["cont_dropMode"] = 1;
@@ -1086,7 +1086,7 @@ void Controller::StartContainer(ContainerHandle *container, bool easy_allocation
                 spdlog::get("container_agent")->warn("Model profile not found for container: {0:s}", container->name);
             }
             start_config["container"]["cont_modelProfile"] = modelProfile;
-            if (ctrl_systemName == "fcpo") {
+            if (ctrl_systemName == "fcpo" || ctrl_systemName== "apis") {
                 ctrl_fcpo_server->incrementClientCounter();
             }
         }
@@ -1174,7 +1174,7 @@ void Controller::StartContainer(ContainerHandle *container, bool easy_allocation
 
             postprocessor->at("msvc_dnstreamMicroservices").push_back(post_down);
             base_config.push_back(sender);
-            if (ctrl_systemName == "fcpo") {
+            if (ctrl_systemName == "fcpo" || ctrl_systemName== "apis") {
                 start_config["fcpo"] = ctrl_fcpo_server->getConfig();
                 std::string deviceTypeName = getDeviceTypeName(container->device_agent->type);
                 start_config["fcpo"]["timeout_size"] = (deviceTypeName == "server") ? 3 : 2;
@@ -1318,7 +1318,7 @@ void Controller::StopContainer(ContainerHandle *container, NodeHandle *device, b
 
     if (container->gpuHandle != nullptr)
         container->gpuHandle->removeContainer(container);
-    if (ctrl_systemName == "fcpo" && container->model != DataSource && container->model != Sink) {
+    if ((ctrl_systemName == "fcpo" || ctrl_systemName== "apis") && container->model != DataSource && container->model != Sink) {
         ctrl_fcpo_server->decrementClientCounter();
     }
     if (!forced) { //not forced means the container is stopped during scheduling and should be removed

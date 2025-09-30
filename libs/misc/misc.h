@@ -74,6 +74,7 @@ enum MESSAGE_TYPE_VALUES {
 
     START_FL,
     RETURN_FL,
+    CRL_WEIGHTS,
     BCEDGE_UPDATE
 };
 

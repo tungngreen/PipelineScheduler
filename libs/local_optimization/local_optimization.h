@@ -12,6 +12,7 @@
 #define PIPEPLUSPLUS_MICRO_OPTIMIZATION_H
 
 using indevicemessages::FlData;
+using indevicemessages::CrlUtilityWeights;
 using T = torch::Tensor;
 
 enum threadingAction {
