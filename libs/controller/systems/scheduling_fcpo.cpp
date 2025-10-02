@@ -28,7 +28,9 @@ void Controller::queryingProfiles(TaskHandle *task) {
         std::vector<std::pair<std::string, std::string>> possibleDevicePairList;
         for (const auto &deviceName : upstreamPossibleDeviceList) {
             for (const auto &deviceName2 : thisPossibleDeviceList) {
-                if (deviceName == "server" && deviceName2 != deviceName) {
+                if ((deviceName == "server" && deviceName2 != deviceName) ||
+                        (std::find(model->possibleDevices.begin(), model->possibleDevices.end(), "server") == model->possibleDevices.end() &&
+                        deviceName.find("virt") != std::string::npos && deviceName2 != deviceName)) {
                     continue;
                 }
                 possibleDevicePairList.push_back({deviceName, deviceName2});
@@ -56,8 +58,16 @@ void Controller::queryingProfiles(TaskHandle *task) {
             std::string senderDeviceType = getDeviceTypeName(deviceList.at(pair.first)->type);
             std::string receiverDeviceType = getDeviceTypeName(deviceList.at(pair.second)->type);
             containerName = model->name + "_" + receiverDeviceType;
+            if (receiverDeviceType == "virtual") {
+                containerName = model->name + "_server";
+            }
             std::unique_lock lock(devices.getDevice(pair.first)->nodeHandleMutex);
-            NetworkEntryType entry = devices.getDevice(pair.first)->latestNetworkEntries[receiverDeviceType];
+
+            NetworkEntryType entry;
+            if (receiverDeviceType == "virtual")
+                entry = devices.getDevice(pair.first)->latestNetworkEntries["server"];
+            else
+                entry = devices.getDevice(pair.first)->latestNetworkEntries[receiverDeviceType];
             lock.unlock();
             NetworkProfile test = queryNetworkProfile(
                 *ctrl_metricsServerConn,
@@ -82,6 +92,9 @@ void Controller::queryingProfiles(TaskHandle *task) {
         for (auto &deviceName : model->possibleDevices) {
             std::string deviceTypeName = getDeviceTypeName(deviceList.at(deviceName)->type);
             containerName = model->name + "_" + deviceTypeName;
+            if (deviceTypeName == "virtual") {
+                containerName = model->name + "_server";
+            }
             ModelProfile profile = queryModelProfile(
                 *ctrl_metricsServerConn,
                 ctrl_experimentName,
@@ -385,6 +398,13 @@ TaskHandle* Controller::mergePipelines(const std::string& taskName) {
         if (task.first.find(taskName) == std::string::npos) {
             continue;
         }
+        if (task.second->tk_edge_node != "server") {
+            ctrl_mergedPipelines.addTask(task.first, task.second);
+            for (auto &model : task.second->tk_pipelineModels) {
+                model->toBeRun = true;
+            }
+            continue;
+        }
         found = true;
         // Initialize the merged pipeline with one of the added tasks in the task type
         *mergedPipeline = *task.second;
@@ -400,6 +420,7 @@ TaskHandle* Controller::mergePipelines(const std::string& taskName) {
         model->toBeRun = true;
     }
 
+    // TODO: if some run on virtual, some on server, only merge server ones.
     // Loop through all the models in the pipeline and merge models of the same type
     for (uint16_t i = 0; i < numModels; i++) {
         // Find this model in all the scheduled tasks

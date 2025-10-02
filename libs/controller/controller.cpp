@@ -24,7 +24,8 @@ void Controller::initiateGPULanes(NodeHandle &node) {
         return;
     }
 
-    if (node.type == Server) {
+    // TODO: Check if we can remove this if
+    if (node.type == Server || node.type == Virtual) {
         node.numGPULanes = NUM_LANES_PER_GPU * NUM_GPUS;
     } else {
         node.numGPULanes = 1;
@@ -694,6 +695,7 @@ bool Controller::AddTask(const TaskDescription::TaskStruct &t) {
     task->tk_src_device = t.srcDevice;
 
     task->tk_pipelineModels = getModelsByPipelineType(t.type, t.srcDevice, t.name, t.stream, t.edgeNode);
+    task->tk_edge_node = t.edgeNode;
     for (auto &model: task->tk_pipelineModels) {
         model->datasourceName = {t.stream};
         model->task = task;
@@ -705,7 +707,9 @@ bool Controller::AddTask(const TaskDescription::TaskStruct &t) {
 
 void Controller::initialiseGPU(NodeHandle *node, int numGPUs, std::vector<int> memLimits) {
     if (node->type == SystemDeviceType::Virtual) {
-        GPUHandle *gpuNode = new GPUHandle{node->name, node->name, 0, memLimits[0] / 5, 1, node};
+        GPUHandle *gpuNode = new GPUHandle{"3090", node->name, 0, memLimits[0] - 2000, NUM_LANES_PER_GPU, node};
+        // TODO: differentiate between virtualEdge and virtualServer
+        //GPUHandle *gpuNode = new GPUHandle{node->name, node->name, 0, memLimits[0] / 5, 1, node};
         node->gpuHandles.emplace_back(gpuNode);
     } else if (node->type == SystemDeviceType::Server) {
         for (uint8_t gpuIndex = 0; gpuIndex < numGPUs; gpuIndex++) {
@@ -945,10 +949,12 @@ ContainerHandle *Controller::TranslateToContainer(PipelineModel *model, NodeHand
     }
 
     std::string subTaskName = model->name;
-    std::string containerName = ctrl_experimentName + "_" + ctrl_systemName + "_" + model->task->tk_name + "_" +
+    std::string containerName = ctrl_experimentName + "_" + ctrl_systemName + "_" + device->name + "_" + model->task->tk_name + "_" +
             modelName + "_" + std::to_string(i);
     // the name of the container type to look it up in the container library
     std::string containerTypeName = modelName + "_" + getDeviceTypeName(device->type);
+    if (getDeviceTypeName(device->type) == "virtual")
+        containerTypeName = modelName + "_server";
 
     if (ctrl_systemName == "ppp" || ctrl_systemName == "fcpo" || ctrl_systemName== "apis" || ctrl_systemName == "bce") {
         if (model->batchSize < model->datasourceName.size()) model->batchSize = model->datasourceName.size();

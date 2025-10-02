@@ -798,8 +798,8 @@ void queryBatchInferLatency(
     const std::string &systemName,
     const std::string &pipelineName,
     const std::string &streamName,
-    std::string &deviceName,
-    std::string &deviceTypeName,
+    std::string deviceName,
+    std::string deviceTypeName,
     const std::string &modelName,
     ModelProfile &profile,
     const uint16_t systemFPS = 15
@@ -811,8 +811,8 @@ BatchInferProfileListType queryBatchInferLatency(
     const std::string &systemName,
     const std::string &pipelineName,
     const std::string &streamName,
-    std::string &deviceName,
-    std::string &deviceTypeName,
+    std::string deviceName,
+    std::string deviceTypeName,
     const std::string &modelName,
     const uint16_t systemFPS = 15
 );
@@ -823,8 +823,8 @@ void queryPrePostLatency(
     const std::string &systemName,
     const std::string &pipelineName,
     const std::string &streamName,
-    std::string &deviceName,
-    std::string &deviceTypeName,
+    std::string deviceName,
+    std::string deviceTypeName,
     const std::string &modelName,
     ModelProfile &profile,
     const uint16_t systemFPS = 15
@@ -832,7 +832,7 @@ void queryPrePostLatency(
 
 void queryResourceRequirements(
     pqxx::connection &metricsConn,
-    std::string &deviceTypeName,
+    std::string deviceTypeName,
     const std::string &modelName,
     ModelProfile &profile,
     const uint16_t systemFPS = 15
@@ -844,8 +844,8 @@ ModelProfile queryModelProfile(
     const std::string &systemName,
     const std::string &pipelineName,
     const std::string &streamName,
-    std::string &deviceName,
-    std::string &deviceTypeName,
+    std::string deviceName,
+    std::string deviceTypeName,
     const std::string &modelName,
     uint16_t systemFPS = 15
 );
@@ -867,7 +867,7 @@ std::string getContainerName(const SystemDeviceType& deviceType, const ModelType
  * @param deviceName "all" for controller, a specifc type for each device
  * @return ContainerLibType 
  */
-ContainerLibType getContainerLib(const std::string& deviceType);
+ContainerLibType getContainerLib(std::string deviceType);
 
 std::string getDeviceTypeName(SystemDeviceType deviceType);
 

@@ -475,7 +475,7 @@ void DeviceAgent::StopContainer(const std::string &msg) {
 }
 
 void DeviceAgent::StopContainer(ContainerSignal request) {
-    std::string file;
+    std::string file = "../dockerfiles/";
     if (containers.find(request.name()) != containers.end()) {
         unsigned int pid = containers[request.name()].pid;
         containers[request.name()].pid = 0;

@@ -592,6 +592,7 @@ struct TaskHandle {
     PipelineType tk_type;
     std::string tk_source;
     std::string tk_src_device;
+    std::string tk_edge_node;
     MsvcSLOType tk_slo;
     int tk_memSlo;
     ClockType tk_startTime;
@@ -623,6 +624,7 @@ struct TaskHandle {
       tk_type(tk_type),
       tk_source(tk_source),
       tk_src_device(tk_src_device),
+      tk_edge_node("server"),
       tk_slo(tk_slo),
       tk_memSlo(1),
       tk_startTime(tk_startTime),
@@ -638,6 +640,7 @@ struct TaskHandle {
         tk_type = other.tk_type;
         tk_source = other.tk_source;
         tk_src_device = other.tk_src_device;
+        tk_edge_node = other.tk_edge_node;
         tk_slo = other.tk_slo;
         tk_memSlo = other.tk_memSlo;
         tk_startTime = other.tk_startTime;
@@ -680,6 +683,7 @@ struct TaskHandle {
             tk_type = other.tk_type;
             tk_source = other.tk_source;
             tk_src_device = other.tk_src_device;
+            tk_edge_node = other.tk_edge_node;
             tk_slo = other.tk_slo;
             tk_memSlo = other.tk_memSlo;
             tk_startTime = other.tk_startTime;

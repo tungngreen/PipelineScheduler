@@ -597,8 +597,8 @@ void queryPrePostLatency(
     const std::string &systemName,
     const std::string &pipelineName,
     const std::string &streamName,
-    std::string &deviceName,
-    std::string &deviceTypeName,
+    std::string deviceName,
+    std::string deviceTypeName,
     const std::string &modelName,
     ModelProfile &profile,
     const uint16_t systemFPS
@@ -703,8 +703,8 @@ void queryBatchInferLatency(
     const std::string &systemName,
     const std::string &pipelineName,
     const std::string &streamName,
-    std::string &deviceName,
-    std::string &deviceTypeName,
+    std::string deviceName,
+    std::string deviceTypeName,
     const std::string &modelName,
     ModelProfile &profile,
     const uint16_t systemFPS
@@ -759,8 +759,8 @@ BatchInferProfileListType queryBatchInferLatency(
     const std::string &systemName,
     const std::string &pipelineName,
     const std::string &streamName,
-    std::string &deviceName,
-    std::string &deviceTypeName,
+    std::string deviceName,
+    std::string deviceTypeName,
     const std::string &modelName,
     const uint16_t systemFPS
 ) {
@@ -794,7 +794,7 @@ BatchInferProfileListType queryBatchInferLatency(
  */
 void queryResourceRequirements(
     pqxx::connection &metricsConn,
-    std::string &deviceTypeName,
+    std::string deviceTypeName,
     const std::string &modelName,
     ModelProfile &profile,
     const uint16_t systemFPS
@@ -842,8 +842,8 @@ ModelProfile queryModelProfile(
     const std::string &systemName,
     const std::string &pipelineName,
     const std::string &streamName,
-    std::string &deviceName,
-    std::string &deviceTypeName,
+    std::string deviceName,
+    std::string deviceTypeName,
     const std::string &modelName,
     uint16_t systemFPS
 ) {
@@ -1423,6 +1423,9 @@ std::string getContainerName(const std::string& deviceTypeName, const std::strin
 
 std::string getContainerName(const SystemDeviceType& deviceType, const ModelType& modelType) {
     std::string deviceAbbr = SystemDeviceTypeList.at(deviceType);
+    if (deviceType == Virtual) {
+        deviceAbbr = SystemDeviceTypeList.at(Server);
+    }
     std::string modelAbbr = ModelTypeList.at(modelType);
     return modelAbbr + "_" + deviceAbbr;
 }
@@ -1431,7 +1434,10 @@ std::string getDeviceTypeAbbr(const SystemDeviceType &deviceType) {
     return abbreviate(SystemDeviceTypeList.at(deviceType));
 }
 
-ContainerLibType getContainerLib(const std::string& deviceType) {
+ContainerLibType getContainerLib(std::string deviceType) {
+    if (deviceType == "virtual") {// Virtual device is always the server
+        deviceType = "server";
+    }
     ContainerLibType containerLib;
     std::ifstream file("../jsons/container_lib.json");
     json j = json::parse(file);
