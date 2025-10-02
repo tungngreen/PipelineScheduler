@@ -4,6 +4,12 @@ services:
     container_name: ${CONTAINER_NAME}
     restart: on-failure
     network_mode: host
+    runtime: nvidia
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - capabilities: [gpu]
     privileged: true
     user: "0:0"
     volumes:
