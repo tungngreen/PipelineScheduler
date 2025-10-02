@@ -5,15 +5,16 @@
 
 ABSL_FLAG(std::string, name, "", "base name of container");
 ABSL_FLAG(std::string, json, "{\"experimentName\": \"none\", \"pipelineName\": \"none\", \"systemName\": \"none\","
-                             "\"taskName\": \"none\", \"controllerIP\": \"none\"}",
+                             "\"controllerIP\": \"none\"}",
           "json experiment configs");
 ABSL_FLAG(std::string, log_dir, "../logs", "Log path for the container");
 ABSL_FLAG(uint16_t, port, 0, "receiving port for the sink");
 ABSL_FLAG(uint16_t, verbose, 2, "verbose level 0:trace, 1:debug, 2:info, 3:warn, 4:error, 5:critical, 6:off");
 ABSL_FLAG(uint16_t, logging_mode, 0, "0:stdout, 1:file, 2:both");
+ABSL_FLAG(std::optional<uint16_t>, port_offset, 0, "port offset for control communication");
 //dummy flags to make command sync with other containers
 ABSL_FLAG(std::optional<int16_t>, device, 0, "UNUSED FOR SINK - NO EFFECT");
-ABSL_FLAG(std::optional<uint16_t>, port_offset, 0, "port offset for control communication");
+ABSL_FLAG(bool, restart, 0, "UNUSED FOR SINK - NO EFFECT");
 
 int main(int argc, char **argv) {
     absl::ParseCommandLine(argc, argv);
@@ -39,7 +40,7 @@ int main(int argc, char **argv) {
             loggerSinks,
             logger
     );
-    std::string taskName = j.contains("taskName") ? j["taskName"].get<std::string>() : "none";
+    std::string taskName = j.contains("taskName") ? j["taskName"].get<std::string>() :  j["pipelineName"].get<std::string>();
     std::string controllerIP = j.contains("controllerIP") ? j["controllerIP"].get<std::string>() : "none";
     context_t controller_ctx;
     socket_t controller_socket;

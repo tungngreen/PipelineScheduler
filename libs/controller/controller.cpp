@@ -1045,7 +1045,7 @@ void Controller::StartContainer(ContainerHandle *container, bool easy_allocation
     ContainerConfig request;
     json start_config;
     unsigned int control_port;
-    std::string pipelineName = splitString(container->name, "_")[2];
+    std::string pipelineName = container->task->tk_name;
     ModelType model = static_cast<ModelType>(container->model);
     std::string modelName = getContainerName(container->device_agent->type, model);
     std::cout << "Creating container: " << container->name << std::endl;
@@ -1053,7 +1053,6 @@ void Controller::StartContainer(ContainerHandle *container, bool easy_allocation
         start_config["experimentName"] = ctrl_experimentName;
         start_config["systemName"] = ctrl_systemName;
         start_config["pipelineName"] = pipelineName;
-        start_config["taskName"] = container->task->tk_name;
         start_config["controllerIP"] = "<IP>";
         control_port = container->recv_port;
     } else {

@@ -439,6 +439,13 @@ TaskHandle* Controller::mergePipelines(const std::string& taskName) {
         if (task.first.find(taskName) == std::string::npos) {
             continue;
         }
+        if (task.second->tk_edge_node != "server") {
+            ctrl_mergedPipelines.addTask(task.first, task.second);
+            for (auto &model : task.second->tk_pipelineModels) {
+                model->toBeRun = true;
+            }
+            continue;
+        }
         found = true;
         // Initialize the merged pipeline with one of the added tasks in the task type
         *mergedPipeline = *task.second;
@@ -454,6 +461,7 @@ TaskHandle* Controller::mergePipelines(const std::string& taskName) {
         model->toBeRun = true;
     }
 
+    // TODO: if some run on virtual, some on server, only merge server ones.
     // Loop through all the models in the pipeline and merge models of the same type
     for (uint16_t i = 0; i < numModels; i++) {
         // Find this model in all the scheduled tasks

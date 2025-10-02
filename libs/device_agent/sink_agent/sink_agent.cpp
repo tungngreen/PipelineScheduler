@@ -1,6 +1,7 @@
 #include "sink_agent.h"
 
-SinkAgent::SinkAgent(const std::string &controller_url) : DeviceAgent() {
+SinkAgent::SinkAgent(const std::string &ctrl_url) : DeviceAgent() {
+    controller_url = ctrl_url;
     controller_ctx = context_t(1);
     std::string server_address = absl::StrFormat("tcp://%s:%d", controller_url, CONTROLLER_MESSAGE_QUEUE_PORT + dev_system_port_offset  - dev_agent_port_offset);
     controller_message_queue = socket_t(controller_ctx, ZMQ_SUB);
