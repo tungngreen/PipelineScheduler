@@ -1,5 +1,5 @@
 # Builder Image
-FROM pipeplusplus:torch
+FROM pipeplusplus:amd64-dev
 
 ARG VERSION=Release
 
