@@ -68,6 +68,6 @@ message LoopRange {
 
 message SinkMetrics {
   string name = 1;
-  int64 avg_latency = 2;
+  float avg_latency = 2;
   int32 throughput = 3;
 }

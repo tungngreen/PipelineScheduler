@@ -596,7 +596,7 @@ struct TaskHandle {
     MsvcSLOType tk_slo;
     int tk_memSlo;
     ClockType tk_startTime;
-    MsvcSLOType tk_lastLatency;
+    float tk_lastLatency;
     float tk_lastThroughput;
     std::map<std::string, std::vector<ContainerHandle*>> tk_subTasks;
     PipelineModelListType tk_pipelineModels;
