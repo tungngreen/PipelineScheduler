@@ -13,3 +13,7 @@ WORKDIR /app/build
 RUN cmake -DON_HOST=OFF -DDEVICE_ARCH=amd64 -DSYSTEM_NAME=FCPO -DCMAKE_BUILD_TYPE=VERSION ..
 RUN make -j$(nproc)
 COPY ./jsons /app/jsons
+
+ENV DEBIAN_FRONTEND=noninteractive \
+    TZ=Asia/Seoul
+RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone

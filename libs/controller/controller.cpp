@@ -620,7 +620,7 @@ Controller::Controller(int argc, char **argv) {
     ctrl_clusterID = 0;
 
     std::string server_address = absl::StrFormat("tcp://*:%d", CONTROLLER_RECEIVE_PORT + ctrl_port_offset);
-    ctx = context_t();
+    ctx = context_t(2);
     server_socket = socket_t(ctx, ZMQ_REP);
     server_socket.bind(server_address);
     server_socket.set(zmq::sockopt::rcvtimeo, 1000);
@@ -1502,6 +1502,7 @@ void Controller::handleSinkMetrics(const std::string& msg) {
     TaskHandle *task = ctrl_scheduledPipelines.getTask(request.name());
     task->tk_lastLatency = request.avg_latency();
     task->tk_lastThroughput = request.throughput();
+    server_socket.send(message_t("success"), send_flags::dontwait);
 }
 
 void Controller::sendMessageToDevice(const std::string &topik, const std::string &type, const std::string &content) {
