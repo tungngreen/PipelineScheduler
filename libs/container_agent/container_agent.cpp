@@ -567,6 +567,7 @@ ContainerAgent::ContainerAgent(const json& configs) {
     std::string server_address = absl::StrFormat("tcp://localhost:%d", IN_DEVICE_RECEIVE_PORT + absl::GetFlag(FLAGS_port_offset));
     sending_socket = socket_t(messaging_ctx, ZMQ_REQ);
     sending_socket.connect(server_address);
+    sending_socket.setsockopt(ZMQ_RCVTIMEO, 100);
     server_address = absl::StrFormat("tcp://localhost:%d", IN_DEVICE_MESSAGE_QUEUE_PORT + absl::GetFlag(FLAGS_port_offset));
     device_message_queue = socket_t(messaging_ctx, ZMQ_SUB);
     device_message_queue.setsockopt(ZMQ_SUBSCRIBE, (cont_name + "|").c_str(), cont_name.size() + 1);
@@ -1448,7 +1449,7 @@ std::string ContainerAgent::sendMessageToDevice(const std::string &type, const s
         spdlog::get("container_agent")->error("Failed to send message to device: {0:s}", msg);
         return "";
     }
-    if (!sending_socket.recv(response, recv_flags::none)) {
+    if (!sending_socket.recv(response, zmq::recv_flags::none)) {
         spdlog::get("container_agent")->error("Failed to receive response from device for message: {0:s}", msg);
         return "";
     }
