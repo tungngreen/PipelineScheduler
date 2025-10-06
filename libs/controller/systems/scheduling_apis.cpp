@@ -58,9 +58,8 @@ void Controller::queryingProfiles(TaskHandle *task) {
             std::string senderDeviceType = getDeviceTypeName(deviceList.at(pair.first)->type);
             std::string receiverDeviceType = getDeviceTypeName(deviceList.at(pair.second)->type);
             containerName = model->name + "_" + receiverDeviceType;
-            if (receiverDeviceType == "virtual") {
+            if (receiverDeviceType == "virtual")
                 containerName = model->name + "_server";
-            }
             std::unique_lock lock(devices.getDevice(pair.first)->nodeHandleMutex);
 
             NetworkEntryType entry;
@@ -126,76 +125,94 @@ void Controller::Scheduling() {
     while (running) {
         Stopwatch schedulingSW;
         schedulingSW.start();
-        // Check if it is the next scheduling period
-        ctrl_controlTimings.currSchedulingTime = std::chrono::system_clock::now();
-        if (ctrl_controlTimings.currSchedulingTime < ctrl_nextSchedulingTime) {
-            std::this_thread::sleep_for(
-                    std::chrono::seconds(
-                            std::chrono::duration_cast<std::chrono::seconds>(ctrl_nextSchedulingTime - ctrl_controlTimings.currSchedulingTime).count()
-                    )
-            );
+
+        if (!isPipelineInitialised) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(100));
             continue;
         }
 
         ctrl_unscheduledPipelines = ctrl_savedUnscheduledPipelines;
-        auto taskList = ctrl_unscheduledPipelines.getMap();
-        if (!isPipelineInitialised) {
-            continue;
+        if (ctrl_scheduledPipelines.hasTasks()) {
+            ctrl_unscheduledPipelines = ctrl_scheduledPipelines;
+            for (auto *task: ctrl_unscheduledPipelines.getList())
+                for (auto *model: task->tk_pipelineModels)
+                    model->name = model->name.substr(model->name.find_last_of('_') + 1);
         }
-        ctrl_controlTimings.nextSchedulingTime = ctrl_controlTimings.currSchedulingTime + std::chrono::seconds(ctrl_controlTimings.schedulingIntervalSec);
+        if (!ctrl_scheduledPipelines.hasTasks()) {
+            auto taskList = ctrl_unscheduledPipelines.getMap();
 
-        for (auto &[taskName, taskHandle]: taskList) {
-            queryingProfiles(taskHandle);
-            crossDeviceWorkloadDistributor(taskHandle, taskHandle->tk_slo / 2);
-            shiftModelToEdge(taskHandle->tk_pipelineModels, taskHandle->tk_pipelineModels.front(), taskHandle->tk_slo, taskHandle->tk_pipelineModels.front()->device);
-            for (auto &model: taskHandle->tk_pipelineModels) {
-                model->name = taskName + "_" + model->name;
-            }
-            estimateModelTiming(taskHandle->tk_pipelineModels.front(), 0);
-            taskHandle->tk_newlyAdded = false;
-        }
+            ctrl_controlTimings.currSchedulingTime = std::chrono::high_resolution_clock::now();
+            if (ctrl_controlTimings.nextSchedulingTime <= ctrl_controlTimings.currSchedulingTime) {
+                ctrl_controlTimings.nextSchedulingTime = ctrl_controlTimings.currSchedulingTime +
+                                                         std::chrono::seconds(
+                                                                 ctrl_controlTimings.schedulingIntervalSec);
 
-        mergePipelines();
-
-        auto mergedTasks = ctrl_mergedPipelines.getMap();
-        for (auto &[taskName, taskHandle]: mergedTasks) {
-            for (auto &model: taskHandle->tk_pipelineModels) {
-                for (auto i = 0; i < model->numReplicas; i++) {
-                    model->cudaDevices.push_back(0); // Add dummy cuda device value to create a container manifestation
+                for (auto &[taskName, taskHandle]: taskList) {
+                    queryingProfiles(taskHandle);
+                    crossDeviceWorkloadDistributor(taskHandle, taskHandle->tk_slo / 2);
+                    shiftModelToEdge(taskHandle->tk_pipelineModels, taskHandle->tk_pipelineModels.front(),
+                                     taskHandle->tk_slo, taskHandle->tk_pipelineModels.front()->device);
+                    for (auto &model: taskHandle->tk_pipelineModels) {
+                        if (model->name.find("_") == std::string::npos)
+                            model->name = taskName + "_" + model->name;
+                    }
+                    estimateModelTiming(taskHandle->tk_pipelineModels.front(), 0);
+                    taskHandle->tk_newlyAdded = false;
                 }
-                if (model->name.find("sink") != std::string::npos) {
-                    model->device = "sink";
+
+                mergePipelines();
+
+                auto mergedTasks = ctrl_mergedPipelines.getMap();
+                for (auto &[taskName, taskHandle]: mergedTasks) {
+                    for (auto &model: taskHandle->tk_pipelineModels) {
+                        for (auto i = 0; i < model->numReplicas; i++) {
+                            model->cudaDevices.push_back(
+                                    0); // Add dummy cuda device value to create a container manifestation
+                        }
+                        if (model->name.find("sink") != std::string::npos) {
+                            model->device = "sink";
+                        }
+                    }
                 }
+
+                estimatePipelineTiming();
+                ctrl_scheduledPipelines = ctrl_mergedPipelines;
+                ApplyScheduling();
             }
         }
-
-        estimatePipelineTiming();
-        ctrl_scheduledPipelines = ctrl_mergedPipelines;
-        ApplyScheduling();
 
         // -------------- APIS RL INTEGRATION CODE START -----------------
-        for (auto *task : ctrl_scheduledPipelines.getList()) {
-            for (auto &subTaskPair : task->tk_subTasks) {
+        for (auto *task: ctrl_scheduledPipelines.getList()) {
+            for (auto &subTaskPair: task->tk_subTasks) {
+                if (subTaskPair.first.find("sink") != std::string::npos)
+                    continue;
                 for (auto &container: subTaskPair.second) {
                     if (localCRLAgents.find(container->name) == localCRLAgents.end())
-                        localCRLAgents[container->name] = {container->position_in_pipeline, container->name, ctrl_fcpo_server->getUtilityWeights()};
+                        localCRLAgents[container->name] = {container->position_in_pipeline, container->name,
+                                                           ctrl_fcpo_server->getUtilityWeights()};
                     // Assign Reward
-                    ApisRL->rewardCallback((double) task->tk_slo / (double) task->tk_lastLatency - 1.0,
-                                           task->tk_lastThroughput / (double) ctrl_systemFPS - 1.0,
-                                           (double) task->tk_memSlo / (double) (container->getExpectedTotalMemUsage() + task->tk_memSlo) - 1.0);
+                    if (task->tk_lastThroughput == 0.0)
+                        ApisRL->rewardCallback(0.0, 0.0, 0.0);
+                    else
+                        ApisRL->rewardCallback((double) task->tk_slo / (double) task->tk_lastLatency - 1.0,
+                                               (double) task->tk_lastThroughput / (double) ctrl_systemFPS - 1.0,
+                                               (double) task->tk_memSlo /
+                                               (double) (container->getExpectedTotalMemUsage() + task->tk_memSlo) -
+                                               1.0);
                     // Set State
-                    BatchInferProfile tmp = container->pipelineModel->processProfiles.at(getDeviceTypeName(container->device_agent->type)).batchInfer.at(container->batch_size);
+                    BatchInferProfile tmp = container->pipelineModel->processProfiles.at(
+                            getDeviceTypeName(container->device_agent->type)).batchInfer.at(container->batch_size);
                     ApisRL->setState((double) container->position_in_pipeline,
-                                      (double) container->pipelineModel->type,
-                                      (double) task->tk_type,
-                                      (double) task->tk_lastLatency / (double) task->tk_slo,
-                                      (double) (tmp.p95prepLat + tmp.p95inferLat + tmp.p95postLat) / 10000.0,
-                                      (double) localCRLAgents[container->name].weights[0],
-                                      (double) task->tk_lastThroughput / (double) ctrl_systemFPS,
-                                      (double) localCRLAgents[container->name].weights[1],
-                                      (double) container->getExpectedTotalMemUsage() / 1000.0,
-                                      (double) localCRLAgents[container->name].weights[2],
-                                      (double) localCRLAgents[container->name].weights[3]);
+                                     (double) container->pipelineModel->type,
+                                     (double) task->tk_type,
+                                     (double) task->tk_lastLatency / (double) task->tk_slo,
+                                     (double) (tmp.p95prepLat + tmp.p95inferLat + tmp.p95postLat) / 10000.0,
+                                     (double) localCRLAgents[container->name].weights[0],
+                                     (double) task->tk_lastThroughput / (double) ctrl_systemFPS,
+                                     (double) localCRLAgents[container->name].weights[1],
+                                     (double) container->getExpectedTotalMemUsage() / 1000.0,
+                                     (double) localCRLAgents[container->name].weights[2],
+                                     (double) localCRLAgents[container->name].weights[3]);
 
                     // Take Action and Communicate to Agent
                     std::vector<float> weight_updates = ApisRL->runStep();
@@ -206,11 +223,12 @@ void Controller::Scheduling() {
                     request.set_sigma(localCRLAgents[container->name].weights[1]);
                     request.set_phi(localCRLAgents[container->name].weights[2]);
                     request.set_rho(localCRLAgents[container->name].weights[3]);
-                    sendMessageToDevice(container->device_agent->name, MSG_TYPE[CRL_WEIGHTS], request.SerializeAsString());
+                    sendMessageToDevice(container->device_agent->name, MSG_TYPE[CRL_WEIGHTS],
+                                        request.SerializeAsString());
                 }
             }
         }
-
+        ApisRL->finish_step();
         // --------------- APIS RL INTEGRATION CODE END ------------------
 
         if (ctrl_systemName == "fcpo" || ctrl_systemName== "apis") {
@@ -220,8 +238,9 @@ void Controller::Scheduling() {
 
         schedulingSW.stop();
         uint64_t sleepTime = std::chrono::duration_cast<TimePrecisionType>(ctrl_controlTimings.nextSchedulingTime - std::chrono::system_clock::now()).count();
-        if (startTime == std::chrono::system_clock::time_point()) startTime = std::chrono::system_clock::now();
-        if (std::chrono::duration_cast<std::chrono::minutes>(std::chrono::system_clock::now() - startTime).count() > ctrl_runtime) {
+        sleepTime = std::min(sleepTime, (uint64_t) 30000000);
+        if (startTime == std::chrono::system_clock::time_point()) startTime = std::chrono::high_resolution_clock::now();
+        if (std::chrono::duration_cast<std::chrono::minutes>(std::chrono::high_resolution_clock::now() - startTime).count() > ctrl_runtime) {
             running = false;
             break;
         }

@@ -812,6 +812,10 @@ public:
         return list.find(name) != list.end();
     }
 
+    bool hasTasks() {
+        return !list.empty();
+    }
+
     Tasks() = default;
 
     // Copy constructor

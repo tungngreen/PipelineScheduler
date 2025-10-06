@@ -8,49 +8,27 @@ public:
     PAHC_ExperienceBuffer() = default;
 
     PAHC_ExperienceBuffer(size_t capacity)
-            : ExperienceBuffer(capacity), weights(capacity) {}
+            : ExperienceBuffer(capacity), weights(capacity), log_stds(capacity), means(capacity) {}
 
-    virtual void add(const T& state, const T& log_prob, const T& weight) final {
-        if (is_full) {
-            double distance = distance_metric(state, states[current_index]);
-
-            if (distance > 0.5) {
-                spdlog::trace("Distance: {}", distance);
-                reward_index = reward_index - 1;
-                if (reward_index < 0) {
-                    reward_index = 0;
-                    return;
-                }
-                current_index = capacity - 1;
-                // remove the oldest entry by shifting all elements to the left
-                for (size_t i = 0; i < current_index; ++i) {
-                    timestamps[i] = timestamps[i + 1];
-                    states[i] = states[i + 1];
-                    log_probs[i] = log_probs[i + 1];
-                    weights[i] = weights[i + 1];
-                    rewards[i] = rewards[i + 1];
-                }
-            } else {
-                return;
-            }
-        }
+    virtual void add(const T& state, const T& log_std, const T& mean, const T& weight) final {
         timestamps[current_index] = std::chrono::system_clock::now();
         states[current_index] = state;
-        log_probs[current_index] = log_prob;
+        log_stds[current_index] = log_std;
+        means[current_index] = mean;
         weights[current_index] = weight;
 
         current_index = (current_index + 1) % capacity;
-        if (current_index == 0) is_full = true;
     }
 
     virtual void add_reward(const double x) final {
         if (reward_index == capacity) return;
         rewards[reward_index] = x;
         reward_index = (reward_index + 1) % capacity;
-        if (reward_index == 0) reward_index = capacity;
+        if (reward_index == 0) is_full = true;
     }
 
     [[nodiscard]] virtual std::vector<double> get_rewards() const final {
+        if (is_full) return rewards;
         return {rewards.begin(), rewards.begin() + reward_index - 1};
     }
 
@@ -59,19 +37,45 @@ public:
         return {weights.begin(), weights.begin() + current_index - 1};
     }
 
-    void clear_partially() { // remove first 20% of experiences
-        current_index = capacity * 0.8;
-        reward_index = current_index;
-        std::rotate(timestamps.begin(), timestamps.begin() + capacity * 0.2, timestamps.end());
-        std::rotate(states.begin(), states.begin() + capacity * 0.2, states.end());
-        std::rotate(log_probs.begin(), log_probs.begin() + capacity * 0.2, log_probs.end());
-        std::rotate(weights.begin(), weights.begin() + capacity * 0.2, weights.end());
+    std::tuple<T, T, T, T, T> sample(uint n) {
+        std::vector<int> indices;
+        if (is_full)
+            indices =  std::vector<int>(capacity);
+        else {
+            if (n > reward_index - 1) n = reward_index - 1;
+            indices = std::vector<int>(reward_index - 1);
+        }
+        std::iota(indices.begin(), indices.end(), 0);
+        std::shuffle(indices.begin(), indices.end(), std::mt19937{std::random_device{}()});
+        indices.resize(n);
+        std::sort(indices.begin(), indices.end());
+        std::vector<T> sampled_states, sampled_actions, sampled_log_stds, sampled_means;
+        std::vector<double> sampled_rewards;
+
+        for (auto i : indices) {
+            if (states[i].size(0) == 0 || log_stds[i].size(0) == 0 || weights[i].size(0) == 0 || means[i].size(0) == 0) {
+                spdlog::get("container_agent")->trace("Skipping empty experience at index {}", i);
+                continue;
+            }
+            sampled_states.push_back(states[i]);
+            sampled_actions.push_back(weights[i]);
+            sampled_log_stds.push_back(log_stds[i]);
+            sampled_means.push_back(means[i]);
+            sampled_rewards.push_back(rewards[i]);
+        }
+
+        return std::make_tuple(torch::stack(sampled_states), torch::stack(sampled_actions),
+                               torch::stack(sampled_log_stds), torch::stack(sampled_means), torch::tensor(sampled_rewards));
+    };
+
+    virtual void clear() final {
+        reward_index = 0;
+        current_index = 0;
         is_full = false;
     }
-
 private:
     int reward_index;
-    std::vector<T> weights;
+    std::vector<T> weights, log_stds, means;
 };
 
 
@@ -80,9 +84,9 @@ public:
     PAHC_Actor(int state_dim, int action_dim) :
             fc1(torch::nn::LinearOptions(state_dim, 128)),
             fc2(torch::nn::LinearOptions(128, 128)),
-            fc3(torch::nn::LinearOptions(128, 128)),
-            fc_mean(torch::nn::LinearOptions(128, action_dim)),
-            fc_log_std(torch::nn::LinearOptions(128, action_dim))
+            fc3(torch::nn::LinearOptions(128, 64)),
+            fc_mean(torch::nn::LinearOptions(64, action_dim)),
+            fc_log_std(torch::nn::LinearOptions(64, action_dim))
     {
         register_module("fc1", fc1);
         register_module("fc2", fc2);
@@ -159,6 +163,16 @@ public:
         out.close();
     }
 
+    void finish_step() {
+        first = false;
+        try {
+            update();
+        } catch (const c10::Error& e) {
+            spdlog::get("container_agent")->error("Error during PAHC update: {0}", e.what());
+            reset();
+            experiences.clear();
+        }
+    }
     std::vector<float> runStep();
     void rewardCallback(double throughput, double latency, double memory_use);
     void setState(double agentID, double agentType, double pipeType, double pipeLatency, double localLatency,
@@ -169,10 +183,11 @@ private:
     void soft_update_targets();
 
     void reset() {
+        steps_counter = 0;
         cumu_reward = 0.0;
         first = true;
         new_states.clear();
-        experiences.clear_partially();
+        experiences.clear();
     }
 
     std::shared_ptr<PAHC_Actor> actor;
@@ -180,7 +195,7 @@ private:
     std::unique_ptr<torch::optim::Optimizer> optimizer_actor, optimizer_critic1, optimizer_critic2, optimizer_alpha;
     torch::Dtype precision;
 
-    T state, log_prob, value, log_alpha_meta;
+    T state, value, log_alpha_meta;
     std::vector<T> new_states;
     std::vector<float> weights;
     PAHC_ExperienceBuffer experiences;
