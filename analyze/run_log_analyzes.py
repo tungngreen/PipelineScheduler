@@ -312,7 +312,7 @@ def get_bandwidths(base_dir):
 
 def logSystemMetrics(base_directory):
     results = {}
-    experiments = ['fcty', 'camp']
+    experiments = ['main']
     for exp in experiments:
         directory = os.path.join(base_directory, exp)
         if not os.path.exists(os.path.join(directory, 'processed_logs.pkl')):
@@ -320,9 +320,9 @@ def logSystemMetrics(base_directory):
             if exp == 'fcty':
                 results[exp] = analyze_single_experiment(directory, systems, 1, 200, True, 2160)
             elif exp == 'camp':
-                results[exp] = analyze_single_experiment(directory, systems, 1, 250, True, 7200)
+                results[exp] = analyze_single_experiment(directory, systems, 1, 200, True, 7200)
             else:
-                results[exp] = analyze_single_experiment(directory, systems, 1, 250, True)
+                results[exp] = analyze_single_experiment(directory, systems, 1, 200, True, 1800)
             with open(os.path.join(directory, 'processed_logs.pkl'), 'wb') as f:
                 pickle.dump(results[exp], f)
         else:
