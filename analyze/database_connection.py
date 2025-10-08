@@ -77,6 +77,8 @@ def avg_memory(exp, algos=['ppp', 'dis', 'jlf', 'rim'], edge_device_count=0):
     df = pd.DataFrame()
     for algo in algos:
         full_schema = f"{exp}_{algo}"
+        if algo == 'apis':
+            full_schema = f"{exp}{algo}"
         with engine.connect() as connection:
             if edge_device_count == 0:
                 table_names = get_table_names(connection, full_schema, 'serv_hw')

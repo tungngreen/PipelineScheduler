@@ -5,6 +5,7 @@ import pickle
 import numpy as np
 import matplotlib.pyplot as plt
 from natsort import natsorted
+from database_connection import avg_memory
 
 def get_total_objects(dir, path='full_run_total.json'):
     traffic_people, traffic_cars, people_people, people_cars = 0, 0, 0, 0
@@ -328,6 +329,9 @@ def logSystemMetrics(base_directory):
         else:
             with open(os.path.join(directory, 'processed_logs.pkl'), 'rb') as f:
                 results[exp] = pickle.load(f)
+
+    memory = avg_memory('apis', ['apis', 'fcpo', 'ippo'], 1)
+    print(memory)
 
     with open('systemMetrics.txt', 'wb') as f:
         for exp in experiments:
