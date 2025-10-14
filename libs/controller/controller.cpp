@@ -7,6 +7,59 @@ ABSL_FLAG(uint16_t, ctrl_loggingMode, 0, "Logging mode of the controller. 0:stdo
 ABSL_FLAG(std::string, ctrl_logPath, "../logs", "Path to the log dir for the controller.");
 
 
+// =========================================================GPU Lanes/Portions Control===========================================================
+// ==============================================================================================================================================
+// ==============================================================================================================================================
+// ==============================================================================================================================================
+
+void Controller::initiateGPULanes(NodeHandle &node) {
+    // Currently only support powerful GPUs capable of running multiple models in parallel
+    if (node.name == "sink") {
+        return;
+    }
+    auto deviceList = devices.getMap();
+
+    if (deviceList.find(node.name) == deviceList.end()) {
+        spdlog::get("container_agent")->error("Device {0:s} is not found in the device list", node.name);
+        return;
+    }
+
+    if (node.type == Server) {
+        node.numGPULanes = NUM_LANES_PER_GPU * NUM_GPUS;
+    } else {
+        node.numGPULanes = 1;
+    }
+    node.gpuHandles.clear();
+    node.freeGPUPortions.list.clear();
+
+    for (unsigned short i = 0; i < node.numGPULanes; i++) {
+        GPULane *gpuLane = new GPULane{node.gpuHandles[i / NUM_LANES_PER_GPU], &node, i};
+        node.gpuLanes.push_back(gpuLane);
+        // Initially the number of portions is the number of lanes'
+        GPUPortion *portion = new GPUPortion{gpuLane};
+        node.freeGPUPortions.list.push_back(portion);
+        // This is currently the only portion in a lane, later when it is divided
+        // we need to keep track of the portions in the lane to be able to recover the free portions
+        // when the container is removed.
+        portion->nextInLane = nullptr;
+        portion->prevInLane = nullptr;
+
+        gpuLane->portionList.list.push_back(portion);
+        gpuLane->portionList.head = portion;
+
+        // TODO: HANDLE FREE PORTIONS WITHIN THE GPU
+        // gpuLane->gpuHandle->freeGPUPortions.push_back(portion);
+
+        if (i == 0) {
+            node.freeGPUPortions.head = portion;
+            portion->prev = nullptr;
+        } else {
+            node.freeGPUPortions.list[i - 1]->next = portion;
+            portion->prev = node.freeGPUPortions.list[i - 1];
+        }
+        portion->next = nullptr;
+    }
+}
 
 GPULane::GPULane(GPUHandle *gpu, NodeHandle *device, uint16_t laneNum) : gpuHandle(gpu), node(device), laneNum(laneNum) {
     dutyCycle = 0;
@@ -14,24 +67,388 @@ GPULane::GPULane(GPUHandle *gpu, NodeHandle *device, uint16_t laneNum) : gpuHand
     portionList.list = {};
 }
 
-bool GPUPortion::assignContainer(ContainerHandle *container) {
+bool GPUPortion::assignContainer(ContainerHandle *cont) {
     if (this->container != nullptr) {
         spdlog::get("console")->error("Portion already assigned to container {0:s}", this->container->name);
         return false;
     }
-    container->executionPortion = this;
-    this->container = container;
-    start = container->startTime;
-    end = container->endTime;
+    cont->executionPortion = this;
+    this->container = cont;
+    start = cont->startTime;
+    end = cont->endTime;
 
-    spdlog::get("container_agent")->info("Portion assigned to container {0:s}", container->name);
+    spdlog::get("container_agent")->info("Portion assigned to container {0:s}", cont->name);
+    return true;
+}
+
+/**
+ * @brief insert the newly created free portion into the sorted list of free portions
+ * Since the list is sorted, we can insert the new portion by traversing the list from the head
+ * Complexity: O(n)
+ *
+ * @param head
+ * @param freePortion
+ */
+void Controller::insertFreeGPUPortion(GPUPortionList &portionList, GPUPortion *freePortion) {
+    auto &head = portionList.head;
+    if (head == nullptr) {
+        head = freePortion;
+        return;
+    }
+    GPUPortion *curr = head;
+    auto it = portionList.list.begin();
+    while (true) {
+        if ((curr->end - curr->start) >= (freePortion->end - freePortion->start)) {
+            if (curr == head) {
+                freePortion->next = curr;
+                curr->prev = freePortion;
+                head = freePortion;
+                portionList.list.insert(it, freePortion);
+                return;
+            } else if ((curr->prev->end - curr->prev->start) < (freePortion->end - freePortion->start)) {
+                freePortion->next = curr;
+                freePortion->prev = curr->prev;
+                curr->prev = freePortion;
+                freePortion->prev->next = freePortion;
+                portionList.list.insert(it, freePortion);
+                return;
+            }
+        } else {
+            if (curr->next == nullptr) {
+                curr->next = freePortion;
+                freePortion->prev = curr;
+                portionList.list.push_back(freePortion);
+                return;
+            } else if ((curr->next->end - curr->next->start) > (freePortion->end - freePortion->start)) {
+                freePortion->next = curr->next;
+                freePortion->prev = curr;
+                curr->next = freePortion;
+                freePortion->next->prev = freePortion;
+                portionList.list.insert(it + 1, freePortion);
+                return;
+            } else {
+                curr = curr->next;
+            }
+        }
+        it++;
+    }
+}
+
+GPUPortion* Controller::findFreePortionForInsertion(GPUPortionList &portionList, ContainerHandle *container) {
+    auto &head = portionList.head;
+    GPUPortion *curr = head;
+    while (true) {
+        auto laneDutyCycle = curr->lane->dutyCycle;
+        if (curr->start <= container->startTime &&
+            curr->end >= container->endTime &&
+            container->pipelineModel->localDutyCycle >= laneDutyCycle) {
+            return curr;
+        }
+        if (curr->next == nullptr) {
+            return nullptr;
+        }
+        curr = curr->next;
+    }
+}
+
+/**
+ * @brief
+ *
+ * @param node
+ * @param scheduledPortion
+ * @param toBeDividedFreePortion
+ */
+std::pair<GPUPortion *, GPUPortion *> Controller::insertUsedGPUPortion(GPUPortionList &portionList, ContainerHandle *container, GPUPortion *toBeDividedFreePortion) {
+    auto gpuLane = toBeDividedFreePortion->lane;
+    GPUPortion *usedPortion = new GPUPortion{gpuLane};
+    usedPortion->assignContainer(container);
+    gpuLane->portionList.list.push_back(usedPortion);
+
+    usedPortion->nextInLane = toBeDividedFreePortion->nextInLane;
+    usedPortion->prevInLane = toBeDividedFreePortion->prevInLane;
+    if (toBeDividedFreePortion->prevInLane != nullptr) {
+        toBeDividedFreePortion->prevInLane->nextInLane = usedPortion;
+    }
+    if (toBeDividedFreePortion->nextInLane != nullptr) {
+        toBeDividedFreePortion->nextInLane->prevInLane = usedPortion;
+    }
+
+    auto &head = portionList.head;
+    // new portion on the left
+    uint64_t newStart = toBeDividedFreePortion->start;
+    uint64_t newEnd = container->startTime;
+
+    GPUPortion* leftPortion = nullptr;
+    bool goodLeft = false;
+    GPUPortion* rightPortion = nullptr;
+    bool goodRight = false;
+    // Create a new portion on the left only if it is large enough
+    if (newEnd - newStart > 0) {
+        leftPortion = new GPUPortion{};
+        leftPortion->start = newStart;
+        leftPortion->end = newEnd;
+        leftPortion->lane = gpuLane;
+        gpuLane->portionList.list.push_back(leftPortion);
+        leftPortion->prevInLane = toBeDividedFreePortion->prevInLane;
+        leftPortion->nextInLane = usedPortion;
+        usedPortion->prevInLane = leftPortion;
+        if (toBeDividedFreePortion == gpuLane->portionList.head) {
+            gpuLane->portionList.head = leftPortion;
+        }
+        if (newEnd - newStart >= MINIMUM_PORTION_SIZE) {
+            goodLeft = true;
+            // TODO: HANDLE FREE PORTIONS WITHIN THE GPU
+            // gpu->freeGPUPortions.push_back(leftPortion);
+        }
+    }
+    if (toBeDividedFreePortion == gpuLane->portionList.head && !goodLeft) {
+        gpuLane->portionList.head = usedPortion;
+    }
+
+    // new portion on the right
+    newStart = container->endTime;
+    auto laneDutyCycle = gpuLane->dutyCycle;
+    if (laneDutyCycle == 0) {
+        if (container->pipelineModel->localDutyCycle == 0) {
+            throw std::runtime_error("Duty cycle of the container 0");
+        }
+        int64_t slack = container->pipelineModel->task->tk_slo - container->pipelineModel->localDutyCycle * 2;
+        if (slack < 0) {
+            throw std::runtime_error("Slack is negative. Duty cycle is larger than the SLO");
+        }
+        laneDutyCycle = container->pipelineModel->localDutyCycle;
+        newEnd = container->pipelineModel->localDutyCycle;
+    } else {
+        newEnd = toBeDividedFreePortion->end;
+    }
+    // Create a new portion on the right only if it is large enough
+    if (newEnd - newStart > 0) {
+        rightPortion = new GPUPortion{};
+        rightPortion->start = newStart;
+        rightPortion->end = newEnd;
+        rightPortion->lane = gpuLane;
+        gpuLane->portionList.list.push_back(rightPortion);
+        rightPortion->nextInLane = toBeDividedFreePortion->nextInLane;
+        rightPortion->prevInLane = usedPortion;
+        usedPortion->nextInLane = rightPortion;
+        if (newEnd - newStart >= MINIMUM_PORTION_SIZE) {
+            goodRight = true;
+            // TODO: HANDLE FREE PORTIONS WITHIN THE GPU
+            // gpu->freeGPUPortions.push_back(rightPortion);
+        }
+    }
+
+    gpuLane->dutyCycle = laneDutyCycle;
+
+    auto it = std::find(portionList.list.begin(), portionList.list.end(), toBeDividedFreePortion);
+    portionList.list.erase(it);
+    // TODO: HANDLE FREE PORTIONS WITHIN THE GPU
+    // it = std::find(gpu->freeGPUPortions.begin(), gpu->freeGPUPortions.end(), toBeDividedFreePortion);
+    // gpu->freeGPUPortions.erase(it);
+    it = std::find(gpuLane->portionList.list.begin(), gpuLane->portionList.list.end(), toBeDividedFreePortion);
+    gpuLane->portionList.list.erase(it);
+
+
+
+    // Delete the old portion as it has been divided into two new free portions and an occupied portion
+    if (toBeDividedFreePortion->prev != nullptr) {
+        toBeDividedFreePortion->prev->next = toBeDividedFreePortion->next;
+    } else {
+        head = toBeDividedFreePortion->next;
+    }
+    if (toBeDividedFreePortion->next != nullptr) {
+        toBeDividedFreePortion->next->prev = toBeDividedFreePortion->prev;
+    }
+    delete toBeDividedFreePortion;
+
+    if (goodLeft) {
+        insertFreeGPUPortion(portionList, leftPortion);
+    }
+
+    if (goodRight) {
+        insertFreeGPUPortion(portionList, rightPortion);
+    }
+
+    return {leftPortion, rightPortion};
+}
+
+/**
+ * @brief Remove a free GPU portion from the list of free portions
+ * This happens when a container is removed from the system and its portion is reclaimed
+ * and merged with the free portions on the left and right.
+ * These left and right portions are to be removed from the list of free portions.
+ *
+ * @param portionList
+ * @param toBeRemovedPortion
+ * @return true
+ * @return false
+ */
+bool Controller::removeFreeGPUPortion(GPUPortionList &portionList, GPUPortion *toBeRemovedPortion) {
+    if (toBeRemovedPortion == nullptr) {
+        spdlog::get("container_agent")->error("Portion to be removed doesn't exist");
+        return false;
+    }
+    auto container = toBeRemovedPortion->container;
+    if (container != nullptr) {
+        spdlog::get("container_agent")->error("Portion to be removed is being used by container {0:s}", container->name);
+        return false;
+    }
+    auto &head = portionList.head;
+    auto it = std::find(portionList.list.begin(), portionList.list.end(), toBeRemovedPortion);
+    if (it == portionList.list.end()) {
+        spdlog::get("container_agent")->error("Portion to be removed not found in the list of free portions");
+        return false;
+    }
+    portionList.list.erase(it);
+
+    if (toBeRemovedPortion->prev != nullptr) {
+        toBeRemovedPortion->prev->next = toBeRemovedPortion->next;
+    } else {
+        if (toBeRemovedPortion != head) {
+            throw std::runtime_error("Portion is not the head of the list but its previous is null");
+        }
+        head = toBeRemovedPortion->next;
+    }
+    if (toBeRemovedPortion->next != nullptr) {
+        toBeRemovedPortion->next->prev = toBeRemovedPortion->prev;
+    }
+
+    // auto gpuHandle = toBeRemovedPortion->lane->gpuHandle;
+    // it = std::find(gpuHandle->freeGPUPortions.begin(), gpuHandle->freeGPUPortions.end(), toBeRemovedPortion);
+    // gpuHandle->freeGPUPortions.erase(it);
+    spdlog::get("container_agent")->info("Portion from {0:d} to {1:d} removed from the list of free portions of lane {2:d}",
+                                         toBeRemovedPortion->start,
+                                         toBeRemovedPortion->end,
+                                         toBeRemovedPortion->lane->laneNum);
+    delete toBeRemovedPortion;
+    return true;
+}
+
+/**
+ * @brief
+ *
+ * @param toBeReclaimedPortion
+ * @return true
+ * @return false
+ */
+bool Controller::reclaimGPUPortion(GPUPortion *toBeReclaimedPortion) {
+    if (toBeReclaimedPortion == nullptr) {
+        throw std::runtime_error("Portion to be reclaimed is null");
+    }
+
+    spdlog::get("container_agent")->info("Reclaiming portion from {0:d} to {1:d} in lane {2:d}",
+                                         toBeReclaimedPortion->start,
+                                         toBeReclaimedPortion->end,
+                                         toBeReclaimedPortion->lane->laneNum);
+    if (toBeReclaimedPortion->container != nullptr) {
+        spdlog::get("container_agent")->warn("Portion is being used by container {0:s}", toBeReclaimedPortion->container->name);
+    }
+
+    GPULane *gpuLane = toBeReclaimedPortion->lane;
+    NodeHandle *node = gpuLane->node;
+
+    /**
+     * @brief Organizing the lsit of portions in the lane the container is currently using
+
+     *
+     */
+    GPUPortion *leftInLanePortion = toBeReclaimedPortion->prevInLane;
+    GPUPortion *rightInLanePortion = toBeReclaimedPortion->nextInLane;
+
+    // No container is using the portion now
+    toBeReclaimedPortion->container = nullptr;
+
+    // Resetting its left boundary by merging it with the left portion if it is free
+    if (leftInLanePortion == nullptr) {
+        toBeReclaimedPortion->start = 0;
+        spdlog::get("container_agent")->trace("The portion to be reclaimed is the head of the list of portions in the lane.");
+        if (gpuLane->portionList.head != toBeReclaimedPortion) {
+            throw std::runtime_error("Left portion is null but the portion is not the head of the list");
+        }
+    } else {
+        if (leftInLanePortion->container != nullptr) {
+            spdlog::get("container_agent")->trace("Left portion is occupied.");
+        } else {
+            spdlog::get("container_agent")->trace("Left portion was free and is merged with the reclaimed portion.");
+            /**
+             * @brief Merging the left portion with the portion to be reclaimed in a lane context
+             * Removing the left portion from the list of portions in the lane
+             *
+             */
+
+            // Whatever was on the left of the left portion will now be on the left of the portion to be reclaimed
+            toBeReclaimedPortion->prevInLane = leftInLanePortion->prevInLane;
+            // AFter merging, the portion to be reclaimed will have the start of the left portion
+            toBeReclaimedPortion->start = leftInLanePortion->start;
+            // If the left portion was the head of the list, the portion to be reclaimed will be the new head
+            if (leftInLanePortion == gpuLane->portionList.head) {
+                gpuLane->portionList.head = toBeReclaimedPortion;
+            }
+            auto it = std::find(gpuLane->portionList.list.begin(), gpuLane->portionList.list.end(), leftInLanePortion);
+            gpuLane->portionList.list.erase(it);
+
+            /**
+             * @brief Removing the left portion from the list of free portions as it is now merged with the portion to be reclaimed
+             * to create a bigger free portion
+             *
+             */
+
+            removeFreeGPUPortion(node->freeGPUPortions, leftInLanePortion);
+        }
+    }
+
+    // Resetting its right boundary by merging it with the right portion if it is free
+
+    if (rightInLanePortion == nullptr) {
+    } else {
+        if (rightInLanePortion->container != nullptr) {
+            spdlog::get("container_agent")->trace("Right portion is occupied.");
+        } else {
+            spdlog::get("container_agent")->trace("Right portion was free and is merged with the reclaimed portion.");
+            /**
+             * @brief Merging the right portion with the portion to be reclaimed in a lane context
+             * Removing the right portion from the list of portions in the lane
+             *
+             */
+
+            // Whatever was on the right of the right portion will now be on the right of the portion to be reclaimed
+            toBeReclaimedPortion->nextInLane = rightInLanePortion->nextInLane;
+            // AFter merging, the portion to be reclaimed will have the end of the right portion
+            toBeReclaimedPortion->end = rightInLanePortion->end;
+
+            if (rightInLanePortion == gpuLane->portionList.head) {
+                gpuLane->portionList.head = rightInLanePortion->next;
+            }
+            auto it = std::find(gpuLane->portionList.list.begin(), gpuLane->portionList.list.end(), rightInLanePortion);
+            gpuLane->portionList.list.erase(it);
+
+            /**
+             * @brief Removing the right portion from the list of free portions as it is now merged with the portion to be reclaimed
+             * to create a bigger free portion
+             *
+             */
+            removeFreeGPUPortion(node->freeGPUPortions, rightInLanePortion);
+        }
+    }
+
+    if (toBeReclaimedPortion->prevInLane == nullptr) {
+        toBeReclaimedPortion->start = 0;
+    }
+    // Recover the lane's original structure if the portion to be reclaimed is the only portion in the lane
+    if (toBeReclaimedPortion->nextInLane == nullptr && toBeReclaimedPortion->start == 0) {
+        toBeReclaimedPortion->end = MAX_PORTION_SIZE;
+        gpuLane->dutyCycle = 0;
+    }
+
+    // Insert the reclaimed portion into the free portion list
+    insertFreeGPUPortion(node->freeGPUPortions, toBeReclaimedPortion);
+
     return true;
 }
 
 bool GPULane::removePortion(GPUPortion *portion) {
     if (portion->lane != this) {
         throw std::runtime_error("Lane %d cannot remove portion %s, which does not belong to it." + portion->container->name + std::to_string(laneNum));
-        return false;
     }
     if (portion->prevInLane != nullptr) {
         portion->prevInLane->nextInLane = portion->nextInLane;
@@ -57,63 +474,6 @@ bool GPULane::removePortion(GPUPortion *portion) {
 // ======================================================================================================================================== //
 // ======================================================================================================================================== //
 
-void Controller::readInitialObjectCount(const std::string &path) {
-    std::ifstream file(path);
-    json j = json::parse(file);
-    std::map<std::string, std::map<std::string, std::map<int, float>>> initialPerSecondRate;
-    for (auto &item: j.items()) {
-        std::string streamName = item.key();
-        initialPerSecondRate[streamName] = {};
-        for (auto &object: item.value().items()) {
-            std::string objectName = object.key();
-            initialPerSecondRate[streamName][objectName] = {};
-            std::vector<int> perFrameObjCount = object.value().get<std::vector<int>>();
-            int numFrames = perFrameObjCount.size();
-            int totalNumObjs = 0;
-            for (auto i = 0; i < numFrames; i++) {
-                totalNumObjs += perFrameObjCount[i];
-                if ((i + 1) % 30 != 0) {
-                    continue;
-                }
-                int seconds = (i + 1) / 30;
-                initialPerSecondRate[streamName][objectName][seconds] = totalNumObjs * 1.f / seconds;
-            }
-        }
-        float skipRate = ctrl_systemFPS / 30.f;
-        std::map<std::string, float> *stream = &(ctrl_initialRequestRates[streamName]);
-        float maxPersonRate = 1.2 * std::max_element(
-                    initialPerSecondRate[streamName]["person"].begin(),
-                    initialPerSecondRate[streamName]["person"].end()
-            )->second * skipRate;
-        maxPersonRate = std::max(maxPersonRate, ctrl_systemFPS * 1.f);
-        float maxCarRate = 1.2 * std::max_element(
-                    initialPerSecondRate[streamName]["car"].begin(),
-                    initialPerSecondRate[streamName]["car"].end()
-            )->second * skipRate;
-        maxCarRate = std::max(maxCarRate, ctrl_systemFPS * 1.f);
-        if (streamName.find("traffic") != std::string::npos) {
-            stream->insert({"yolov5n", ctrl_systemFPS});
-
-            stream->insert({"retina1face", std::ceil(maxPersonRate)});
-            stream->insert({"arcface", std::ceil(maxPersonRate * 0.6)});
-            stream->insert({"carbrand", std::ceil(maxCarRate)});
-            stream->insert({"platedet", std::ceil(maxCarRate)});
-        } else if (streamName.find("people") != std::string::npos) {
-            stream->insert({"yolov5n", ctrl_systemFPS});
-            stream->insert({"retina1face", std::ceil(maxPersonRate)});
-            stream->insert({"age", std::ceil(maxPersonRate) * 0.6});
-            stream->insert({"gender", std::ceil(maxPersonRate) * 0.6});
-            stream->insert({"movenet", std::ceil(maxPersonRate)});
-        } else if (streamName.find("indoor") != std::string::npos) {
-            stream->insert({"retinamtface", ctrl_systemFPS});
-            stream->insert({"arcface", std::ceil(maxPersonRate)});
-            stream->insert({"age", std::ceil(maxPersonRate)});
-            stream->insert({"gender", std::ceil(maxPersonRate)});
-            stream->insert({"emotionnet", std::ceil(maxPersonRate)});
-        }
-    }
-}
-
 void Controller::readConfigFile(const std::string &path) {
     std::ifstream file(path);
     json j = json::parse(file);
@@ -121,6 +481,7 @@ void Controller::readConfigFile(const std::string &path) {
     ctrl_experimentName = j["expName"];
     ctrl_systemName = j["systemName"];
     ctrl_runtime = j["runtime"];
+    ctrl_clusterCount = j["cluster_count"];
     ctrl_port_offset = j["port_offset"];
     ctrl_systemFPS = j["system_fps"];
     ctrl_sinkNodeIP = j["sink_ip"];
@@ -186,7 +547,7 @@ bool GPUHandle::removeContainer(ContainerHandle *container) {
 }
 
 
-// ============================================================= Con/Desstructors ============================================================= //
+// ============================================================= Con/Destructors ============================================================= //
 // ============================================================================================================================================ //
 // ============================================================================================================================================ //
 // ============================================================================================================================================ //
@@ -231,7 +592,7 @@ Controller::Controller(int argc, char **argv) {
     std::string sql = "SELECT schema_name FROM information_schema.schemata WHERE schema_name = '" + ctrl_metricsServerConfigs.schema + "';";
     pqxx::result res = pullSQL(*ctrl_metricsServerConn, sql);
     if (res.empty()) {
-        std::string sql = "CREATE SCHEMA IF NOT EXISTS " + ctrl_metricsServerConfigs.schema + ";";
+        sql = "CREATE SCHEMA IF NOT EXISTS " + ctrl_metricsServerConfigs.schema + ";";
         pushSQL(*ctrl_metricsServerConn, sql);
         sql = "ALTER DEFAULT PRIVILEGES IN SCHEMA " + ctrl_metricsServerConfigs.schema + 
               " GRANT ALL PRIVILEGES ON TABLES TO controller;";
@@ -251,56 +612,50 @@ Controller::Controller(int argc, char **argv) {
     }
 
     running = true;
+    ctrl_clusterID = 0;
 
-    std::string server_address = absl::StrFormat("%s:%d", "0.0.0.0", CONTROLLER_BASE_PORT + ctrl_port_offset);
-    ServerBuilder builder;
-    builder.AddListeningPort(server_address, grpc::InsecureServerCredentials());
-    builder.RegisterService(&service);
-    cq = builder.AddCompletionQueue();
-    server = builder.BuildAndStart();
+    std::string server_address = absl::StrFormat("tcp://*:%d", CONTROLLER_RECEIVE_PORT + ctrl_port_offset);
+    ctx = context_t();
+    server_socket = socket_t(ctx, ZMQ_REP);
+    server_socket.bind(server_address);
+    server_socket.set(zmq::sockopt::rcvtimeo, 1000);
+    handlers = {
+        {MSG_TYPE[DEVICE_ADVERTISEMENT], std::bind(&Controller::handleDeviseAdvertisement, this, std::placeholders::_1)},
+        {MSG_TYPE[DUMMY_DATA], std::bind(&Controller::handleDummyDataRequest, this, std::placeholders::_1)},
+        {MSG_TYPE[START_FL], std::bind(&Controller::handleForwardFLRequest, this, std::placeholders::_1)}
+    };
+    server_address = absl::StrFormat("tcp://*:%d", CONTROLLER_MESSAGE_QUEUE_PORT + ctrl_port_offset);
+    message_queue = socket_t(ctx, ZMQ_PUB);
+    message_queue.bind(server_address);
+    message_queue.set(zmq::sockopt::sndtimeo, 100);
 
     // append one device for sink of type server
-    NodeHandle *sink_node = new NodeHandle("sink", ctrl_sinkNodeIP,
-                                           ControlCommands::NewStub(grpc::CreateChannel(
-                                      absl::StrFormat("%s:%d", ctrl_sinkNodeIP, DEVICE_CONTROL_PORT + ctrl_port_offset), grpc::InsecureChannelCredentials())),
-                      new CompletionQueue(), SystemDeviceType::Server, DATA_BASE_PORT + ctrl_port_offset, {});
+    NodeHandle *sink_node = new NodeHandle("sink", ctrl_sinkNodeIP,  SystemDeviceType::Server,
+                                            DATA_BASE_PORT + ctrl_port_offset, {});
     devices.addDevice("sink", sink_node);
 
     if (ctrl_systemName == "fcpo") {
-        ctrl_fcpo_server = new FCPOServer(ctrl_systemName + "_" + ctrl_experimentName, ctrl_fcpo_config);
+        ctrl_fcpo_server = new FCPOServer(ctrl_systemName + "_" + ctrl_experimentName, ctrl_fcpo_config, ctrl_clusterCount, &message_queue);
     }
 
     ctrl_nextSchedulingTime = std::chrono::system_clock::now();
 }
 
 Controller::~Controller() {
+    running = false;
     if (ctrl_systemName == "fcpo") ctrl_fcpo_server->stop();
     for (auto msvc: containers.getList()) {
         StopContainer(msvc, msvc->device_agent, true);
     }
-
+    std::this_thread::sleep_for(std::chrono::seconds(10));
     for (auto &device: devices.getList()) {
-        //skip Sink
-        if (device->name == "sink") {
-            continue;
-        }
-        EmptyMessage request;
-        EmptyMessage reply;
-        ClientContext context;
-        Status status;
-        std::unique_ptr<ClientAsyncResponseReader<EmptyMessage>> rpc(
-                device->stub->AsyncShutdown(&context, request, device->cq));
-        rpc->Finish(&reply, &status, (void *)1);
-        void *got_tag;
-        bool ok = false;
-        if (device->cq != nullptr) GPR_ASSERT(device->cq->Next(&got_tag, &ok));
-        device->cq->Shutdown();
+        if (device->name == "sink") { continue; }
+        sendMessageToDevice(device->name, MSG_TYPE[DEVICE_SHUTDOWN], "");
     }
-    server->Shutdown();
-    cq->Shutdown();
+    std::this_thread::sleep_for(std::chrono::seconds(10));
 }
 
-// ============================================================ Excutor/Maintainers ============================================================ //
+// =========================================================== Executor/Maintainers ============================================================ //
 // ============================================================================================================================================= //
 // ============================================================================================================================================= //
 // ============================================================================================================================================= //
@@ -383,23 +738,23 @@ void Controller::basicGPUScheduling(std::vector<ContainerHandle *> new_container
         std::vector<GPUHandle *> gpus = device.second->gpuHandles;
         for (auto &container: scheduledContainers[device.first]) {
             MemUsageType containerMemUsage = container->getExpectedTotalMemUsage();
-            MemUsageType smallestGap  = std::numeric_limits<MemUsageType>::max();
-            int8_t smallestGapIndex = -1;
+            MemUsageType biggestGap  = std::numeric_limits<MemUsageType>::min();
+            int8_t targetGapIndex = -1;
             for (auto &gpu: gpus) {
                 MemUsageType gap = gpu->memLimit - gpu->currentMemUsage - containerMemUsage;
-                if (gap < 0) {
+                if (gap < 500) {
                     continue;
                 }
-                if (gap < smallestGap) {
-                    smallestGap = gap;
-                    smallestGapIndex = gpu->number;
+                if (gap > biggestGap) {
+                    biggestGap = gap;
+                    targetGapIndex = gpu->number;
                 }
             }
-            if (smallestGapIndex == -1) {
+            if (targetGapIndex == -1) {
                 spdlog::get("container_agent")->error("No GPU available for container {}", container->name);
                 continue;
             }
-            gpus[smallestGapIndex]->addContainer(container);
+            gpus[targetGapIndex]->addContainer(container);
         }
 
     }
@@ -428,7 +783,9 @@ void Controller::ApplyScheduling() {
      */
     for (auto &[pipeName, pipe]: ctrl_scheduledPipelines.getMap()) {
         for (auto &model: pipe->tk_pipelineModels) {
-            if (ctrl_systemName != "ppp" && ctrl_systemName != "jlf" && ctrl_systemName != "fcpo" && ctrl_systemName != "bce") {
+            if (ctrl_systemName == "tuti" && model->name.find("datasource") == std::string::npos && model->name.find("sink") == std::string::npos) {
+                model->numReplicas = 3;
+            } else if (ctrl_systemName == "rim" && ctrl_systemName == "dis") {
                 model->cudaDevices.emplace_back(0);
                 model->numReplicas = 1;
             }
@@ -501,8 +858,8 @@ void Controller::ApplyScheduling() {
     // Rearranging the upstreams and downstreams for containers;
     for (auto pipe: ctrl_scheduledPipelines.getList()) {
         for (auto &model: pipe->tk_pipelineModels) {
-            // If its a datasource, we dont have to do it now
-            // datasource doesnt have upstreams
+            // If it's a datasource, we don't have to do it now
+            // datasource doesn't have upstreams
             // and the downstreams will be set later
             if (model->name.find("datasource") != std::string::npos) {
                 continue;
@@ -526,35 +883,6 @@ void Controller::ApplyScheduling() {
     } else {
         colocationTemporalScheduling();
     }
-
-    // // Testing gpu portion reclaiming
-    // uint8_t numReclaims = 0, numSinks = 0;
-
-    // for (auto container: new_containers) {
-    //     if (container->model == Sink) {
-    //         numSinks++;
-    //     }
-    // }
-
-    // std::mt19937 gen(3000);
-
-    // std::uniform_int_distribution<> dis(1, 100);
-    // while (numReclaims < new_containers.size() - numSinks) {
-
-    //     for (auto container : new_containers) {
-    //         if (container->model == Sink || container->executionPortion == nullptr) {
-    //             continue;
-    //         }
-    //         int random = dis(gen);
-    //         if (random <= 33) {
-    //             std::cout << "Reclaiming GPU Portion for container: " << container->name << std::endl;
-    //             reclaimGPUPortion(container->executionPortion);
-    //             container->executionPortion = nullptr;
-    //             numReclaims++;
-    //         }
-    //     }
-    // }
-    // // done testing
 
     for (auto pipe: ctrl_scheduledPipelines.getList()) {
         for (auto &model: pipe->tk_pipelineModels) {
@@ -690,9 +1018,6 @@ void Controller::AdjustTiming(ContainerHandle *container) {
     container->cycleStartTime = ctrl_currSchedulingTime;
 
     TimeKeeping request;
-    ClientContext context;
-    EmptyMessage reply;
-    Status status;
     request.set_name(container->name);
     request.set_slo(container->pipelineSLO);
     request.set_time_budget(container->timeBudgetLeft);
@@ -700,25 +1025,13 @@ void Controller::AdjustTiming(ContainerHandle *container) {
     request.set_end_time(container->endTime);
     request.set_local_duty_cycle(container->localDutyCycle);
     request.set_cycle_start_time(std::chrono::duration_cast<TimePrecisionType>(container->cycleStartTime.time_since_epoch()).count());
-    std::unique_ptr<ClientAsyncResponseReader<EmptyMessage>> rpc(
-            container->device_agent->stub->AsyncUpdateTimeKeeping(&context, request,
-                                                               container->device_agent->cq));
-    rpc->Finish(&reply, &status, (void *)1);
-    void *got_tag;
-    bool ok = false;
-    if (container->device_agent->cq != nullptr) GPR_ASSERT(container->device_agent->cq->Next(&got_tag, &ok));
-    if (!status.ok()) {
-        spdlog::get("container_agent")->error("Failed to update TimeKeeping for container: {0:s}", container->name);
-        return;
-    }
+    sendMessageToDevice(container->device_agent->name, MSG_TYPE[TIME_KEEPING_UPDATE], request.SerializeAsString());
+    spdlog::get("container_agent")->info("Requested container {0:s} to update time keeping!", container->name);
 }
 
 void Controller::StartContainer(ContainerHandle *container, bool easy_allocation) {
     spdlog::get("container_agent")->info("Starting container: {0:s}", container->name);
     ContainerConfig request;
-    ClientContext context;
-    EmptyMessage reply;
-    Status status;
     json start_config;
     unsigned int control_port;
     std::string pipelineName = splitString(container->name, "_")[2];
@@ -738,14 +1051,15 @@ void Controller::StartContainer(ContainerHandle *container, bool easy_allocation
         start_config["container"]["cont_systemName"] = ctrl_systemName;
         start_config["container"]["cont_pipeName"] = pipelineName;
         start_config["container"]["cont_hostDevice"] = container->device_agent->name;
-        start_config["container"]["cont_hostDeviceType"] = ctrl_sysDeviceInfo[container->device_agent->type];
+        start_config["container"]["cont_hostDeviceType"] = SystemDeviceTypeList[container->device_agent->type];
         start_config["container"]["cont_name"] = container->name;
         start_config["container"]["cont_allocationMode"] = easy_allocation ? 1 : 0;
-        if (ctrl_systemName == "ppp" || ctrl_systemName == "fcpo" || ctrl_systemName == "bce") {
+        if (ctrl_systemName == "ppp" || ctrl_systemName == "bce") {
             //TODO: set back to 2 after OURs working again with batcher
             start_config["container"]["cont_batchMode"] = 0;
-        }
-        if (ctrl_systemName == "ppp" || ctrl_systemName == "fcpo" || ctrl_systemName == "bce" || ctrl_systemName == "jlf") {
+        } if (ctrl_systemName == "fcpo") {
+            start_config["container"]["cont_batchMode"] = 1;
+        } if (ctrl_systemName == "ppp" || ctrl_systemName == "jlf") {
             start_config["container"]["cont_dropMode"] = 1;
         }
         start_config["container"]["cont_pipelineSLO"] = container->task->tk_slo;
@@ -755,10 +1069,9 @@ void Controller::StartContainer(ContainerHandle *container, bool easy_allocation
         start_config["container"]["cont_localDutyCycle"] = container->localDutyCycle;
         start_config["container"]["cont_cycleStartTime"] = std::chrono::duration_cast<TimePrecisionType>(container->cycleStartTime.time_since_epoch()).count();
 
-        if (container->model != DataSource &&
-            container->model != Sink) {
+        if (container->model != DataSource) {
             std::vector<uint32_t> modelProfile;
-            for (auto &[batchSize, profile]: container->pipelineModel->processProfiles.at(ctrl_sysDeviceInfo[container->device_agent->type]).batchInfer) {
+            for (auto &[batchSize, profile]: container->pipelineModel->processProfiles.at(SystemDeviceTypeList[container->device_agent->type]).batchInfer) {
                 modelProfile.push_back(batchSize);
                 modelProfile.push_back(profile.p95prepLat);
                 modelProfile.push_back(profile.p95inferLat);
@@ -783,7 +1096,11 @@ void Controller::StartContainer(ContainerHandle *container, bool easy_allocation
         }
         if (model == ModelType::DataSource) {
             base_config[0]["msvc_dataShape"] = {container->dimensions};
-            base_config[0]["msvc_idealBatchSize"] = ctrl_systemFPS;
+            if (container->pipelineModel->datasourceName[0].find("spot") != std::string::npos) {
+                base_config[0]["msvc_idealBatchSize"] = 7; // spot data only available in 7 fps
+            } else {
+                base_config[0]["msvc_idealBatchSize"] = ctrl_systemFPS;
+            }
         } else {
             if (model == ModelType::Yolov5nDsrc || model == ModelType::RetinaMtfaceDsrc) {
                 base_config[0]["msvc_dataShape"] = {container->dimensions};
@@ -856,11 +1173,7 @@ void Controller::StartContainer(ContainerHandle *container, bool easy_allocation
             if (ctrl_systemName == "fcpo") {
                 start_config["fcpo"] = ctrl_fcpo_server->getConfig();
                 std::string deviceTypeName = getDeviceTypeName(container->device_agent->type);
-                if (container->model_file.find("yolov5") != std::string::npos) {
-                    start_config["fcpo"]["resolution_size"] =
-                            (deviceTypeName == "server" || deviceTypeName == "agx") ? 4 : 2;
-                }
-                start_config["fcpo"]["resolution_size"] = 1;
+                start_config["fcpo"]["timeout_size"] = (deviceTypeName == "server") ? 3 : 2;
                 start_config["fcpo"]["batch_size"] = container->pipelineModel->processProfiles[deviceTypeName].maxBatchSize;
                 start_config["fcpo"]["threads_size"] = (deviceTypeName == "server") ? 4 : 2;
             }
@@ -869,6 +1182,7 @@ void Controller::StartContainer(ContainerHandle *container, bool easy_allocation
         start_config["container"]["cont_pipeline"] = base_config;
         control_port = container->recv_port - 5000;
     }
+    container->fcpo_conf = start_config["fcpo"];
 
     request.set_name(container->name);
     request.set_json_config(start_config.dump());
@@ -890,18 +1204,8 @@ void Controller::StartContainer(ContainerHandle *container, bool easy_allocation
         request.add_input_shape(dim);
     }
 
-    std::unique_ptr<ClientAsyncResponseReader<EmptyMessage>> rpc(
-            container->device_agent->stub->AsyncStartContainer(&context, request,
-                                                                      container->device_agent->cq));
-    rpc->Finish(&reply, &status, (void *)1);
-    void *got_tag;
-    bool ok = false;
-    if (container->device_agent->cq != nullptr) GPR_ASSERT(container->device_agent->cq->Next(&got_tag, &ok));
-    if (!status.ok()) {
-        spdlog::get("container_agent")->error("Failed to start container: {0:s}", container->name);
-        return;
-    }
-    spdlog::get("container_agent")->info("Container {0:s} started", container->name);
+    sendMessageToDevice(container->device_agent->name, MSG_TYPE[CONTAINER_START], request.SerializeAsString());
+    spdlog::get("container_agent")->info("Requested container {0:s} to start!", container->name);
 }
 
 void Controller::MoveContainer(ContainerHandle *container, NodeHandle *device) {
@@ -951,9 +1255,6 @@ void Controller::MoveContainer(ContainerHandle *container, NodeHandle *device) {
 void Controller::AdjustUpstream(int port, ContainerHandle *upstr, NodeHandle *new_device,
                                 const std::string &dwnstr, AdjustUpstreamMode mode, const std::string &old_link) {
     ContainerLink request;
-    ClientContext context;
-    EmptyMessage reply;
-    Status status;
     request.set_mode(mode);
     request.set_name(upstr->name);
     request.set_downstream_name(dwnstr);
@@ -963,44 +1264,26 @@ void Controller::AdjustUpstream(int port, ContainerHandle *upstr, NodeHandle *ne
     request.set_old_link(old_link);
     request.set_offloading_duration(0);
 
-    std::unique_ptr<ClientAsyncResponseReader<EmptyMessage>> rpc(
-            upstr->device_agent->stub->AsyncUpdateDownstream(&context, request, upstr->device_agent->cq));
-    rpc->Finish(&reply, &status, (void *)1);
-    void *got_tag;
-    bool ok = false;
-    if (upstr->device_agent->cq != nullptr) GPR_ASSERT(upstr->device_agent->cq->Next(&got_tag, &ok));
+    sendMessageToDevice(upstr->device_agent->name, MSG_TYPE[ADJUST_UPSTREAM], request.SerializeAsString());
     spdlog::get("container_agent")->info("Upstream of {0:s} adjusted to container {1:s}", dwnstr, upstr->name);
 }
 
 void Controller::SyncDatasource(ContainerHandle *prev, ContainerHandle *curr) {
     ContainerLink request;
-    ClientContext context;
-    EmptyMessage reply;
-    Status status;
     request.set_name(prev->name);
     request.set_downstream_name(curr->name);
-    std::unique_ptr<ClientAsyncResponseReader<EmptyMessage>> rpc(
-            curr->device_agent->stub->AsyncSyncDatasource(&context, request, curr->device_agent->cq));
-    rpc->Finish(&reply, &status, (void *)1);
-    void *got_tag;
-    bool ok = false;
-    if (curr->device_agent->cq != nullptr) GPR_ASSERT(curr->device_agent->cq->Next(&got_tag, &ok));
+
+    sendMessageToDevice(curr->device_agent->name, MSG_TYPE[SYNC_DATASOURCES], request.SerializeAsString());
+    spdlog::get("container_agent")->info("Datasource {0:s} synced with {1:s}", prev->name, curr->name);
 }
 
 void Controller::AdjustBatchSize(ContainerHandle *msvc, int new_bs) {
     msvc->batch_size = new_bs;
     ContainerInts request;
-    ClientContext context;
-    EmptyMessage reply;
-    Status status;
     request.set_name(msvc->name);
     request.add_value(new_bs);
-    std::unique_ptr<ClientAsyncResponseReader<EmptyMessage>> rpc(
-            msvc->device_agent->stub->AsyncUpdateBatchSize(&context, request, msvc->device_agent->cq));
-    rpc->Finish(&reply, &status, (void *)1);
-    void *got_tag;
-    bool ok = false;
-    if (msvc->device_agent->cq != nullptr) GPR_ASSERT(msvc->device_agent->cq->Next(&got_tag, &ok));
+
+    sendMessageToDevice(msvc->device_agent->name, MSG_TYPE[BATCH_SIZE_UPDATE], request.SerializeAsString());
     spdlog::get("container_agent")->info("Batch size of {0:s} adjusted to {1:d}", msvc->name, new_bs);
 }
 
@@ -1012,35 +1295,23 @@ void Controller::AdjustCudaDevice(ContainerHandle *msvc, GPUHandle *new_device) 
 void Controller::AdjustResolution(ContainerHandle *msvc, std::vector<int> new_resolution) {
     msvc->dimensions = new_resolution;
     ContainerInts request;
-    ClientContext context;
-    EmptyMessage reply;
-    Status status;
     request.set_name(msvc->name);
     request.add_value(new_resolution[0]);
     request.add_value(new_resolution[1]);
     request.add_value(new_resolution[2]);
-    std::unique_ptr<ClientAsyncResponseReader<EmptyMessage>> rpc(
-            msvc->device_agent->stub->AsyncUpdateResolution(&context, request, msvc->device_agent->cq));
-    rpc->Finish(&reply, &status, (void *)1);
-    void *got_tag;
-    bool ok = false;
-    if (msvc->device_agent->cq != nullptr) GPR_ASSERT(msvc->device_agent->cq->Next(&got_tag, &ok));
+
+    sendMessageToDevice(msvc->device_agent->name, MSG_TYPE[RESOLUTION_UPDATE], request.SerializeAsString());
+    spdlog::get("container_agent")->info("Resolution of {0:s} adjusted to {1:d}x{2:d}x{3:d}",
+                                      msvc->name, new_resolution[0], new_resolution[1], new_resolution[2]);
 }
 
 void Controller::StopContainer(ContainerHandle *container, NodeHandle *device, bool forced) {
     spdlog::get("container_agent")->info("Stopping container: {0:s}", container->name);
     ContainerSignal request;
-    ClientContext context;
-    EmptyMessage reply;
-    Status status;
     request.set_name(container->name);
     request.set_forced(forced);
-    std::unique_ptr<ClientAsyncResponseReader<EmptyMessage>> rpc(
-            device->stub->AsyncStopContainer(&context, request, container->device_agent->cq));
-    rpc->Finish(&reply, &status, (void *)1);
-    void *got_tag;
-    bool ok = false;
-    if (container->device_agent->cq != nullptr) GPR_ASSERT(container->device_agent->cq->Next(&got_tag, &ok));
+    sendMessageToDevice(device->name, MSG_TYPE[CONTAINER_STOP], request.SerializeAsString());
+
     if (container->gpuHandle != nullptr)
         container->gpuHandle->removeContainer(container);
     if (ctrl_systemName == "fcpo" && container->model != DataSource && container->model != Sink) {
@@ -1106,8 +1377,8 @@ void Controller::calculateQueueSizes(ContainerHandle &container, const ModelType
     QueueLengthType preprocess_inQueueSize = std::max((QueueLengthType) std::ceil(preprocess_rho * preprocess_rho / (2 * (1 - preprocess_rho))), minimumQueueSize);
     float preprocess_thrpt = std::min(preprocessRate, container.arrival_rate);
 
-    // Preprocessor to Inferencer
-    // Utilization of inferencer
+    // Preprocessor to Inference
+    // Utilization of inference
     float infer_rho = preprocess_thrpt / container.batch_size / inferRate;
     QueueLengthType infer_inQueueSize = std::max((QueueLengthType) std::ceil(infer_rho * infer_rho / (2 * (1 - infer_rho))), minimumQueueSize);
     float infer_thrpt = std::min(inferRate, preprocess_thrpt / container.batch_size); // batch per second
@@ -1123,103 +1394,98 @@ void Controller::calculateQueueSizes(ContainerHandle &container, const ModelType
     container.expectedThroughput = postprocess_thrpt;
 }
 
-
 // ============================================================ Communication Handlers ============================================================ //
 // ================================================================================================================================================ //
 // ================================================================================================================================================ //
 // ================================================================================================================================================ //
 
-void Controller::HandleRecvRpcs() {
-    new DeviseAdvertisementHandler(&service, cq.get(), this);
-    new DummyDataRequestHandler(&service, cq.get(), this);
-    new ForwardFLRequestHandler(&service, cq.get(), this);
-    void *tag;
-    bool ok;
+void Controller::HandleControlMessages() {
     while (running) {
-        if (!cq->Next(&tag, &ok)) {
+        message_t message;
+        if (server_socket.recv(message, recv_flags::none)) {
+            std::string raw = message.to_string();
+            std::istringstream iss(raw);
+            std::string topic;
+            iss >> topic;
+            iss.get(); // skip the space after the topic
+            std::string payload((std::istreambuf_iterator<char>(iss)),
+                                std::istreambuf_iterator<char>());
+            if (handlers.count(topic)) {
+                handlers[topic](payload);
+            } else {
+                spdlog::get("container_agent")->error("Received unknown topic: {}", topic);
+            }
+//        } else {
+//            spdlog::get("container_agent")->trace("Communication Receive Timeout");
+        }
+    }
+}
+
+void Controller::handleDeviseAdvertisement(const std::string& msg) {
+    ConnectionConfigs request;
+    SystemInfo reply;
+    if (!request.ParseFromString(msg)){
+        spdlog::get("container_agent")->error("Failed to connect device with msg: {}", msg);
+        return;
+    }
+    std::string deviceName = request.device_name();
+    NodeHandle *node = new NodeHandle{deviceName, request.ip_address(), static_cast<SystemDeviceType>(request.device_type()),
+                                      DATA_BASE_PORT + ctrl_port_offset + request.agent_port_offset(), {}};
+    reply.set_name(ctrl_systemName);
+    reply.set_experiment(ctrl_experimentName);
+    server_socket.send(message_t(reply.SerializeAsString()), send_flags::dontwait);
+    initialiseGPU(node, request.processors(), std::vector<int>(request.memory().begin(), request.memory().end()));
+    devices.addDevice(deviceName, node);
+    spdlog::get("container_agent")->info("Device {} is connected to the system", request.device_name());
+    queryInDeviceNetworkEntries(devices.getDevice(deviceName));
+
+    if (node->type != SystemDeviceType::Server) {
+        std::thread networkCheck(&Controller::initNetworkCheck, this, std::ref(*(devices.getDevice(deviceName))), 1000, 300000, 30);
+        networkCheck.detach();
+    } else {
+        node->initialNetworkCheck = true;
+    }
+}
+
+void Controller::handleDummyDataRequest(const std::string& msg) {
+    DummyMessage request;
+    if (!request.ParseFromString(msg)){
+        spdlog::get("container_agent")->error("Failed handle dummy data: {}", msg);
+        return;
+    }
+    ClockType now = std::chrono::system_clock::now();
+    unsigned long diff = std::chrono::duration_cast<TimePrecisionType>(
+            now - std::chrono::time_point<std::chrono::system_clock>(TimePrecisionType(request.gen_time()))).count();
+    unsigned int size = request.data().size();
+    network_check_buffer[request.origin_name()].push_back({size, diff});
+    server_socket.send(message_t("success"), send_flags::dontwait);
+}
+
+void Controller::handleForwardFLRequest(const std::string& msg) {
+    FlData request;
+    if (!request.ParseFromString(msg)){
+        spdlog::get("container_agent")->error("Failed adding FCPO client with msg: {}", msg);
+        return;
+    }
+    for (auto &dev: devices.getMap()) {
+        if (dev.first == request.device_name()) {
+            if (ctrl_fcpo_server->addClient(request)) {
+                spdlog::get("container_agent")->info("Successfully added client {} to FCPO Aggregation.", request.device_name());
+                server_socket.send(message_t("success"), send_flags::dontwait);
+            } else {
+                spdlog::get("container_agent")->error("Failed adding client {} to FCPO Aggregation.", request.device_name());
+                server_socket.send(message_t("error"), send_flags::dontwait);
+            }
             break;
         }
-        GPR_ASSERT(ok);
-        static_cast<RequestHandler *>(tag)->Proceed();
     }
 }
 
-void Controller::DeviseAdvertisementHandler::Proceed() {
-    if (status == CREATE) {
-        status = PROCESS;
-        service->RequestAdvertiseToController(&ctx, &request, &responder, cq, cq, this);
-    } else if (status == PROCESS) {
-        new DeviseAdvertisementHandler(service, cq, controller);
-        std::string target_str = absl::StrFormat("%s:%d", request.ip_address(),
-                                                 DEVICE_CONTROL_PORT + controller->ctrl_port_offset + request.agent_port_offset());
-        std::string deviceName = request.device_name();
-        NodeHandle *node = new NodeHandle{deviceName,
-                                     request.ip_address(),
-                                          ControlCommands::NewStub(
-                                             grpc::CreateChannel(target_str, grpc::InsecureChannelCredentials())),
-                                     new CompletionQueue(),static_cast<SystemDeviceType>(request.device_type()),
-                                     DATA_BASE_PORT + controller->ctrl_port_offset + request.agent_port_offset(), {}};
-        reply.set_name(controller->ctrl_systemName);
-        reply.set_experiment(controller->ctrl_experimentName);
-        status = FINISH;
-        responder.Finish(reply, Status::OK, this);
-        controller->initialiseGPU(node, request.processors(), std::vector<int>(request.memory().begin(), request.memory().end()));
-        controller->devices.addDevice(deviceName, node);
-        spdlog::get("container_agent")->info("Device {} is connected to the system", request.device_name());
-        controller->queryInDeviceNetworkEntries(controller->devices.getDevice(deviceName));
-
-        if (node->type != SystemDeviceType::Server) {
-            std::thread networkCheck(&Controller::initNetworkCheck, controller, std::ref(*(controller->devices.getDevice(deviceName))), 1000, 300000, 30);
-            networkCheck.detach();
-        } else {
-            node->initialNetworkCheck = true;
-        }
-    } else {
-        GPR_ASSERT(status == FINISH);
-        delete this;
-    }
-}
-
-void Controller::DummyDataRequestHandler::Proceed() {
-    if (status == CREATE) {
-        status = PROCESS;
-        service->RequestSendDummyData(&ctx, &request, &responder, cq, cq, this);
-    } else if (status == PROCESS) {
-        new DummyDataRequestHandler(service, cq, controller);
-        ClockType now = std::chrono::system_clock::now();
-        unsigned long diff = std::chrono::duration_cast<TimePrecisionType>(
-                now - std::chrono::time_point<std::chrono::system_clock>(TimePrecisionType(request.gen_time()))).count();
-        unsigned int size = request.data().size();
-        controller->network_check_buffer[request.origin_name()].push_back({size, diff});
-        status = FINISH;
-        responder.Finish(reply, Status::OK, this);
-    } else {
-        GPR_ASSERT(status == FINISH);
-        delete this;
-    }
-}
-
-void Controller::ForwardFLRequestHandler::Proceed() {
-    if (status == CREATE) {
-        status = PROCESS;
-        service->RequestForwardFl(&ctx, &request, &responder, cq, cq, this);
-    } else if (status == PROCESS) {
-        new ForwardFLRequestHandler(service, cq, controller);
-        for (auto &dev: controller->devices.getMap()) {
-            if (dev.first == request.device_name()) {
-                if (controller->ctrl_fcpo_server->addClient(request, dev.second->stub, dev.second->cq)) {
-                    responder.Finish(reply, Status::OK, this);
-                } else {
-                    responder.Finish(reply, Status::CANCELLED, this);
-                }
-                break;
-            }
-        }
-        status = FINISH;
-    } else {
-        GPR_ASSERT(status == FINISH);
-        delete this;
-    }
+void Controller::sendMessageToDevice(const std::string &topik, const std::string &type, const std::string &content) {
+    std::string msg = absl::StrFormat("%s| %s %s", topik, type, content);
+    message_t zmq_msg(msg.size());
+    memcpy(zmq_msg.data(), msg.data(), msg.size());
+    message_queue.send(zmq_msg, send_flags::none);
 }
 
 /**
@@ -1236,19 +1502,11 @@ NetworkEntryType Controller::initNetworkCheck(NodeHandle &node, uint32_t minPack
         return {};
     }
     LoopRange request;
-    EmptyMessage reply;
-    ClientContext context;
-    Status status;
     request.set_min(minPacketSize);
     request.set_max(maxPacketSize);
     request.set_repetitions(numLoops);
     try {
-        std::unique_ptr<ClientAsyncResponseReader<EmptyMessage>> rpc(
-                node.stub->AsyncExecuteNetworkTest(&context, request, node.cq));
-        rpc->Finish(&reply, &status, (void *)1);
-        void *got_tag;
-        bool ok = false;
-        if (node.cq != nullptr) GPR_ASSERT(node.cq->Next(&got_tag, &ok));
+        sendMessageToDevice(node.name, MSG_TYPE[NETWORK_CHECK], request.SerializeAsString());
         spdlog::get("container_agent")->info("Successfully started network check for device {}.", node.name);
     } catch (const std::exception &e) {
         spdlog::get("container_agent")->error("Error while starting network check for device {}.", node.name);
@@ -1262,11 +1520,24 @@ NetworkEntryType Controller::initNetworkCheck(NodeHandle &node, uint32_t minPack
     entries = aggregateNetworkEntries(entries);
     network_check_buffer[node.name].clear();
     spdlog::get("container_agent")->info("Finished network check for device {}.", node.name);
+    // find the closest latency between min and max packet size
+    float latency;
+    for (auto &entry: entries) {
+        if (entry.first >= (minPacketSize + maxPacketSize) / 2) {
+            latency = entry.second;
+            break;
+        }
+    }
     std::lock_guard lock(node.nodeHandleMutex);
     node.initialNetworkCheck = true;
     if (entries.empty()) entries = {std::pair<uint32_t, uint64_t>{1, 1}};
     node.latestNetworkEntries["server"] = entries;
     node.lastNetworkCheckTime = std::chrono::system_clock::now();
+    if (node.transmissionLatencyHistory.size() > ctrl_bandwidth_predictor.getWindowSize()) {
+        node.transmissionLatencyHistory.erase(node.transmissionLatencyHistory.begin());
+    }
+    node.transmissionLatencyHistory.push_back(latency / 1000.0f); // convert to ms
+    node.transmissionLatencyPrediction = ctrl_bandwidth_predictor.predict(node.transmissionLatencyHistory);
     node.networkCheckMutex.unlock();
     return entries;
 };
@@ -1284,7 +1555,7 @@ void Controller::checkNetworkConditions() {
         std::map<std::string, NetworkEntryType> networkEntries = {};
 
         
-        for (auto [deviceName, nodeHandle] : devices.getMap()) {
+        for (const auto& [deviceName, nodeHandle] : devices.getMap()) {
             std::unique_lock<std::mutex> lock(nodeHandle->nodeHandleMutex);
             bool initialNetworkCheck = nodeHandle->initialNetworkCheck;
             uint64_t timeSinceLastCheck = std::chrono::duration_cast<TimePrecisionType>(
@@ -1306,471 +1577,3 @@ void Controller::checkNetworkConditions() {
 // ============================================================================================================================================ //
 // ============================================================================================================================================ //
 // ============================================================================================================================================ //
-
-PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, const std::string &startDevice, const std::string &pipelineName, const std::string &streamName) {
-    std::string sourceName = streamName;
-    if (ctrl_initialRequestRates.find(sourceName) == ctrl_initialRequestRates.end()) {
-        for (auto [key, rates]: ctrl_initialRequestRates) {
-            if (key.find(pipelineName) != std::string::npos) {
-                sourceName = key;
-                break;
-            }
-        }
-    }
-    switch (type) {
-        case PipelineType::Traffic: {
-            auto *datasource = new PipelineModel{startDevice, "datasource", ModelType::DataSource, {}, true, {}, {}};
-            datasource->possibleDevices = {startDevice};
-
-            auto *yolov5n = new PipelineModel{
-                    "server",
-                    "yolov5n",
-                    ModelType::Yolov5n,
-                    {},
-                    true,
-                    {},
-                    {},
-                    {},
-                    {{datasource, -1}}
-            };
-            yolov5n->possibleDevices = {startDevice, "server"};
-            datasource->downstreams.push_back({yolov5n, -1});
-
-            PipelineModel *yolov5n320 = nullptr;
-            PipelineModel *yolov5n512 = nullptr;
-            PipelineModel *yolov5s = nullptr;
-            if (ctrl_systemName == "jlf") {
-                yolov5n->possibleDevices = {"server"};
-
-                yolov5n320 = new PipelineModel{
-                        "server",
-                        "yolov5n320",
-                        ModelType::Yolov5n320,
-                        {},
-                        true,
-                        {},
-                        {},
-                        {},
-                        {{datasource, -1}}
-                };
-                yolov5n320->possibleDevices = {"server"};
-
-
-                yolov5n512 = new PipelineModel{
-                        "server",
-                        "yolov5n512",
-                        ModelType::Yolov5n512,
-                        {},
-                        true,
-                        {},
-                        {},
-                        {},
-                        {{datasource, -1}}
-                };
-                yolov5n512->possibleDevices = {"server"};
-
-                yolov5s= new PipelineModel{
-                        "server",
-                        "yolov5s",
-                        ModelType::Yolov5s,
-                        {},
-                        true,
-                        {},
-                        {},
-                        {},
-                        {{datasource, -1}}
-                };
-                yolov5s->possibleDevices = {"server"};
-            }
-
-            auto *retina1face = new PipelineModel{
-                    "server",
-                    "retina1face",
-                    ModelType::Retinaface,
-                    {},
-                    false,
-                    {},
-                    {},
-                    {},
-                    {{yolov5n, 0}}
-            };
-            retina1face->possibleDevices = {"server"};
-            yolov5n->downstreams.push_back({retina1face, 0});
-
-            if (ctrl_systemName == "jlf") {
-                retina1face->possibleDevices = {"server"};
-                retina1face->upstreams = {{yolov5n, 0}, {yolov5n320, 0}, {yolov5n512, 0}, {yolov5s, 0}};
-                yolov5n320->downstreams.push_back({retina1face, 0});
-                yolov5n512->downstreams.push_back({retina1face, 0});
-                yolov5s->downstreams.push_back({retina1face, 0});
-            }
-
-            auto *arcface = new PipelineModel{
-                    "server",
-                    "arcface",
-                    ModelType::Arcface,
-                    {},
-                    false,
-                    {},
-                    {},
-                    {},
-                    {{retina1face, -1}}
-            };
-            arcface->possibleDevices = {"server"};
-            retina1face->downstreams.push_back({arcface, -1});
-
-            auto *carbrand = new PipelineModel{
-                    "server",
-                    "carbrand",
-                    ModelType::CarBrand,
-                    {},
-                    false,
-                    {},
-                    {},
-                    {},
-                    {{yolov5n, 2}}
-            };
-            carbrand->possibleDevices = {startDevice, "server"};
-            yolov5n->downstreams.push_back({carbrand, 2});
-
-            if (ctrl_systemName == "jlf") {
-                carbrand->possibleDevices = {"server"};
-                carbrand->upstreams = {{yolov5n, 2}, {yolov5n320, 2}, {yolov5n512, 2}, {yolov5s, 2}};
-                yolov5n320->downstreams.push_back({carbrand, 2});
-                yolov5n512->downstreams.push_back({carbrand, 2});
-                yolov5s->downstreams.push_back({carbrand, 2});
-            }
-
-            auto *platedet = new PipelineModel{
-                    "server",
-                    "platedet",
-                    ModelType::PlateDet,
-                    {},
-                    false,
-                    {},
-                    {},
-                    {},
-                    {{yolov5n, 2}}
-            };
-            platedet->possibleDevices = {startDevice, "server"};
-            yolov5n->downstreams.push_back({platedet, 2});
-
-            if (ctrl_systemName == "jlf") {
-                platedet->possibleDevices = {"server"};
-                platedet->upstreams = {{yolov5n, 0}, {yolov5n320, 0}, {yolov5n512, 0}, {yolov5s, 0}};
-                yolov5n320->downstreams.push_back({platedet, 2});
-                yolov5n512->downstreams.push_back({platedet, 2});
-                yolov5s->downstreams.push_back({platedet, 2});
-            }
-
-            auto *sink = new PipelineModel{
-                    "sink",
-                    "sink",
-                    ModelType::Sink,
-                    {},
-                    false,
-                    {},
-                    {},
-                    {},
-                    {{arcface, -1}, {carbrand, -1}, {platedet, -1}}
-            };
-            sink->possibleDevices = {"sink"};
-            arcface->downstreams.push_back({sink, -1});
-            carbrand->downstreams.push_back({sink, -1});
-            platedet->downstreams.push_back({sink, -1});
-
-            if (!sourceName.empty()) {
-                yolov5n->arrivalProfiles.arrivalRates = ctrl_initialRequestRates[sourceName][yolov5n->name];
-                retina1face->arrivalProfiles.arrivalRates = ctrl_initialRequestRates[sourceName][retina1face->name];
-                arcface->arrivalProfiles.arrivalRates = ctrl_initialRequestRates[sourceName][arcface->name];
-                carbrand->arrivalProfiles.arrivalRates = ctrl_initialRequestRates[sourceName][carbrand->name];
-                platedet->arrivalProfiles.arrivalRates = ctrl_initialRequestRates[sourceName][platedet->name];
-            }
-
-            if (ctrl_systemName == "jlf") {
-                arcface->possibleDevices = {"server"};
-                return {datasource, yolov5n, yolov5n320, yolov5n512, yolov5s, retina1face, arcface, carbrand, platedet, sink};
-            }
-            return {datasource, yolov5n, retina1face, arcface, carbrand, platedet, sink};
-        }
-        case PipelineType::Building_Security: {
-            auto *datasource = new PipelineModel{startDevice, "datasource", ModelType::DataSource, {}, true, {}, {}};
-            datasource->possibleDevices = {startDevice};
-
-            auto *yolov5n = new PipelineModel{
-                    "server",
-                    "yolov5n",
-                    ModelType::Yolov5n,
-                    {},
-                    true,
-                    {},
-                    {},
-                    {},
-                    {{datasource, -1}}
-            };
-            yolov5n->possibleDevices = {startDevice, "server"};
-            datasource->downstreams.push_back({yolov5n, -1});
-
-            PipelineModel *yolov5n320 = nullptr;
-            PipelineModel *yolov5n512 = nullptr;
-            PipelineModel *yolov5s = nullptr;
-            if (ctrl_systemName == "jlf") {
-                yolov5n->possibleDevices = {"server"};
-
-                yolov5n320 = new PipelineModel{
-                        "server",
-                        "yolov5n320",
-                        ModelType::Yolov5n320,
-                        {},
-                        true,
-                        {},
-                        {},
-                        {},
-                        {{datasource, -1}}
-                };
-                yolov5n320->possibleDevices = {"server"};
-
-
-                yolov5n512 = new PipelineModel{
-                        "server",
-                        "yolov5n512",
-                        ModelType::Yolov5n512,
-                        {},
-                        true,
-                        {},
-                        {},
-                        {},
-                        {{datasource, -1}}
-                };
-                yolov5n512->possibleDevices = {"server"};
-
-                yolov5s= new PipelineModel{
-                        "server",
-                        "yolov5s",
-                        ModelType::Yolov5s,
-                        {},
-                        true,
-                        {},
-                        {},
-                        {},
-                        {{datasource, -1}}
-                };
-                yolov5s->possibleDevices = {"server"};
-            }
-
-            auto *retina1face = new PipelineModel{
-                    "server",
-                    "retina1face",
-                    ModelType::Retinaface,
-                    {},
-                    false,
-                    {},
-                    {},
-                    {},
-                    {{yolov5n, 0}}
-            };
-            retina1face->possibleDevices = {"server"};
-            yolov5n->downstreams.push_back({retina1face, 0});
-
-            if (ctrl_systemName == "jlf") {
-                retina1face->possibleDevices = {"server"};
-                retina1face->upstreams = {{yolov5n, 0}, {yolov5n320, 0}, {yolov5n512, 0}, {yolov5s, 0}};
-                yolov5n320->downstreams.push_back({retina1face, 0});
-                yolov5n512->downstreams.push_back({retina1face, 0});
-                yolov5s->downstreams.push_back({retina1face, 0});
-            }
-
-            auto *movenet = new PipelineModel{
-                    "server",
-                    "movenet",
-                    ModelType::Movenet,
-                    {},
-                    false,
-                    {},
-                    {},
-                    {},
-                    {{yolov5n, 0}}
-            };
-            movenet->possibleDevices = {startDevice, "server"};
-            yolov5n->downstreams.push_back({movenet, 0});
-
-            if (ctrl_systemName == "jlf") {
-                movenet->possibleDevices = {"server"};
-                movenet->upstreams = {{yolov5n, 0}, {yolov5n320, 0}, {yolov5n512, 0}, {yolov5s, 0}};
-                yolov5n320->downstreams.push_back({movenet, 0});
-                yolov5n512->downstreams.push_back({movenet, 0});
-                yolov5s->downstreams.push_back({movenet, 0});
-            }
-
-            auto *gender = new PipelineModel{
-                    "server",
-                    "gender",
-                    ModelType::Gender,
-                    {},
-                    false,
-                    {},
-                    {},
-                    {},
-                    {{retina1face, -1}}
-            };
-            gender->possibleDevices = {startDevice, "server"};
-            retina1face->downstreams.push_back({gender, -1});
-
-            auto *age = new PipelineModel{
-                    "server",
-                    "age",
-                    ModelType::Age,
-                    {},
-                    false,
-                    {},
-                    {},
-                    {},
-                    {{retina1face, -1}}
-            };
-            age->possibleDevices = {startDevice, "server"};
-            retina1face->downstreams.push_back({age, -1});
-
-            auto *sink = new PipelineModel{
-                    "sink",
-                    "sink",
-                    ModelType::Sink,
-                    {},
-                    false,
-                    {},
-                    {},
-                    {},
-                    {{gender, -1}, {age, -1}, {movenet, -1}}
-            };
-            sink->possibleDevices = {"sink"};
-            gender->downstreams.push_back({sink, -1});
-            age->downstreams.push_back({sink, -1});
-            movenet->downstreams.push_back({sink, -1});
-
-            if (!sourceName.empty()) {
-                yolov5n->arrivalProfiles.arrivalRates = ctrl_initialRequestRates[sourceName][yolov5n->name];
-                retina1face->arrivalProfiles.arrivalRates = ctrl_initialRequestRates[sourceName][retina1face->name];
-                movenet->arrivalProfiles.arrivalRates = ctrl_initialRequestRates[sourceName][movenet->name];
-                gender->arrivalProfiles.arrivalRates = ctrl_initialRequestRates[sourceName][movenet->name];
-                age->arrivalProfiles.arrivalRates = ctrl_initialRequestRates[sourceName][age->name];
-            }
-
-            if (ctrl_systemName == "jlf") {
-                gender->possibleDevices = {"server"};
-                age->possibleDevices = {"server"};
-                return {datasource, yolov5n, yolov5n320, yolov5n512, yolov5s, retina1face, movenet, gender, age, sink};
-            }
-            return {datasource, yolov5n, retina1face, movenet, gender, age, sink};
-        }
-        case PipelineType::Indoor: {
-            auto *datasource = new PipelineModel{startDevice, "datasource", ModelType::DataSource, {}, true, {}, {}};
-            datasource->possibleDevices = {startDevice};
-            auto *retinamtface = new PipelineModel{
-                    startDevice,
-                    "retinamtface",
-                    ModelType::RetinaMtface,
-                    {},
-                    true,
-                    {},
-                    {},
-                    {},
-                    {{datasource, -1}}
-            };
-            retinamtface->possibleDevices = {startDevice};
-            datasource->downstreams.push_back({retinamtface, -1});
-
-            auto *emotionnet = new PipelineModel{
-                    "server",
-                    "emotionnet",
-                    ModelType::Emotionnet,
-                    {},
-                    false,
-                    {},
-                    {},
-                    {},
-                    {{retinamtface, -1}}
-            };
-            emotionnet->possibleDevices = {"server"};
-            retinamtface->downstreams.push_back({emotionnet, -1});
-
-            auto *age = new PipelineModel{
-                    "server",
-                    "age",
-                    ModelType::Age,
-                    {},
-                    false,
-                    {},
-                    {},
-                    {},
-                    {{retinamtface, -1}}
-            };
-            age->possibleDevices = {"server"};
-            retinamtface->downstreams.push_back({age, -1});
-
-            auto *gender = new PipelineModel{
-                    "server",
-                    "gender",
-                    ModelType::Gender,
-                    {},
-                    false,
-                    {},
-                    {},
-                    {},
-                    {{retinamtface, -1}}
-            };
-            gender->possibleDevices = {"server"};
-            retinamtface->downstreams.push_back({gender, -1});
-
-            auto *arcface = new PipelineModel{
-                    "server",
-                    "arcface",
-                    ModelType::Arcface,
-                    {},
-                    false,
-                    {},
-                    {},
-                    {},
-                    {{retinamtface, -1}}
-            };
-            arcface->possibleDevices = {"server"};
-            retinamtface->downstreams.push_back({arcface, -1});
-
-            auto *sink = new PipelineModel{
-                    "sink",
-                    "sink",
-                    ModelType::Sink,
-                    {},
-                    false,
-                    {},
-                    {},
-                    {},
-                    {{emotionnet, -1}, {age, -1}, {gender, -1}, {arcface, -1}}
-            };
-            sink->possibleDevices = {"sink"};
-            emotionnet->downstreams.push_back({sink, -1});
-            age->downstreams.push_back({sink, -1});
-            gender->downstreams.push_back({sink, -1});
-            arcface->downstreams.push_back({sink, -1});
-
-            if (!sourceName.empty()) {
-                retinamtface->arrivalProfiles.arrivalRates = ctrl_initialRequestRates[sourceName][retinamtface->name];
-                emotionnet->arrivalProfiles.arrivalRates = ctrl_initialRequestRates[sourceName][emotionnet->name];
-                age->arrivalProfiles.arrivalRates = ctrl_initialRequestRates[sourceName][age->name];
-                gender->arrivalProfiles.arrivalRates = ctrl_initialRequestRates[sourceName][gender->name];
-                arcface->arrivalProfiles.arrivalRates = ctrl_initialRequestRates[sourceName][arcface->name];
-            }
-
-            return {datasource, retinamtface, emotionnet, age, gender, arcface, sink};
-        }
-        default:
-            return {};
-    }
-}
-
-PipelineModelListType deepCopyPipelineModelList(const PipelineModelListType& original) {
-    PipelineModelListType newList;
-    newList.reserve(original.size());
-    for (const auto* model : original) {
-        newList.push_back(new PipelineModel(*model));
-    }
-    return newList;
-}

@@ -5,21 +5,13 @@
 #include <random>
 #include <cmath>
 #include <chrono>
-#include "indevicecommands.grpc.pb.h"
 #include "indevicemessages.grpc.pb.h"
-#include "controlcommands.grpc.pb.h"
+#include "controlmessages.grpc.pb.h"
 
 #ifndef PIPEPLUSPLUS_BATCH_LEARNING_H
 #define PIPEPLUSPLUS_BATCH_LEARNING_H
 
-using controlcommands::ControlCommands;
-using grpc::Status;
-using grpc::CompletionQueue;
-using grpc::ClientContext;
-using grpc::ClientAsyncResponseReader;
-using indevicemessages::InDeviceMessages;
-using indevicecommands::FlData;
-using EmptyMessage = google::protobuf::Empty;
+using indevicemessages::FlData;
 using T = torch::Tensor;
 
 enum threadingAction {
@@ -43,16 +35,15 @@ const std::unordered_map<std::string, torch::Dtype> DTYPE_MAP = {
 
 class ExperienceBuffer {
 public:
-
     ExperienceBuffer() = default;
 
     ExperienceBuffer(size_t capacity)
         :  timestamps(capacity), states(capacity), log_probs(capacity), values(capacity),
-          resolutions(capacity), batchings(capacity), scalings(capacity), rewards(capacity),
-          capacity(capacity), current_index(0), await_reward(false), is_full(false) {}
+          timeouts(capacity), batchings(capacity), scalings(capacity), rewards(capacity),
+          capacity(capacity), current_index(0), await_reward(false), valid_history(false), is_full(false) {}
 
     void add(const T& state, const T& log_prob, const T& value,
-             int resolution_action, int batching_action, int scaling_action) {
+             int timeout_action, int batching_action, int scaling_action) {
         if (is_full) {
             double distance = distance_metric(state, states[current_index]);
 
@@ -71,7 +62,7 @@ public:
 
         log_probs[current_index] = log_prob;
         values[current_index] = value;
-        resolutions[current_index] = resolution_action;
+        timeouts[current_index] = timeout_action;
         batchings[current_index] = batching_action;
         scalings[current_index] = scaling_action;
         valid_history = false;
@@ -105,9 +96,9 @@ public:
         return {values.begin(), values.begin() + current_index};
     }
 
-    [[nodiscard]] std::vector<int> get_resolution() const {
-        if (is_full) return resolutions;
-        return {resolutions.begin(), resolutions.begin() + current_index};
+    [[nodiscard]] std::vector<int> get_timeout() const {
+        if (is_full) return timeouts;
+        return {timeouts.begin(), timeouts.begin() + current_index};
     }
 
     [[nodiscard]] std::vector<int> get_batching() const {
@@ -132,7 +123,7 @@ public:
 
 private:
 
-    double distance_metric(const T& state, const T& log_probs) {
+    double distance_metric(const T& state, const T& log_prob) {
         if (!valid_history) {
             historical_states = torch::stack(states);
             T mean = historical_states.mean(0);
@@ -146,7 +137,7 @@ private:
         T diff = historical_states - state;
         T mahalanobis_distances = torch::sqrt((diff.matmul(covariance_inv).mul(diff)).sum(1));
 
-        T kl_divergences = torch::kl_div(log_probs, torch::stack(log_probs), torch::Reduction::None);
+        T kl_divergences = torch::kl_div(log_prob, torch::stack(log_probs), torch::Reduction::None);
 
         return 0.5 * mahalanobis_distances.mean().item<double>() + 0.5 * kl_divergences.mean().item<double>();
     }
@@ -154,7 +145,7 @@ private:
     std::vector<ClockType> timestamps;
     std::vector<T> states, log_probs, values;
     T historical_states, covariance_inv;
-    std::vector<int> resolutions, batchings, scalings;
+    std::vector<int> timeouts, batchings, scalings;
     std::vector<double> rewards;
 
     size_t capacity;
@@ -212,20 +203,20 @@ struct SinglePolicyNet: torch::nn::Module {
         return std::make_tuple(policy_output, value);
     }
 
-    T combine_actions(std::vector<int> resolution, std::vector<int> batching, std::vector<int> scaling, int action2_size, int action3_size) {
-        T action = torch::zeros({static_cast<long>(resolution.size()), 1});
-        for (unsigned int i = 0; i < resolution.size(); i++) {
-            action[i] = resolution[i] * action2_size * action3_size + batching[i] * action3_size + scaling[i];
+    T combine_actions(std::vector<int> timeout, std::vector<int> batching, std::vector<int> scaling, int action2_size, int action3_size) {
+        T action = torch::zeros({static_cast<long>(timeout.size()), 1});
+        for (unsigned int i = 0; i < timeout.size(); i++) {
+            action[i] = timeout[i] * action2_size * action3_size + batching[i] * action3_size + scaling[i];
         }
         return action;
     }
 
     std::tuple<int, int, int> interpret_action(int action, int action2_size, int action3_size) {
-        int resolution = action / (action2_size * action3_size);
+        int timeout = action / (action2_size * action3_size);
         int remainder = action % (action2_size * action3_size);
         int batching = remainder / action3_size;
         int scaling = remainder % action3_size;
-        return std::make_tuple(resolution, batching, scaling);
+        return std::make_tuple(timeout, batching, scaling);
     }
 
     torch::nn::Linear shared_layer1{nullptr};
@@ -236,11 +227,11 @@ struct SinglePolicyNet: torch::nn::Module {
 
 class FCPOAgent {
 public:
-    FCPOAgent(std::string& cont_name, uint state_size, uint resolution_size, uint max_batch, uint scaling_size,
-             CompletionQueue *cq, std::shared_ptr<InDeviceMessages::Stub> stub, torch::Dtype precision = torch::kF64,
+    FCPOAgent(std::string& cont_name, uint state_size, uint timeout_size, uint max_batch, uint scaling_size,
+             socket_t *socket, BatchInferProfileListType profile, int base_batch, torch::Dtype precision = torch::kF64,
              uint update_steps = 60, uint update_steps_inc = 5, uint federated_steps = 5, double lambda = 0.95,
-             double gamma = 0.99, double clip_epsilon = 0.2, double penalty_weight = 0.1, double theta = 1.1,
-             double sigma = 10.0, double phi = 2.0, int seed = 42);
+             double gamma = 0.99, double clip_epsilon = 0.2, double penalty_weight = 0.1, double theta = 1.0,
+             double sigma = 10.0, double phi = 2.0, double rho = 1.0, int seed = 42);
 
     ~FCPOAgent() {
         torch::save(model, path + "/latest_model.pt");
@@ -248,10 +239,10 @@ public:
     }
 
     std::tuple<int, int, int> runStep();
-    void rewardCallback(double throughput, double drops, double latency_penalty, double oversize_penalty);
-    void setState(double curr_resolution, double curr_batch, double curr_scaling,  double arrival, double pre_queue_size,
-                  double inf_queue_size, double post_queue_size, double pipelineSLO);
-    void federatedUpdateCallback(FlData &response);
+    void rewardCallback(double throughput, double latency_penalty, double oversize_penalty, double memory_use);
+    void setState(double curr_timeout, double curr_batch, double curr_scaling,  double arrival, double pre_queue_size,
+                  double inf_queue_size, double post_queue_size, double slo, double memory_use);
+    void federatedUpdateCallback(const std::string &msg);
 
 private:
     void update();
@@ -270,15 +261,18 @@ private:
     std::unique_ptr<torch::optim::Optimizer> optimizer;
     torch::Dtype precision;
     T state, log_prob, value;
-    int resolution, batching, scaling;
+    double last_slo;
+    int timeout, batching, last_batching, scaling;
     ExperienceBuffer experiences;
 
     bool first = true;
+    bool penalty = true;
+    BatchInferProfileListType batchInferProfileList;
+
     std::ofstream out;
     std::string path;
     std::string cont_name;
-    CompletionQueue *cq;
-    std::shared_ptr<InDeviceMessages::Stub> stub;
+    socket_t *device_socket;
 
     // PPO Hyperparameters
     double lambda;
@@ -292,10 +286,12 @@ private:
     double theta;
     double sigma;
     double phi;
+    double rho;
 
     uint state_size;
-    uint resolution_size;
+    uint timeout_size;
     uint max_batch;
+    int base_batch;
     uint scaling_size;
 
     uint steps_counter = 0;
@@ -308,21 +304,23 @@ private:
 
 class FCPOServer {
 public:
-    FCPOServer(std::string run_name, nlohmann::json parameters, uint state_size = 8, torch::Dtype precision = torch::kF32);
+    FCPOServer(std::string run_name, nlohmann::json parameters, uint16_t clusterCount, socket_t *mq, uint state_size = 9,
+               torch::Dtype precision = torch::kF32);
     ~FCPOServer() {
-        torch::save(model, path + "/latest_model.pt");
+        int i = 0;
+        for (auto model: models) {
+            torch::save(model, path + "/latest_model" + std::to_string(i++) + ".pt");
+        }
         out.close();
     }
 
-    bool addClient(FlData &data, std::shared_ptr<ControlCommands::Stub> stub, CompletionQueue *cq);
+    bool addClient(FlData &data);
 
-    void incrementClientCounter() {
-        client_counter++;
-    }
+    void incrementClientCounter() { client_counter++; }
 
-    void decrementClientCounter() {
-        client_counter--;
-    }
+    void decrementClientCounter() { client_counter--; }
+
+    void updateCluster(uint16_t id, std::vector<std::tuple<std::string, std::string, nlohmann::json>> devices);
 
     void stop() { run = false; }
 
@@ -337,6 +335,7 @@ public:
                 {"theta", theta},
                 {"sigma", sigma},
                 {"phi", phi},
+                {"rho", rho},
                 {"precision", boost::algorithm::to_lower_copy(p)},
                 {"update_steps", update_steps},
                 {"update_step_incs", update_step_incs},
@@ -349,15 +348,17 @@ private:
     struct ClientModel{
         FlData data;
         std::shared_ptr<MultiPolicyNet> model;
-        std::shared_ptr<ControlCommands::Stub> stub;
-        CompletionQueue *cq;
     };
 
     void proceed();
 
     void returnFLModel(ClientModel &client);
 
-    std::shared_ptr<MultiPolicyNet> model;
+    void sendClusterModel(std::string name, std::string queue, nlohmann::json conf);
+
+    std::vector<std::shared_ptr<MultiPolicyNet>> models;
+    std::vector<std::map<std::vector<int64_t>, T>> action_heads_by_size;
+    uint16_t clusterID;
     std::unique_ptr<torch::optim::Optimizer> optimizer;
     torch::Dtype precision;
     std::vector<ClientModel> federated_clients;
@@ -367,6 +368,7 @@ private:
     std::ofstream out;
     std::string path;
     std::atomic<bool> run;
+    socket_t *message_queue;
 
     // PPO Hyperparameters
     double lambda;
@@ -379,6 +381,7 @@ private:
     double theta;
     double sigma;
     double phi;
+    double rho;
 
 
     // Parameters for Learning Loop

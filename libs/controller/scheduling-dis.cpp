@@ -193,8 +193,14 @@ void Controller::Scheduling()
         ApplyScheduling();
         std::cout << "end_scheduleBaseParPoint " << partitioner.BaseParPoint << std::endl;
         std::cout << "end_FineGrainedParPoint " << partitioner.FineGrainedOffset << std::endl;
+
         schedulingSW.stop();
         ctrl_nextSchedulingTime = std::chrono::system_clock::now() + std::chrono::seconds(ctrl_schedulingIntervalSec);
+        if (startTime == std::chrono::system_clock::time_point()) startTime = std::chrono::system_clock::now();
+        if (std::chrono::duration_cast<std::chrono::minutes>(std::chrono::system_clock::now() - startTime).count() > ctrl_runtime) {
+            running = false;
+            break;
+        }
         std::this_thread::sleep_for(TimePrecisionType((ctrl_schedulingIntervalSec + 1) * 1000000 - schedulingSW.elapsed_microseconds()));
     }
 }

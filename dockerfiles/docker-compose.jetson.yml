@@ -1,0 +1,18 @@
+services:
+  workload:
+    image: lucasliebe/pipeplusplus:${DOCKER_TAG}
+    container_name: ${CONTAINER_NAME}
+    restart: on-failure
+    network_mode: host
+    privileged: true
+    user: "0:0"
+    volumes:
+      - /home/cdsn/FCPO:/app
+      - /home/cdsn/pipe/data:/app/data
+      - /home/cdsn/pipe/models:/app/models
+      - /run/jtop.sock:/run/jtop.sock
+      - /usr/bin/tegrastats:/usr/bin/tegrastats
+    command: >
+      ${EXECUTABLE} --json '${START_STRING}' --device ${DEVICE}
+      --port ${PORT} --port_offset ${PORT_OFFSET}
+      --log_dir ../logs ${LOGGING_ARGS}

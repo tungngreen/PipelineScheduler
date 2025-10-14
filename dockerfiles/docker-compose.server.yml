@@ -1,0 +1,21 @@
+services:
+  workload:
+    image: lucasliebe/pipeplusplus:${DOCKER_TAG}
+    container_name: ${CONTAINER_NAME}
+    restart: on-failure
+    network_mode: host
+    runtime: nvidia
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - capabilities: [gpu]
+    volumes:
+      - /ssd0/tung/PipePlusPlus/data/:/app/data/
+      - /ssd0/tung/PipePlusPlus/logs/:/app/logs/
+      - /ssd0/tung/PipePlusPlus/models/:/app/models/
+      - /ssd0/tung/PipePlusPlus/model_profiles/:/app/model_profiles/
+    command: >
+      ${EXECUTABLE} --json '${START_STRING}' --device ${DEVICE}
+      --port ${PORT} --port_offset ${PORT_OFFSET}
+      --log_dir ../logs ${LOGGING_ARGS}

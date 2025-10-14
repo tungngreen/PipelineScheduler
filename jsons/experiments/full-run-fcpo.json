@@ -12,6 +12,7 @@
     "rescaling_interval_sec": 30,
     "scale_up_interval_threshold_sec": 150,
     "scale_down_interval_threshold_sec": 240,
+    "cluster_count": 1,
     "initial_pipelines": [
         {
             "pipeline_name": "people1",
@@ -77,6 +78,7 @@
     "theta": 1.1,
     "sigma": 10.0,
     "phi": 2.0,
+    "rho": 1.0,
     "update_steps": 100,
     "update_step_incs": 10,
     "federated_steps": 10,
