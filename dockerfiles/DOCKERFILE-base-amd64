@@ -1,30 +1,28 @@
-FROM nvcr.io/nvidia/tensorrt:24.10-py3
+# ==============================================================================
+# BUILD STAGE - All compilation and build dependencies
+# ==============================================================================
+FROM nvcr.io/nvidia/cuda:12.6.3-devel-ubuntu22.04 AS builder
 
 ENV DEBIAN_FRONTEND=noninteractive \
     TZ=Asia/Seoul
 RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 
-# --------------------------------------------------
-# Core build tools & dependencies
-# --------------------------------------------------
+# Build tools and development dependencies
 RUN apt-get update --fix-missing && apt-get install -y --no-install-recommends \
         python3-pip python3-dev python3-numpy \
-        build-essential cmake git wget unzip vim \
-        ffmpeg libsm6 libxext6 imagemagick \
-        gdb lsof yasm pkg-config autoconf libtool \
-        libswscale-dev libtbb2 libtbb-dev \
+        build-essential cmake git wget unzip \
+        yasm pkg-config autoconf libtool \
+        libswscale-dev libtbb-dev \
         libpng-dev libtiff-dev libavformat-dev libavcodec-dev libavutil-dev libpostproc-dev \
         libpq-dev libpqxx-dev libssl-dev \
         libglew-dev libxine2-dev libgtk2.0-dev \
         zlib1g-dev libeigen3-dev \
-        postgresql-client \
-    && rm -rf /var/lib/apt/lists/*
+    && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # --------------------
 # CMake 3.25.1
 # --------------------
-RUN rm -f /usr/local/bin/cmake /usr/local/bin/cpack /usr/local/bin/ctest /usr/local/bin/ccmake && \
-    wget -q https://github.com/Kitware/CMake/releases/download/v3.25.1/cmake-3.25.1-Linux-x86_64.sh -O /tmp/cmake-install.sh && \
+RUN wget -q https://github.com/Kitware/CMake/releases/download/v3.25.1/cmake-3.25.1-Linux-x86_64.sh -O /tmp/cmake-install.sh && \
     chmod u+x /tmp/cmake-install.sh && \
     mkdir /opt/cmake-3.25.1 && \
     /tmp/cmake-install.sh --skip-license --prefix=/opt/cmake-3.25.1 && \
@@ -32,38 +30,42 @@ RUN rm -f /usr/local/bin/cmake /usr/local/bin/cpack /usr/local/bin/ctest /usr/lo
     rm /tmp/cmake-install.sh
 
 # --------------------
-# OpenCV + contrib
+# Build ZeroMQ and cppzmq
 # --------------------
-ARG OPENCV_VERSION=4.10.0
-RUN cd /opt && \
-    wget -q https://github.com/opencv/opencv/archive/${OPENCV_VERSION}.zip && unzip ${OPENCV_VERSION}.zip && rm ${OPENCV_VERSION}.zip && \
-    wget -q https://github.com/opencv/opencv_contrib/archive/${OPENCV_VERSION}.zip && unzip ${OPENCV_VERSION}.zip && rm ${OPENCV_VERSION}.zip && \
-    mkdir /opt/opencv-${OPENCV_VERSION}/build && cd /opt/opencv-${OPENCV_VERSION}/build && \
-    cmake -DOPENCV_EXTRA_MODULES_PATH=/opt/opencv_contrib-${OPENCV_VERSION}/modules \
-          -DWITH_CUDA=ON \
-          -DCUDA_ARCH_BIN=7.5,8.0,8.6 \
-          -DCMAKE_BUILD_TYPE=Release \
-          -DCMAKE_INSTALL_PREFIX=/usr/local .. && \
-    make -j"$(nproc)" && make install && ldconfig && \
-    rm -rf /opt/opencv-${OPENCV_VERSION} /opt/opencv_contrib-${OPENCV_VERSION}
+RUN git clone --depth 1 https://github.com/zeromq/libzmq.git && \
+    cd libzmq && mkdir build && cd build && \
+    cmake -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr/local .. && \
+    make -j$(nproc) install && \
+    cd / && rm -rf libzmq
+
+RUN git clone --depth 1 https://github.com/zeromq/cppzmq.git && \
+    cd cppzmq && mkdir build && cd build && \
+    cmake -DCPPZMQ_BUILD_TESTS=OFF -DCMAKE_INSTALL_PREFIX=/usr/local .. && \
+    make -j$(nproc) install && \
+    cd / && rm -rf cppzmq
 
 # --------------------
-# TensorRT 10.9.0 (CUDA 12.6 build)
+# Build Boost 1.84.0
 # --------------------
-ARG TRT_VERSION="10.9.0"
-ARG TRT_TAG="10.9.0.34.Linux.x86_64-gnu.cuda-12.8"
-ARG TRT_TAR=TensorRT-${TRT_TAG}.tar.gz
-RUN wget -q https://developer.nvidia.com/downloads/compute/machine-learning/tensorrt/${TRT_VERSION}/tars/${TRT_TAR} && \
-    mkdir /TensorRT && \
-    tar -xzf ${TRT_TAR} -C /TensorRT --strip-components=1 && \
-    rm ${TRT_TAR}
-ENV LD_LIBRARY_PATH=/TensorRT/lib:${LD_LIBRARY_PATH} \
-    PATH=/TensorRT/bin:${PATH}
+RUN wget -q https://archives.boost.io/release/1.84.0/source/boost_1_84_0.tar.gz && \
+    tar -xzf boost_1_84_0.tar.gz && cd boost_1_84_0 && \
+    ./bootstrap.sh --prefix=/usr/local && \
+    ./b2 -j$(nproc) --prefix=/usr/local install && \
+    cd / && rm -rf boost_1_84_0 boost_1_84_0.tar.gz
 
 # --------------------
-# gRPC (lean build)
+# Build Spdlog
 # --------------------
-ARG GRPC_INSTALL_DIR=/grpc
+RUN git clone --branch v1.5.0 --depth 1 https://github.com/gabime/spdlog.git && \
+    cd spdlog && mkdir build && cd build && \
+    cmake -DCMAKE_BUILD_TYPE=Release -DSPDLOG_BUILD_TESTS=OFF -DCMAKE_INSTALL_PREFIX=/usr/local .. && \
+    make -j$(nproc) install && \
+    cd / && rm -rf spdlog
+
+# --------------------
+# Build gRPC
+# --------------------
+ARG GRPC_INSTALL_DIR=/usr/local
 RUN git clone --recurse-submodules -b v1.62.0 --depth 1 https://github.com/grpc/grpc /grpc-src && \
     mkdir -p /grpc-src/build && cd /grpc-src/build && \
     cmake -DgRPC_INSTALL=ON -DgRPC_BUILD_TESTS=OFF \
@@ -71,42 +73,100 @@ RUN git clone --recurse-submodules -b v1.62.0 --depth 1 https://github.com/grpc/
           -DCMAKE_INSTALL_PREFIX=$GRPC_INSTALL_DIR .. && \
     make -j"$(nproc)" && make install && \
     rm -rf /grpc-src
-ENV PATH=${PATH}:${GRPC_INSTALL_DIR}/bin
 
 # --------------------
-# cppzmq
+# Build OpenCV + contrib
 # --------------------
-RUN git clone --depth 1 https://github.com/zeromq/libzmq.git && \
-    cd libzmq && mkdir build && cd build && cmake .. && make -j"$(nproc)" install && \
-    cd / && rm -rf libzmq && \
-    git clone --depth 1 https://github.com/zeromq/cppzmq.git && \
-    cd cppzmq && mkdir build && cd build && cmake -DCPPZMQ_BUILD_TESTS=OFF .. && make -j"$(nproc)" install && \
-    cd / && rm -rf cppzmq
+ARG OPENCV_VERSION=4.10.0
+RUN cd /opt && \
+    wget -q https://github.com/opencv/opencv/archive/${OPENCV_VERSION}.zip && \
+    unzip ${OPENCV_VERSION}.zip && rm ${OPENCV_VERSION}.zip && \
+    wget -q https://github.com/opencv/opencv_contrib/archive/${OPENCV_VERSION}.zip && \
+    unzip ${OPENCV_VERSION}.zip && rm ${OPENCV_VERSION}.zip && \
+    mkdir /opt/opencv-${OPENCV_VERSION}/build && cd /opt/opencv-${OPENCV_VERSION}/build && \
+    cmake -DOPENCV_EXTRA_MODULES_PATH=/opt/opencv_contrib-${OPENCV_VERSION}/modules \
+          -DWITH_CUDA=ON \
+          -DCUDA_ARCH_BIN=7.5,8.0,8.6,8.9,9.0 \
+          -DCMAKE_BUILD_TYPE=Release \
+          -DCMAKE_INSTALL_PREFIX=/usr/local \
+          -DWITH_CUBLAS=ON \
+          -DWITH_CUDNN=ON \
+          -DBUILD_EXAMPLES=OFF \
+          -DBUILD_TESTS=OFF \
+          -DBUILD_PERF_TESTS=OFF .. && \
+    make -j$(nproc) && make install && \
+    rm -rf /opt/opencv-${OPENCV_VERSION} /opt/opencv_contrib-${OPENCV_VERSION}
 
 # --------------------
-# Boost 1.84.0
+# Download and extract TensorRT
 # --------------------
-RUN wget -q https://archives.boost.io/release/1.84.0/source/boost_1_84_0.tar.gz && \
-    tar -xzf boost_1_84_0.tar.gz && cd boost_1_84_0 && \
-    ./bootstrap.sh --prefix=/usr && ./b2 -j"$(nproc)" install && \
-    cd / && rm -rf boost_1_84_0 boost_1_84_0.tar.gz
+ARG TRT_VERSION="10.5.0"
+ARG TRT_TAG="10.5.0.18.Linux.x86_64-gnu.cuda-12.6"
+ARG TRT_TAR=TensorRT-${TRT_TAG}.tar.gz
+RUN wget -q https://developer.nvidia.com/downloads/compute/machine-learning/tensorrt/${TRT_VERSION}/tars/${TRT_TAR} && \
+    mkdir /TensorRT && \
+    tar -xzf ${TRT_TAR} -C /TensorRT --strip-components=1 && \
+    rm ${TRT_TAR}
 
 # --------------------
-# Spdlog
+# Download and extract LibTorch
 # --------------------
-RUN git clone --branch v1.5.0 --depth 1 https://github.com/gabime/spdlog.git && \
-    cd spdlog && mkdir build && cd build && cmake -DCMAKE_BUILD_TYPE=Release -DSPDLOG_BUILD_TESTS=OFF .. && \
-    make -j"$(nproc)" install && \
-    cd / && rm -rf spdlog
+ARG TORCH_FILE=libtorch-cxx11-abi-shared-with-deps-2.5.0+cu124.zip
+ARG TORCH_LINK=https://download.pytorch.org/libtorch/cu124/libtorch-cxx11-abi-shared-with-deps-2.5.0%2Bcu124.zip
+RUN wget -q ${TORCH_LINK} && \
+    unzip ${TORCH_FILE} -d / && \
+    rm ${TORCH_FILE}
 
-# --------------------
-# LibTorch (CUDA 12.6 build)
-# --------------------
-# first remove any existing torch and torchvision installations
-RUN pip3 uninstall -y torch torchvision torchaudio
-ARG TORCH_FILE=libtorch-cxx11-abi-shared-with-deps-1.11.0+cu115.zip \
-ARG TORCH_LINK=https://download.pytorch.org/libtorch/cu115/libtorch-cxx11-abi-shared-with-deps-1.11.0%2Bcu115.zip
-RUN wget -q ${TORCH_LINK} && unzip ${TORCH_FILE} -d / && rm ${TORCH_FILE}
+# # ==============================================================================
+# # RUNTIME STAGE - Minimal runtime dependencies
+# # ==============================================================================
+# FROM nvcr.io/nvidia/cuda:12.6.3-runtime-ubuntu22.04 AS runtime
+
+# ENV DEBIAN_FRONTEND=noninteractive \
+#     TZ=Asia/Seoul
+# RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
+
+# # Runtime dependencies only (much smaller set)
+# RUN apt-get update --fix-missing && apt-get install -y --no-install-recommends \
+#         python3-pip python3-numpy \
+#         vim gdb lsof \
+#         ffmpeg libsm6 libxext6 \
+#         libtbb2 libpng16-16 libtiff5 \
+#         libavformat58 libavcodec58 libavutil56 libpostproc55 \
+#         libpq5 libpqxx-6.4 libssl3 \
+#         libglew2.2 libxine2 libgtk2.0-0 \
+#         zlib1g \
+#         postgresql-client \
+#         software-properties-common \
+#         sudo \
+#     && apt-get clean && rm -rf /var/lib/apt/lists/*
+
+# # Copy built libraries and binaries from builder stage
+# COPY --from=builder /usr/local /usr/local
+# COPY --from=builder /TensorRT /TensorRT  
+# COPY --from=builder /libtorch /libtorch
+
+# Update library cache
+RUN ldconfig
+
+# Environment variables for all the libraries
+ENV LD_LIBRARY_PATH=/TensorRT/lib:/libtorch/lib:/usr/local/lib:${LD_LIBRARY_PATH} \
+    PATH=/TensorRT/bin:/usr/local/bin:${PATH} \
+    CMAKE_PREFIX_PATH=/libtorch:/usr/local:${CMAKE_PREFIX_PATH} \
+    PKG_CONFIG_PATH=/usr/local/lib/pkgconfig:${PKG_CONFIG_PATH}
+
+# ====
+
+# ==============================================================================
+# Setup fish
+# ==============================================================================
+RUN apt-get update
+RUN apt-get install software-properties-common -y
+
+RUN apt-add-repository ppa:fish-shell/release-3
+RUN apt-get update
+RUN apt-get install fish -y
+
 
 # --------------------
 # User setup
@@ -117,7 +177,8 @@ ARG host_gid=1001
 RUN groupadd -g $host_gid ${user} && \
     useradd -u $host_uid -g ${user} -m ${user} && \
     usermod -aG sudo ${user} && \
-    echo '%sudo ALL=(ALL:ALL) NOPASSWD:ALL' >> /etc/sudoers
+    echo '%sudo ALL=(ALL:ALL) NOPASSWD:ALL' >> /etc/sudoers && \
+    usermod -s /usr/fish ${user}
 
 USER ${user}
 WORKDIR /home/${user}
