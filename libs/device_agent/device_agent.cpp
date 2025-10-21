@@ -139,15 +139,17 @@ DeviceAgent::DeviceAgent(const std::string &ctrl_url) : DeviceAgent() {
     in_device_message_queue.bind(server_address);
     in_device_message_queue.set(zmq::sockopt::sndtimeo, 100);
 
-    controller_ctx = context_t(1);
-    server_address = absl::StrFormat("tcp://%s:%d", controller_url, CONTROLLER_RECEIVE_PORT + dev_system_port_offset - dev_agent_port_offset);
-    controller_socket = socket_t(controller_ctx, ZMQ_REQ);
-    controller_socket.connect(server_address);
-    server_address = absl::StrFormat("tcp://%s:%d", controller_url, CONTROLLER_MESSAGE_QUEUE_PORT + dev_system_port_offset  - dev_agent_port_offset);
-    controller_message_queue = socket_t(controller_ctx, ZMQ_SUB);
-    controller_message_queue.setsockopt(ZMQ_SUBSCRIBE, (dev_name + "|").c_str(), dev_name.size() + 1);
-    controller_message_queue.connect(server_address);
-    controller_message_queue.set(zmq::sockopt::rcvtimeo, 1000);
+    if (controller_url != "") {
+        controller_ctx = context_t(1);
+        server_address = absl::StrFormat("tcp://%s:%d", controller_url, CONTROLLER_RECEIVE_PORT + dev_system_port_offset - dev_agent_port_offset);
+        controller_socket = socket_t(controller_ctx, ZMQ_REQ);
+        controller_socket.connect(server_address);
+        server_address = absl::StrFormat("tcp://%s:%d", controller_url, CONTROLLER_MESSAGE_QUEUE_PORT + dev_system_port_offset - dev_agent_port_offset);
+        controller_message_queue = socket_t(controller_ctx, ZMQ_SUB);
+        controller_message_queue.setsockopt(ZMQ_SUBSCRIBE, (dev_name + "|").c_str(), dev_name.size() + 1);
+        controller_message_queue.connect(server_address);
+        controller_message_queue.set(zmq::sockopt::rcvtimeo, 1000);
+    }
 
     dev_profiler = new Profiler({(unsigned int) getpid()}, "runtime");
     SystemInfo readyReply = Ready(getHostIP());
@@ -170,6 +172,8 @@ DeviceAgent::DeviceAgent(const std::string &ctrl_url) : DeviceAgent() {
             dev_loggerSinks,
             dev_logger
     );
+    if (controller_url == "") spdlog::get("container_agent")->warn("No connection to Controller specified, skipping Ready advertisement and running in testing mode.");
+
     if (dev_totalBandwidthData.size() <= absl::GetFlag(FLAGS_dev_bandwidthLimitID)) {
         spdlog::get("container_agent")->error("Invalid bandwidth limit ID, use [0, 20]! Defaulting to 0.");
         dev_bandwidthLimit = dev_totalBandwidthData[0];
@@ -243,7 +247,7 @@ DeviceAgent::DeviceAgent(const std::string &ctrl_url) : DeviceAgent() {
     running = true;
     threads = std::vector<std::thread>();
     threads.emplace_back(&DeviceAgent::HandleDeviceMessages, this);
-    threads.emplace_back(&DeviceAgent::HandleControlCommands, this);
+    if (controller_url != "") threads.emplace_back(&DeviceAgent::HandleControlCommands, this);
     for (auto &thread: threads) {
         thread.detach();
     }
@@ -251,6 +255,10 @@ DeviceAgent::DeviceAgent(const std::string &ctrl_url) : DeviceAgent() {
 }
 
 void DeviceAgent::collectRuntimeMetrics() {
+    if (controller_url == "")
+        while (running)
+            std::this_thread::sleep_for(std::chrono::seconds(1));
+
     std::string sql;
     std::vector<double> edgevisionBWs(std::max(1, (int) edgevision_dwnstrList.size() - 1));
     auto timeNow = std::chrono::high_resolution_clock::now();
@@ -548,6 +556,12 @@ void DeviceAgent::SyncDatasources(const std::string &msg) {
 }
 
 SystemInfo DeviceAgent::Ready(const std::string &ip) {
+    if (controller_url == "") {
+        dev_system_name = "ppp";
+        dev_experiment_name = "test";
+        dev_numCudaDevices = 1;
+        return SystemInfo();
+    }
     ConnectionConfigs request;
     request.set_device_name(dev_name);
     request.set_device_type(dev_type);
@@ -586,11 +600,11 @@ SystemInfo DeviceAgent::Ready(const std::string &ip) {
     message_t zmq_msg(msg.size()), reply;
     memcpy(zmq_msg.data(), msg.data(), msg.size());
     if (!controller_socket.send(zmq_msg, send_flags::dontwait)){
-        spdlog::error("Sending ready message failed! Is the Server running?");
+        spdlog::error("Sending ready message failed! Is the Controller running?");
         exit(1);
     }
     if (!controller_socket.recv(reply)) {
-        spdlog::error("Ready message reply failed! Is the Server running correctly?");
+        spdlog::error("Ready message reply failed! Is the Controller running correctly?");
         exit(1);
     }
     SystemInfo info;
