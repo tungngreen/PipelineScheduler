@@ -1290,6 +1290,10 @@ std::map<std::string, std::string> keywordAbbrs = {
     {"age", "age"},
     {"arcface", "arcf"},
     {"carbrand", "cbrd"},
+    {"carcolor", "ccol"},
+    {"cardamage", "cdmg"},
+    {"firedetect", "fire"},
+    {"fashioncolor", "fcol"},
     {"gender", "gndr"},
     {"emotion", "emtn"},
     {"emotionnet", "emtn"},
@@ -1355,7 +1359,11 @@ std::map<ModelType, std::string> ModelTypeList = {
     {Emotionnet, "emotionnet"},
     {Gender, "gender"},
     {Age, "age"},
-    {CarBrand, "carbrand"}
+    {CarBrand, "carbrand"},
+    {CarColor, "carcolor"},
+    {CarDamage, "cardamage"},
+    {FireDetect, "firedetect"},
+    {FashionColor, "fashioncolor"}
 };
 
 std::map<std::string, ModelType> ModelTypeReverseList = {
@@ -1402,7 +1410,15 @@ std::map<std::string, ModelType> ModelTypeReverseList = {
     {"gndr", Gender},
     {"age", Age},
     {"carbrand", CarBrand},
-    {"cbrd", CarBrand}  
+    {"cbrd", CarBrand} ,
+    {"carcolor", CarColor},
+    {"ccol", CarColor},
+    {"cardamage", CarDamage},
+    {"cdmg", CarDamage},
+    {"firedetect", FireDetect},
+    {"fire", FireDetect},
+    {"fashioncolor", FashionColor},
+    {"fcol", FashionColor}
 };
 
 bool isFileEmpty(const std::string& filePath) {

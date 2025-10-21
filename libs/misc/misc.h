@@ -555,6 +555,10 @@ enum ModelType {
     Gender,
     Age,
     CarBrand,
+    CarColor,
+    CarDamage,
+    FireDetect,
+    FashionColor,
     End
 };
 
