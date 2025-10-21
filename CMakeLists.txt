@@ -235,6 +235,10 @@ if (ON_HOST STREQUAL "BOTH" OR (NOT (ON_HOST STREQUAL "ON")))
     add_subdirectory(libs/workloads/gender)
     add_subdirectory(libs/workloads/age)
     add_subdirectory(libs/workloads/carbrand)
+    add_subdirectory(libs/workloads/carcolor)
+    add_subdirectory(libs/workloads/cardamage)
+    add_subdirectory(libs/workloads/fashioncolor)
+    add_subdirectory(libs/workloads/firedetect)
 
     add_library(PipePlusPlusSink
         libs/processing_engine/data_sink/main.cpp)
@@ -296,5 +300,17 @@ if (ON_HOST STREQUAL "BOTH" OR (NOT (ON_HOST STREQUAL "ON")))
 
     add_executable(Container_CarBrand libs/workloads/carbrand/carbrand.cpp)
     target_link_libraries(Container_CarBrand carbrand)
+
+    add_executable(Container_CarColor libs/workloads/carcolor/carcolor.cpp)
+    target_link_libraries(Container_CarColor carcolor)
+
+    add_executable(Container_CarDamage libs/workloads/cardamage/cardamage.cpp)
+    target_link_libraries(Container_CarDamage cardamage)
+
+    add_executable(Container_FashionColor libs/workloads/fashioncolor/fashioncolor.cpp)
+    target_link_libraries(Container_FashionColor fashioncolor)
+
+    add_executable(Container_FireDetect libs/workloads/firedetect/firedetect.cpp)
+    target_link_libraries(Container_FireDetect firedetect)
 
 endif()

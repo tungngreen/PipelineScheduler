@@ -1,14 +1,14 @@
 @PACKAGE_INIT@
 
 # Include the exported CMake file
-get_filename_component(carbrand_CMAKE_DIR "${CMAKE_CURRENT_LIST_FILE}" PATH)
+get_filename_component(cardamage_CMAKE_DIR "${CMAKE_CURRENT_LIST_FILE}" PATH)
 
 # This macro enables usage of find_dependency().
 # https://cmake.org/cmake/help/v3.11/module/CMakeFindDependencyMacro.html
 include(CMakeFindDependencyMacro)
 
-if(NOT TARGET carbrand::carbrand)
-    include("${carbrand_CMAKE_DIR}/carbrand-targets.cmake")
+if(NOT TARGET cardamage::cardamage)
+    include("${cardamage_CMAKE_DIR}/cardamage-targets.cmake")
 endif()
 
-check_required_components(carbrand)
+check_required_components(cardamage)
