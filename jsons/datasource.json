@@ -45,7 +45,7 @@
                         "nb_classOfInterest": -2,
                         "nb_commMethod": 4,
                         "nb_link": [
-                            "../data/preview/batch_test.mp4"
+                            "../data/preview/traffic_profiling.mp4"
                         ],
                         "nb_maxQueueSize": 100,
                         "nb_name": "video_source",
@@ -70,7 +70,7 @@
                         "nb_classOfInterest": -1,
                         "nb_commMethod": 2,
                         "nb_link": [
-                            "localhost:55010"
+                            "localhost:55013"
                         ],
                         "nb_maxQueueSize": 100,
                         "nb_name": "yolov5",

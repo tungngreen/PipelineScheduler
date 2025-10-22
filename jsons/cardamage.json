@@ -237,7 +237,7 @@
                 "cbs":1, 
                 "normalize": true,
                 "obs": 1,
-                "path": "../models/cardamage_dynamic_3090_fp32_64_1.engine",
+                "path": "../models/cardamage_dynamic_nms_3090_fp32_64_1.engine",
                 "prec": 4,
                 "msvc_imgNormScale": "1/255",
                 "msvc_subVals": [
@@ -372,7 +372,7 @@
         "profile_maxBatch": 64,
         "profile_stepMode": 1,
         "profile_step": 1,
-        "profile_templateModelPath": "../models/cardamage_dynamic_3090_fp32_[batch]_1.engine",
+        "profile_templateModelPath": "../models/cardamage_dynamic_nms_3090_fp32_[batch]_1.engine",
         "profile_inputRandomizeScheme": 0,
         "profile_numWarmUpBatches": 10,
         "profile_numProfileBatches": 100,

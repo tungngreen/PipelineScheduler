@@ -11,12 +11,6 @@
         "runCommand": "./runSink",
         "modelPath": ""
     },
-    "yolov5_server": {
-        "taskName": "yolov5",
-        "templateConfigPath": "../jsons/yolov5.json",
-        "runCommand": "./Container_Yolov5",
-        "modelPath": "../models/yolov5n_dynamic_nms_3090_126_fp32_16_1.engine"
-    },
     "yolov5n_server": {
         "taskName": "yolov5",
         "templateConfigPath": "../jsons/yolov5.json",
@@ -129,25 +123,19 @@
       "taskName": "fashioncolor",
       "templateConfigPath": "../jsons/fashioncolor.json",
       "runCommand": "./Container_FashionColor",
-      "modelPath": "../models/fashioncolor_dynamic_3090_126_fp32_64_1.engine"
+      "modelPath": "../models/fashioncolor_dynamic_nms_3090_126_fp32_64_1.engine"
     },
     "firedetect_server": {
       "taskName": "firedetect",
       "templateConfigPath": "../jsons/firedetect.json",
       "runCommand": "./Container_FireDetect",
-      "modelPath": "../models/firedetect_dynamic_3090_126_fp32_64_1.engine"
+      "modelPath": "../models/firedetect_dynamic_nms_3090_126_fp32_64_1.engine"
     },
     "datasource_nxavier": {
         "taskName": "datasource",
         "templateConfigPath": "../jsons/datasource.json",
         "runCommand": "./Container_DataSource",
         "modelPath": ""
-    },
-    "yolov5_nxavier": {
-        "taskName": "yolov5",
-        "templateConfigPath": "../jsons/yolov5.json",
-        "runCommand": "./Container_Yolov5",
-        "modelPath": "../models/yolov5n_dynamic_nms_nx_fp32_8_1.engine"
     },
     "yolov5n_nxavier": {
         "taskName": "yolov5",
@@ -237,25 +225,19 @@
       "taskName": "fashioncolor",
       "templateConfigPath": "../jsons/fashioncolor.json",
       "runCommand": "./Container_FashionColor",
-      "modelPath": "../models/fashioncolor_dynamic_nx_fp32_8_1.engine"
+      "modelPath": "../models/fashioncolor_dynamic_nms_nx_fp32_8_1.engine"
     },
     "firedetect_nxavier": {
       "taskName": "firedetect",
       "templateConfigPath": "../jsons/firedetect.json",
       "runCommand": "./Container_FireDetect",
-      "modelPath": "../models/firedetect_dynamic_nx_fp32_8_1.engine"
+      "modelPath": "../models/firedetect_dynamic_nms_nx_fp32_8_1.engine"
     },
     "datasource_agxavier": {
         "taskName": "datasource",
         "templateConfigPath": "../jsons/datasource.json",
         "runCommand": "./Container_DataSource",
         "modelPath": ""
-    },
-    "yolov5_agxavier": {
-        "taskName": "yolov5",
-        "templateConfigPath": "../jsons/yolov5.json",
-        "runCommand": "./Container_Yolov5",
-        "modelPath": "../models/yolov5n_dynamic_nms_agx_fp32_16_1.engine"
     },
     "yolov5n_agxavier": {
         "taskName": "yolov5",
@@ -345,25 +327,19 @@
       "taskName": "fashioncolor",
       "templateConfigPath": "../jsons/fashioncolor.json",
       "runCommand": "./Container_FashionColor",
-      "modelPath": "../models/fashioncolor_dynamic_agx_fp32_16_1.engine"
+      "modelPath": "../models/fashioncolor_dynamic_nms_agx_fp32_16_1.engine"
     },
     "firedetect_agxavier": {
       "taskName": "firedetect",
       "templateConfigPath": "../jsons/firedetect.json",
       "runCommand": "./Container_FireDetect",
-      "modelPath": "../models/firedetect_dynamic_agx_fp32_16_1.engine"
+      "modelPath": "../models/firedetect_dynamic_nms_agx_fp32_16_1.engine"
     },
     "datasource_orinano": {
         "taskName": "datasource",
         "templateConfigPath": "../jsons/datasource.json",
         "runCommand": "./Container_DataSource",
         "modelPath": ""
-    },
-    "yolov5_orinano": {
-        "taskName": "yolov5",
-        "templateConfigPath": "../jsons/yolov5.json",
-        "runCommand": "./Container_Yolov5",
-        "modelPath": "../models/yolov5n_dynamic_nms_orn_fp32_4_1.engine"
     },
     "yolov5n_orinano": {
         "taskName": "yolov5",
@@ -465,13 +441,13 @@
       "taskName": "fashioncolor",
       "templateConfigPath": "../jsons/fashioncolor.json",
       "runCommand": "./Container_FashionColor",
-      "modelPath": "../models/fashioncolor_dynamic_orn_fp32_8_1.engine"
+      "modelPath": "../models/fashioncolor_dynamic_nms_orn_fp32_8_1.engine"
     },
     "firedetect_orinano": {
       "taskName": "firedetect",
       "templateConfigPath": "../jsons/firedetect.json",
       "runCommand": "./Container_FireDetect",
-      "modelPath": "../models/firedetect_dynamic_orn_fp32_8_1.engine"
+      "modelPath": "../models/firedetect_dynamic_nms_orn_fp32_8_1.engine"
     },
     "yolov5n320_nxavier": {
         "taskName": "yolov5",
@@ -538,12 +514,6 @@
         "templateConfigPath": "",
         "runCommand": "./runSink",
         "modelPath": ""
-    },
-    "yolov5_onprem": {
-        "taskName": "yolov5",
-        "templateConfigPath": "../jsons/yolov5.json",
-        "runCommand": "./Container_Yolov5",
-        "modelPath": "../models/yolov5n_dynamic_nms_1080_fp32_16_1.engine"
     },
     "yolov5n_onprem": {
         "taskName": "yolov5",
@@ -657,25 +627,19 @@
       "taskName": "fashioncolor",
       "templateConfigPath": "../jsons/fashioncolor.json",
       "runCommand": "./Container_FashionColor",
-      "modelPath": "../models/fashioncolor_dynamic_1080_fp32_64_1.engine"
+      "modelPath": "../models/fashioncolor_dynamic_nms_1080_fp32_64_1.engine"
     },
     "firedetect_onprem": {
       "taskName": "firedetect",
       "templateConfigPath": "../jsons/firedetect.json",
       "runCommand": "./Container_FireDetect",
-      "modelPath": "../models/firedetect_dynamic_1080_fp32_64_1.engine"
+      "modelPath": "../models/firedetect_dynamic_nms_1080_fp32_64_1.engine"
     },
     "datasource_orinagx": {
       "taskName": "datasource",
       "templateConfigPath": "../jsons/datasource.json",
       "runCommand": "./Container_DataSource",
       "modelPath": ""
-    },
-    "yolov5_orinagx": {
-      "taskName": "yolov5",
-      "templateConfigPath": "../jsons/yolov5.json",
-      "runCommand": "./Container_Yolov5",
-      "modelPath": "../models/yolov5n_dynamic_nms_oagx_fp32_4_1.engine"
     },
     "yolov5n_orinagx": {
       "taskName": "yolov5",
@@ -705,85 +669,85 @@
       "taskName": "retina1face",
       "templateConfigPath": "../jsons/retina1face.json",
       "runCommand": "./Container_RetinaFace",
-      "modelPath": "../models/retina1face_oagx_fp32_8_1.engine"
+      "modelPath": "../models/retina1face_oagx_fp32_16_1.engine"
     },
     "retinamtfacedsrc_orinagx": {
       "taskName": "retinamtface",
       "templateConfigPath": "../jsons/retinaface.json",
       "runCommand": "./Container_RetinaFace",
-      "modelPath": "../models/retina_multiface_640_oagx_fp32_8_1.engine"
+      "modelPath": "../models/retina_multiface_640_oagx_fp32_16_1.engine"
     },
     "retinamtface_orinagx": {
       "taskName": "retinamtface",
       "templateConfigPath": "../jsons/retinaface.json",
       "runCommand": "./Container_RetinaFace",
-      "modelPath": "../models/retina_multiface_640_oagx_fp32_8_1.engine"
+      "modelPath": "../models/retina_multiface_640_oagx_fp32_16_1.engine"
     },
     "platedet_orinagx": {
       "taskName": "platedet",
       "templateConfigPath": "../jsons/platedet.json",
       "runCommand": "./Container_PlateDet",
-      "modelPath": "../models/platedet_dyn_nms_oagx_fp32_8_1.engine"
+      "modelPath": "../models/platedet_dyn_nms_oagx_fp32_16_1.engine"
     },
     "movenet_orinagx": {
       "taskName": "movenet",
       "templateConfigPath": "../jsons/movenet.json",
       "runCommand": "./Container_MoveNet",
-      "modelPath": "../models/pose_oagx_fp32_8_1.engine"
+      "modelPath": "../models/pose_oagx_fp32_16_1.engine"
     },
     "emotionnet_orinagx": {
       "taskName": "emotionnet",
       "templateConfigPath": "../jsons/emotionnet.json",
       "runCommand": "./Container_EmotionNet",
-      "modelPath": "../models/emotion_dyn_oagx_fp32_8_1.engine"
+      "modelPath": "../models/emotion_dyn_oagx_fp32_16_1.engine"
     },
     "arcface_orinagx": {
       "taskName": "arcface",
       "templateConfigPath": "../jsons/arcface.json",
       "runCommand": "./Container_ArcFace",
-      "modelPath": "../models/arcface_dynamic_oagx_fp32_8_1.engine"
+      "modelPath": "../models/arcface_dynamic_oagx_fp32_16_1.engine"
     },
     "age_orinagx": {
       "taskName": "age",
       "templateConfigPath": "../jsons/age.json",
       "runCommand": "./Container_Age",
-      "modelPath": "../models/age_dynamic_oagx_fp32_8_1.engine"
+      "modelPath": "../models/age_dynamic_oagx_fp32_16_1.engine"
     },
     "gender_orinagx": {
       "taskName": "gender",
       "templateConfigPath": "../jsons/gender.json",
       "runCommand": "./Container_Gender",
-      "modelPath": "../models/gender_dynamic_oagx_fp32_8_1.engine"
+      "modelPath": "../models/gender_dynamic_oagx_fp32_16_1.engine"
     },
     "carbrand_orinagx": {
       "taskName": "carbrand",
       "templateConfigPath": "../jsons/carbrand.json",
       "runCommand": "./Container_CarBrand",
-      "modelPath": "../models/carbrand_dynamic_oagx_fp32_8_1.engine"
+      "modelPath": "../models/carbrand_dynamic_oagx_fp32_16_1.engine"
     },
     "carcolor_orinagx": {
       "taskName": "carcolor",
       "templateConfigPath": "../jsons/carcolor.json",
       "runCommand": "./Container_CarColor",
-      "modelPath": "../models/carcolor_dynamic_oagx_fp32_8_1.engine"
+      "modelPath": "../models/carcolor_dynamic_oagx_fp32_16_1.engine"
     },
     "cardamage_orinagx": {
       "taskName": "cardamage",
       "templateConfigPath": "../jsons/cardamage.json",
       "runCommand": "./Container_CarDamage",
-      "modelPath": "../models/cardamage_dynamic_oagx_fp32_8_1.engine"
+      "modelPath": "../models/cardamage_dynamic_oagx_fp32_16_1.engine"
     },
     "fashioncolor_orinagx": {
       "taskName": "fashioncolor",
       "templateConfigPath": "../jsons/fashioncolor.json",
       "runCommand": "./Container_FashionColor",
-      "modelPath": "../models/fashioncolor_dynamic_oagx_fp32_8_1.engine"
+      "modelPath": "../models/fashioncolor_dynamic_nms_oagx_fp32_16_1.engine"
     },
     "firedetect_orinagx": {
       "taskName": "firedetect",
       "templateConfigPath": "../jsons/firedetect.json",
       "runCommand": "./Container_FireDetect",
-      "modelPath": "../models/firedetect_dynamic_oagx_fp32_8_1.engine"
+      "modelPath": "../models/firedetect_dynamic_nms_oagx_fp32_16_1.engine"
     },
     "yolov5n320_orinagx": {
       "taskName": "yolov5",
@@ -808,12 +772,6 @@
       "templateConfigPath": "../jsons/datasource.json",
       "runCommand": "./Container_DataSource",
       "modelPath": ""
-    },
-    "yolov5_orinnx": {
-      "taskName": "yolov5",
-      "templateConfigPath": "../jsons/yolov5.json",
-      "runCommand": "./Container_Yolov5",
-      "modelPath": "../models/yolov5n_dynamic_nms_ornx_fp32_4_1.engine"
     },
     "yolov5n_orinnx": {
       "taskName": "yolov5",
@@ -915,13 +873,13 @@
       "taskName": "fashioncolor",
       "templateConfigPath": "../jsons/fashioncolor.json",
       "runCommand": "./Container_FashionColor",
-      "modelPath": "../models/fashioncolor_dynamic_ornx_fp32_8_1.engine"
+      "modelPath": "../models/fashioncolor_dynamic_nms_ornx_fp32_8_1.engine"
     },
     "firedetect_orinnx": {
       "taskName": "firedetect",
       "templateConfigPath": "../jsons/firedetect.json",
       "runCommand": "./Container_FireDetect",
-      "modelPath": "../models/firedetect_dynamic_ornx_fp32_8_1.engine"
+      "modelPath": "../models/firedetect_dynamic_nms_ornx_fp32_8_1.engine"
     },
     "yolov5n320_orinnx": {
       "taskName": "yolov5",
