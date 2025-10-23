@@ -1122,14 +1122,16 @@ void ContainerAgent::collectRuntimeMetrics() {
                 for (auto &bat: cont_msvcsGroups["batcher"].msvcList) aggExecutedBatchSize += bat->GetAggExecutedBatchSize();
                 cont_throughput = aggExecutedBatchSize;
 
-                ContainerMetrics request;
-                request.set_name(cont_name);
-                request.set_arrival_rate(cont_request_arrival_rate);
-                request.set_queue_size(cont_queue_size);
-                request.set_avg_latency(cont_ewma_latency);
-                request.set_drops(cont_late_drops);
-                request.set_throughput(cont_throughput);
-                sendMessageToDevice(MSG_TYPE[CONTEXT_METRICS], request.SerializeAsString());
+                if (cont_RUNMODE != PROFILING) {
+                    ContainerMetrics request;
+                    request.set_name(cont_name);
+                    request.set_arrival_rate(cont_request_arrival_rate);
+                    request.set_queue_size(cont_queue_size);
+                    request.set_avg_latency(cont_ewma_latency);
+                    request.set_drops(cont_late_drops);
+                    request.set_throughput(cont_throughput);
+                    sendMessageToDevice(MSG_TYPE[CONTEXT_METRICS], request.SerializeAsString());
+                }
                 cont_nextOptimizationMetricsTime = std::chrono::high_resolution_clock::now() + std::chrono::milliseconds(cont_localOptimizationIntervalMillisec);
             }
         }
