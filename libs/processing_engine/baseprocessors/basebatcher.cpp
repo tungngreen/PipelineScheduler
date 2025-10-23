@@ -313,18 +313,25 @@ void BaseBatcher::batchRequests() {
         // Current incoming equest and request to be sent out to the next
         Request<LocalGPUReqDataType> currReq = msvc_InQueue.at(0)->pop2(msvc_name);
         // Meaning the the timeout in pop() has been reached and no request was actually popped
-        if (strcmp(currReq.req_travelPath[0].c_str(), "empty") == 0) {
+        if (strcmp(currReq.req_travelPath[0].c_str(), "empty") == 0)
             continue;
-        } else if (strcmp(currReq.req_travelPath[0].c_str(), "flush") == 0) {
+        if (strcmp(currReq.req_travelPath[0].c_str(), "flush") == 0) {
             if (msvc_onBufferBatchSize > 0) {
                 executeBatching(outBatch_genTime, outBatch_slo, outBatch_path, bufferData, batchConcatInfo, prevData);
             }
             continue;
-        /**
-         * @brief ONLY IN PROFILING MODE
-         * Check if the profiling is to be stopped, if true, then send a signal to the downstream microservice to stop profiling
-         */
-        } else if (checkProfileEnd(currReq.req_travelPath[0])) {
+            /**
+             * @brief ONLY IN PROFILING MODE
+             * Check if the profiling is to be stopped, if true, then send a signal to the downstream microservice to stop profiling
+             */
+        }
+        if (strcmp(currReq.req_travelPath[0].c_str(), "WARMUP_COMPLETED") == 0) {
+            msvc_profWarmupCompleted = true;
+            spdlog::get("container_agent")->info("{0:s} received the signal that the warmup is completed.", msvc_name);
+            msvc_OutQueue[0]->emplace(currReq);
+            continue;
+        }
+        if (checkProfileEnd(currReq.req_travelPath[0])) {
             spdlog::get("container_agent")->info("{0:s} is stopping profiling.", msvc_name);
             STOP_THREADS = true;
             msvc_OutQueue[0]->emplace(
@@ -338,11 +345,6 @@ void BaseBatcher::batchRequests() {
                             {}
                     }
             );
-            continue;
-        }  else if (strcmp(currReq.req_travelPath[0].c_str(), "WARMUP_COMPLETED") == 0) {
-            msvc_profWarmupCompleted = true;
-            spdlog::get("container_agent")->info("{0:s} received the signal that the warmup is completed.", msvc_name);
-            msvc_OutQueue[0]->emplace(currReq);
             continue;
         }
 
