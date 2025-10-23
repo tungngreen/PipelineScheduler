@@ -480,27 +480,6 @@ void BaseVisionPreprocessor::preprocess() {
             // }
         }
         spdlog::get("container_agent")->trace("{0:s} is exiting the loop.", msvc_name);
-
-        /**
-         * @brief ONLY IN PROFILING MODE
-         * Check if the profiling is to be stopped, if true, then send a signal to the downstream microservice to stop profiling
-         */
-        if (checkProfileEnd(currReq.req_travelPath[0])) {
-            spdlog::get("container_agent")->info("{0:s} is stopping profiling.", msvc_name);
-            STOP_THREADS = true;
-            msvc_OutQueue[0]->emplace(
-                    Request<LocalGPUReqDataType>{
-                            {},
-                            {},
-                            {"STOP_PROFILING"},
-                            0,
-                            {},
-                            {},
-                            {}
-                    }
-            );
-            continue;
-        }
     }
     if (preProcStream) {
         delete preProcStream;

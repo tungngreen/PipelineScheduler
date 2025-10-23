@@ -1154,7 +1154,7 @@ void ContainerAgent::collectRuntimeMetrics() {
                     sql = "INSERT INTO " + cont_hwMetricsTableName +
                         " (timestamps, batch_size, cpu_usage, mem_usage, rss_mem_usage, gpu_usage, gpu_mem_usage) VALUES ";
                     sql += "(" + timePointToEpochString(std::chrono::high_resolution_clock::now()) + ", ";
-                    sql += std::to_string(cont_msvcsGroups["preprocessor"].msvcList[0]->msvc_idealBatchSize) + ", ";
+                    sql += std::to_string(cont_msvcsGroups["batcher"].msvcList[0]->msvc_idealBatchSize) + ", ";
                     sql += std::to_string(cont_hwMetrics.cpuUsage) + ", ";
                     sql += std::to_string(cont_hwMetrics.memUsage) + ", ";
                     sql += std::to_string(cont_hwMetrics.rssMemUsage) + ", ";

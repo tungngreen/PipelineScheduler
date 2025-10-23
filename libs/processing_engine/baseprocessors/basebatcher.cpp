@@ -324,14 +324,20 @@ void BaseBatcher::batchRequests() {
          * @brief ONLY IN PROFILING MODE
          * Check if the profiling is to be stopped, if true, then send a signal to the downstream microservice to stop profiling
          */
-        } else if (strcmp(currReq.req_travelPath[0].c_str(), "STOP_PROFILING") == 0) {
+        } else if (checkProfileEnd(currReq.req_travelPath[0])) {
+            spdlog::get("container_agent")->info("{0:s} is stopping profiling.", msvc_name);
             STOP_THREADS = true;
-            msvc_OutQueue[0]->emplace(currReq);
-            continue;
-        }  else if (strcmp(currReq.req_travelPath[0].c_str(), "WARMUP_COMPLETED") == 0) {
-            msvc_profWarmupCompleted = true;
-            spdlog::get("container_agent")->info("{0:s} received the signal that the warmup is completed.", msvc_name);
-            msvc_OutQueue[0]->emplace(currReq);
+            msvc_OutQueue[0]->emplace(
+                    Request<LocalGPUReqDataType>{
+                            {},
+                            {},
+                            {"STOP_PROFILING"},
+                            0,
+                            {},
+                            {},
+                            {}
+                    }
+            );
             continue;
         }
 
