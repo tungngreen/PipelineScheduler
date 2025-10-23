@@ -59,7 +59,7 @@ public:
     static int getGpuCount() { return 1; };
     static std::vector<unsigned int> getGpuMemory(int device_count) { return {0}; };
 
-    sysStats reportAtRuntime(unsigned int pid, unsigned int voidPid) {
+    sysStats reportAtRuntime(unsigned int voidPid, unsigned int pid) {
         std::lock_guard<std::mutex> lock(m); return stats[pid]; };
     sysStats reportAnyMetrics() {
         std::lock_guard<std::mutex> lock(m); return stats.begin()->second; };
