@@ -339,6 +339,11 @@ void BaseBatcher::batchRequests() {
                     }
             );
             continue;
+        }  else if (strcmp(currReq.req_travelPath[0].c_str(), "WARMUP_COMPLETED") == 0) {
+            msvc_profWarmupCompleted = true;
+            spdlog::get("container_agent")->info("{0:s} received the signal that the warmup is completed.", msvc_name);
+            msvc_OutQueue[0]->emplace(currReq);
+            continue;
         }
 
         if (msvc_onBufferBatchSize == 0 && msvc_BATCH_MODE != BATCH_MODE::FIXED) {
