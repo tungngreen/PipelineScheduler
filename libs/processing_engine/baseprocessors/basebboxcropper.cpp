@@ -721,7 +721,7 @@ void BaseBBoxCropper::cropping() {
 
             // If the number of warmup batches has been passed, we start to record the latency
             if (warmupCompleted()) {
-                for (uint8_t j = 0; j < numImagesInFrame; ++j) {
+                for (uint8_t j = 0; j < numImagesInFrame + 1; ++j) {
                     uint8_t imageIndexInBatch = currReq.req_concatInfo[i].firstImageIndex + j;
                     // 12. When the request was completed by the postprocessor (TWELFTH_TIMESTAMP)
                     currReq.req_origGenTime[imageIndexInBatch].emplace_back(std::chrono::high_resolution_clock::now());
