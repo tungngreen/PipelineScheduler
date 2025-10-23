@@ -637,7 +637,7 @@ public:
         std::string reqOriginStream,
         std::string originDevice
     ) {
-        for (size_t i = 0; i < timestamps.size() - 1; ++i) {
+        for (size_t i = 1; i < timestamps.size() - 1; ++i) {
             if (timestamps[i] > timestamps[i + 1]) return;
         }
 
@@ -767,7 +767,7 @@ public:
         uint32_t reqNumber,
         std::string reqOrigin = "stream"
     ) {
-        for (size_t i = 0; i < timestamps.size() - 1; ++i) {
+        for (size_t i = 4; i < timestamps.size() - 1; ++i) {
             if (timestamps[i] >= timestamps[i + 1]) return;
         }
         auto prepDuration = std::chrono::duration_cast<TimePrecisionType>(timestamps[5] - timestamps[4]).count();
