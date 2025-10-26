@@ -1122,7 +1122,7 @@ void ContainerAgent::collectRuntimeMetrics() {
                 for (auto &bat: cont_msvcsGroups["batcher"].msvcList) aggExecutedBatchSize += bat->GetAggExecutedBatchSize();
                 cont_throughput = aggExecutedBatchSize;
 
-                if (cont_RUNMODE != PROFILING) {
+                if (cont_RUNMODE != PROFILING && pid != 0) {
                     ContainerMetrics request;
                     request.set_name(cont_name);
                     request.set_arrival_rate(cont_request_arrival_rate);

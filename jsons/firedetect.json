@@ -1,6 +1,6 @@
 {
     "container": {
-        "cont_experimentName": "th0",
+        "cont_experimentName": "test",
         "cont_systemName": "ppp",
         "cont_pipeName": "traffic",
         "cont_taskName": "firedetect",
@@ -11,11 +11,11 @@
             {
                 "msvc_name": "receiver",
                 "msvc_numInstances": 1,
-                "msvc_idealBatchSize": 2,
+                "msvc_idealBatchSize": 1,
                 "msvc_dnstreamMicroservices": [
                     {
                         "nb_classOfInterest": -1,
-                        "nb_commMethod": 3,
+                        "nb_commMethod": 4,
                         "nb_link": [
                             ""
                         ],
@@ -34,8 +34,8 @@
                 "msvc_dataShape": [
                     [
                         3,
-                        224,
-                        224
+                        1280,
+                        720
                     ]
                 ],
                 "msvc_pipelineSLO": 999999,
@@ -43,12 +43,12 @@
                 "msvc_upstreamMicroservices": [
                     {
                         "nb_classOfInterest": -2,
-                        "nb_commMethod": 3,
+                        "nb_commMethod": 2,
                         "nb_link": [
-                            "0.0.0.0:55013"
+                            "0.0.0.0:55009"
                         ],
                         "nb_maxQueueSize": 100,
-                        "nb_name": "yolov5",
+                        "nb_name": "datasource",
                         "nb_expectedShape": [
                             [
                                 -1,
@@ -79,8 +79,8 @@
                         "nb_expectedShape": [
                             [
                                 3,
-                                224,
-                                224
+                                640,
+                                640
                             ]
                         ],
                         "nb_portions": []
@@ -132,7 +132,7 @@
             {
                 "msvc_name": "batcher",
                 "msvc_numInstances": 1,
-                "msvc_idealBatchSize": 4,
+                "msvc_idealBatchSize": 1,
                 "msvc_dnstreamMicroservices": [
                     {
                         "nb_classOfInterest": -1,
@@ -172,8 +172,8 @@
                         "nb_expectedShape": [
                             [
                                 3,
-                                224,
-                                224
+                                640,
+                                640
                             ]
                         ],
                         "nb_portions": []
@@ -185,7 +185,7 @@
             {
                 "msvc_name": "inference",
                 "msvc_numInstances": 1,
-                "msvc_idealBatchSize": 4,
+                "msvc_idealBatchSize": 2,
                 "msvc_dnstreamMicroservices": [
                     {
                         "nb_classOfInterest": -1,
@@ -194,10 +194,20 @@
                             ""
                         ],
                         "nb_maxQueueSize": 100,
-                        "nb_name": "batcher",
+                        "nb_name": "postprocessor",
                         "nb_expectedShape": [
                             [
-                                9
+                                1 
+                            ],
+                            [
+                                100,
+                                4
+                            ],
+                            [
+                                100
+                            ],
+                            [
+                                100
                             ]
                         ],
                         "nb_portions": []
@@ -219,11 +229,12 @@
                             ""
                         ],
                         "nb_maxQueueSize": 100,
-                        "nb_name": "preprocessor",
+                        "nb_name": "batcher",
                         "nb_expectedShape": [
                             [
-                                -1,
-                                -1
+                                3,
+                                640,
+                                640
                             ]
                         ],
                         "nb_portions": []
@@ -234,11 +245,12 @@
                 "calibration": "",
                 "di": 0,
                 "mbs": 1,
-                "cbs":1, 
+                "cbs":1,
                 "normalize": true,
                 "obs": 1,
-                "path": "../models/firedetect_dynamic_nms_3090_fp32_64_1.engine",
+                "path": "../models/firedetect_dynamic_nms_3090_126_fp32_32_1.engine",
                 "prec": 4,
+                "device": 0,
                 "msvc_imgNormScale": "1/255",
                 "msvc_subVals": [
                     0,
@@ -254,10 +266,10 @@
             {
                 "msvc_name": "postprocessor",
                 "msvc_numInstances": 1,
-                "msvc_idealBatchSize": 2,
+                "msvc_idealBatchSize": 1,
                 "msvc_dnstreamMicroservices": [
                     {
-                        "nb_classOfInterest": -1,
+                        "nb_classOfInterest": 0,
                         "nb_commMethod": 4,
                         "nb_link": [
                             ""
@@ -266,8 +278,8 @@
                         "nb_name": "sender",
                         "nb_expectedShape": [
                             [
-                                -1,
-                                -1
+                                0,
+                                0
                             ]
                         ],
                         "nb_portions": []
@@ -275,11 +287,21 @@
                 ],
                 "msvc_dataShape": [
                     [
-                        9
+                        1
+                    ],
+                    [
+                        100,
+                        4
+                    ],
+                    [
+                        100
+                    ],
+                    [
+                        100
                     ]
                 ],
                 "msvc_pipelineSLO": 999999,
-                "msvc_type": 3004,
+                "msvc_type": 3001,
                 "msvc_upstreamMicroservices": [
                     {
                         "nb_classOfInterest": -2,
@@ -291,29 +313,32 @@
                         "nb_name": "inference",
                         "nb_expectedShape": [
                             [
-                                -1,
-                                -1
+                                3,
+                                640,
+                                640
                             ]
                         ],
                         "nb_portions": []
                     }
                 ],
                 "msvc_maxQueueSize": 100,
-                "=========================================Here ends the common part of the microservice configuration": "The following are the specific configurations for each microservice."
+                "=========================================Here ends the common part of the microservice configuration": "The following are the specific configurations for each microservice.",
+                "msvc_confThreshold": 0.25,
+                "msvc_augment": false
             },
             {
                 "msvc_name": "sender",
                 "msvc_numInstances": 1,
-                "msvc_idealBatchSize": 4,
+                "msvc_idealBatchSize": 20,
                 "msvc_dnstreamMicroservices": [
                     {
                         "nb_classOfInterest": -1,
                         "nb_commMethod": 2,
                         "nb_link": [
-                            "localhost:55055"
+                            "localhost:55010"
                         ],
                         "nb_maxQueueSize": 100,
-                        "nb_name": "datasink",
+                        "nb_name": "name",
                         "nb_expectedShape": [
                             [
                                 -1,
@@ -369,31 +394,32 @@
     },
     "profiling": {
         "profile_minBatch": 1,
-        "profile_maxBatch": 64,
+        "profile_maxBatch": 16,
         "profile_stepMode": 1,
         "profile_step": 1,
-        "profile_templateModelPath": "../models/firedetect_dynamic_nms_3090_fp32_[batch]_1.engine",
+        "profile_templateModelPath": "../models/firedetect_dynamic_nms_3090_126_fp32_16_1.engine",
         "profile_inputRandomizeScheme": 0,
         "profile_numWarmUpBatches": 10,
         "profile_numProfileBatches": 100,
         "profile_numProfileReqs": 1800
     },
     "fcpo": {
-        "state_size": 5,
-        "resolution_size": 1,
-        "batch_size": 64,
+        "state_size": 9,
+        "timeout_size": 4,
+        "batch_size": 16,
         "threads_size": 4,
-        "lambda": 0.95,
-        "gamma": 0.99,
-        "clip_epsilon": 0.2,
-        "penalty_weight": 0.1,
+        "lambda": 0.2,
+        "gamma": 0.2,
+        "clip_epsilon": 0.9,
+        "penalty_weight": 0.2,
         "theta": 1.1,
         "sigma": 10.0,
         "phi": 2.0,
         "rho": 1.0,
         "precision": "float",
-        "update_steps": 60,
-        "update_step_incs": 5,
-        "federated_steps": 5
+        "update_steps": 150,
+        "update_step_incs": 10,
+        "federated_steps": 10,
+        "seed": 42
     }
 }
