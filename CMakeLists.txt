@@ -239,6 +239,9 @@ if (ON_HOST STREQUAL "BOTH" OR (NOT (ON_HOST STREQUAL "ON")))
     add_subdirectory(libs/workloads/cardamage)
     add_subdirectory(libs/workloads/fashioncolor)
     add_subdirectory(libs/workloads/firedetect)
+    add_subdirectory(libs/workloads/geardetect)
+    add_subdirectory(libs/workloads/equipdetect)
+
 
     add_library(PipePlusPlusSink
         libs/processing_engine/data_sink/main.cpp)
@@ -312,5 +315,11 @@ if (ON_HOST STREQUAL "BOTH" OR (NOT (ON_HOST STREQUAL "ON")))
 
     add_executable(Container_FireDetect libs/workloads/firedetect/firedetect.cpp)
     target_link_libraries(Container_FireDetect firedetect)
+
+    add_executable(Container_GearDetect libs/workloads/geardetect/geardetect.cpp)
+    target_link_libraries(Container_GearDetect geardetect)
+
+    add_executable(Container_EquipDetect libs/workloads/equipdetect/equipdetect.cpp)
+    target_link_libraries(Container_EquipDetect equipdetect)
 
 endif()

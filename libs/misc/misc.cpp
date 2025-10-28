@@ -1363,7 +1363,9 @@ std::map<ModelType, std::string> ModelTypeList = {
     {CarColor, "carcolor"},
     {CarDamage, "cardamage"},
     {FireDetect, "firedetect"},
-    {FashionColor, "fashioncolor"}
+    {FashionColor, "fashioncolor"},
+    {GearDetect, "geardetect"},
+    {EquipDetect, "equipdetect"}
 };
 
 std::map<std::string, ModelType> ModelTypeReverseList = {
@@ -1418,7 +1420,11 @@ std::map<std::string, ModelType> ModelTypeReverseList = {
     {"firedetect", FireDetect},
     {"fire", FireDetect},
     {"fashioncolor", FashionColor},
-    {"fcol", FashionColor}
+    {"fcol", FashionColor},
+    {"geardetect", GearDetect},
+    {"gear", GearDetect},
+    {"equipdetect", EquipDetect},
+    {"equi", EquipDetect}
 };
 
 bool isFileEmpty(const std::string& filePath) {

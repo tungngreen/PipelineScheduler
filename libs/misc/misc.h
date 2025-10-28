@@ -559,6 +559,8 @@ enum ModelType {
     CarDamage,
     FireDetect,
     FashionColor,
+    GearDetect,
+    EquipDetect,
     End
 };
 
