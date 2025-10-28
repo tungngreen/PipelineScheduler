@@ -619,19 +619,30 @@ Controller::Controller(int argc, char **argv) {
     running = true;
     ctrl_clusterID = 0;
 
-    std::string server_address = absl::StrFormat("tcp://*:%d", CONTROLLER_RECEIVE_PORT + ctrl_port_offset);
-    ctx = context_t(2);
-    server_socket = socket_t(ctx, ZMQ_REP);
+    std::string server_address = absl::StrFormat("tcp://*:%d", CONTROLLER_API_PORT);
+    api_ctx = context_t(1);
+    api_socket = socket_t(api_ctx, ZMQ_REP);
+    api_socket.bind(server_address);
+    api_socket.set(zmq::sockopt::rcvtimeo, 1000);
+    api_handlers = {
+        {MSG_TYPE[START_TASK], std::bind(&Controller::ScheduleSingleTask, this, std::placeholders::_1)},
+        {MSG_TYPE[STOP_TASK], std::bind(&Controller::StopSingleTask, this, std::placeholders::_1)}
+    };
+
+    server_address = absl::StrFormat("tcp://*:%d", CONTROLLER_RECEIVE_PORT + ctrl_port_offset);
+    system_ctx = context_t(2);
+    server_socket = socket_t(system_ctx, ZMQ_REP);
     server_socket.bind(server_address);
     server_socket.set(zmq::sockopt::rcvtimeo, 1000);
-    handlers = {
+    system_handlers = {
         {MSG_TYPE[DEVICE_ADVERTISEMENT], std::bind(&Controller::handleDeviseAdvertisement, this, std::placeholders::_1)},
         {MSG_TYPE[DUMMY_DATA], std::bind(&Controller::handleDummyDataRequest, this, std::placeholders::_1)},
         {MSG_TYPE[START_FL], std::bind(&Controller::handleForwardFLRequest, this, std::placeholders::_1)},
         {MSG_TYPE[SINK_METRICS], std::bind(&Controller::handleSinkMetrics, this, std::placeholders::_1)}
     };
+
     server_address = absl::StrFormat("tcp://*:%d", CONTROLLER_MESSAGE_QUEUE_PORT + ctrl_port_offset);
-    message_queue = socket_t(ctx, ZMQ_PUB);
+    message_queue = socket_t(system_ctx, ZMQ_PUB);
     message_queue.bind(server_address);
     message_queue.set(zmq::sockopt::sndtimeo, 100);
 
@@ -1422,8 +1433,8 @@ void Controller::HandleControlMessages() {
             iss.get(); // skip the space after the topic
             std::string payload((std::istreambuf_iterator<char>(iss)),
                                 std::istreambuf_iterator<char>());
-            if (handlers.count(topic)) {
-                handlers[topic](payload);
+            if (system_handlers.count(topic)) {
+                system_handlers[topic](payload);
             } else {
                 spdlog::get("container_agent")->error("Received unknown topic: {}", topic);
             }
@@ -1545,7 +1556,7 @@ NetworkEntryType Controller::initNetworkCheck(NodeHandle &node, uint32_t minPack
     network_check_buffer[node.name].clear();
     spdlog::get("container_agent")->info("Finished network check for device {}.", node.name);
     // find the closest latency between min and max packet size
-    float latency;
+    float latency = 0.0f;
     for (auto &entry: entries) {
         if (entry.first >= (minPacketSize + maxPacketSize) / 2) {
             latency = entry.second;

@@ -29,7 +29,10 @@ std::unordered_map<MESSAGE_TYPE_VALUES, std::string> MSG_TYPE = {
         {START_FL, "FL_START"},
         {RETURN_FL, "RET_FL"},
         {CRL_WEIGHTS, "CRLW"},
-        {BCEDGE_UPDATE, "BCEDGE_UPD"}
+        {BCEDGE_UPDATE, "BCEDGE_UPD"},
+
+        {START_TASK, "START"},
+        {STOP_TASK, "STOP"}
 };
 
 std::chrono::time_point<std::chrono::_V2::system_clock, std::chrono::milliseconds> timePointCastMillisecond(
@@ -1339,6 +1342,17 @@ std::map<std::string, SystemDeviceType> SystemDeviceTypeReverseList = {
     {"nx", NXXavier},
     {"nanoxavier", NanoXavier},
     {"naxa", NanoXavier}
+};
+
+std::map<std::string, PipelineType> PipelineTypeReverseList = {
+    {"", None},
+    {"traffic", Traffic},
+    {"indoor", Indoor},
+    {"building", Building_Security},
+    {"surveillance_robot", Surveillance_Robot},
+    {"surveillance_campus", Surveillance_Campus},
+    {"factory_robot", Factory_Robot},
+    {"factory_cctv", Factory_CCTV}
 };
 
 std::map<ModelType, std::string> ModelTypeList = {

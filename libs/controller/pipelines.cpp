@@ -1101,30 +1101,6 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
             }
             return {datasource, yolov5n, retina1face, arcface, activity, sink};
         }
-        case PipelineType::Smart_Glasses: {
-            auto *datasource = new PipelineModel{startDevice, "datasource", ModelType::DataSource, {}, 0, true, {}, {}};
-            datasource->possibleDevices = {startDevice};
-
-            auto *vlm = new PipelineModel{};
-            vlm->possibleDevices = {edgeNode};
-
-            auto *sink = new PipelineModel{
-                    "sink",
-                    "sink",
-                    ModelType::Sink,
-                    {},
-                    0,
-                    false,
-                    {},
-                    {},
-                    {},
-                    {{vlm, -1}}
-            };
-            sink->possibleDevices = {"sink"};
-            vlm->upstreams = {{sink, -1}};
-
-            return {datasource, vlm, sink};
-        }
         default:
             return {};
     }
@@ -1216,4 +1192,34 @@ PipelineModelListType deepCopyPipelineModelList(const PipelineModelListType& ori
         newList.push_back(new PipelineModel(*model));
     }
     return newList;
+}
+
+TaskHandle *Controller::CreatePipelineFromMessage(TaskDesc msg) {
+    TaskHandle *task = new TaskHandle{msg.name(), PipelineTypeReverseList[msg.type()], msg.stream(), msg.srcdevice(), msg.slo(), {}, msg.edgenode()};
+
+    std::map<std::string, NodeHandle*> deviceList = devices.getMap();
+
+    if (deviceList.find(msg.srcdevice()) == deviceList.end()) {
+        spdlog::error("Device {0:s} is not connected", msg.srcdevice());
+        return nullptr;
+    }
+
+    while (!deviceList.at(msg.srcdevice())->initialNetworkCheck) {
+        spdlog::get("container_agent")->info("Waiting for device {0:s} to finish network check", msg.srcdevice());
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    }
+
+    task->tk_src_device = msg.srcdevice();
+
+    if (task->tk_type != PipelineType::None)
+        task->tk_pipelineModels = getModelsByPipelineType(task->tk_type, msg.srcdevice(), msg.name(), msg.stream(), msg.edgenode());
+    else {
+        // TODO: Hand Construct the Models based on msg.models()
+        task->tk_pipelineModels = PipelineModelListType();
+    }
+    for (auto &model: task->tk_pipelineModels) {
+        model->datasourceName = {msg.stream()};
+        model->task = task;
+    }
+    return task;
 }

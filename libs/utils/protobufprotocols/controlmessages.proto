@@ -5,6 +5,30 @@ option objc_class_prefix = "HLW";
 
 package controlmessages;
 
+message PipeModelDesc {
+  string device = 1;
+  string type = 2;
+  int32 position = 3;
+  bool isSplitPoint = 4;
+  repeated string downstreams = 5;
+  repeated string upstreams = 6;
+}
+
+message TaskDesc {
+  string name = 1;
+  string type = 2;
+  int32 slo = 3;
+  string stream = 4;
+  string srcDevice = 5;
+  string edgeNode = 6;
+  repeated PipeModelDesc models = 7;
+}
+
+message TaskCommand {
+  string task_name = 1;
+  string task_srcDevice = 2;
+}
+
 message ConnectionConfigs {
   string device_name = 1;
   uint32 device_type = 2;

@@ -46,6 +46,7 @@ typedef uint16_t BatchSizeType;
 typedef uint32_t RequestMemSizeType;
 
 const int DATA_BASE_PORT = 55001;
+const int CONTROLLER_API_PORT = 60000;
 const int CONTROLLER_RECEIVE_PORT = 60001;
 const int CONTROLLER_MESSAGE_QUEUE_PORT = 60002;
 const int IN_DEVICE_RECEIVE_PORT = 60011;
@@ -76,7 +77,10 @@ enum MESSAGE_TYPE_VALUES {
     START_FL,
     RETURN_FL,
     CRL_WEIGHTS,
-    BCEDGE_UPDATE
+    BCEDGE_UPDATE,
+
+    START_TASK,
+    STOP_TASK
 };
 
 extern std::unordered_map<MESSAGE_TYPE_VALUES, std::string> MSG_TYPE;
@@ -519,14 +523,14 @@ enum AdjustUpstreamMode {
 typedef std::map<SystemDeviceType, std::string> DeviceInfoType;
 
 enum PipelineType {
-    Traffic,
-    Indoor,
-    Building_Security,
-    Surveillance_Robot,
-    Surveillance_Campus,
-    Factory_Robot,
-    Factory_CCTV,
-    Smart_Glasses
+    None = -1,
+    Traffic = 0,
+    Indoor = 1,
+    Building_Security = 2,
+    Surveillance_Robot = 3,
+    Surveillance_Campus = 4,
+    Factory_Robot = 5,
+    Factory_CCTV = 6
 };
 
 enum MODEL_DATA_TYPE {
@@ -567,6 +571,7 @@ enum ModelType {
 extern std::map<std::string, std::string> keywordAbbrs;
 extern std::map<SystemDeviceType, std::string> SystemDeviceTypeList;
 extern std::map<std::string, SystemDeviceType> SystemDeviceTypeReverseList;
+extern std::map<std::string, PipelineType> PipelineTypeReverseList;
 extern std::map<ModelType, std::string> ModelTypeList;
 extern std::map<std::string, ModelType> ModelTypeReverseList;
 

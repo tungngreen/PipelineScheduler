@@ -11,6 +11,9 @@
 #include "fcpo_learning.h"
 #include "bandwidth_predictor/bandwidth_predictor.h"
 
+using controlmessages::TaskCommand;
+using controlmessages::TaskDesc;
+using controlmessages::PipeModelDesc;
 using controlmessages::LoopRange;
 using controlmessages::ContainerConfig;
 using controlmessages::ContainerLink;
@@ -619,12 +622,13 @@ struct TaskHandle {
                const std::string& tk_source,
                const std::string& tk_src_device,
                int tk_slo,
-               ClockType tk_startTime)
+               ClockType tk_startTime,
+               const std::string& tk_edge_node = "server")
     : tk_name(tk_name),
       tk_type(tk_type),
       tk_source(tk_source),
       tk_src_device(tk_src_device),
-      tk_edge_node("server"),
+      tk_edge_node(tk_edge_node),
       tk_slo(tk_slo),
       tk_memSlo(1),
       tk_startTime(tk_startTime),
@@ -954,6 +958,7 @@ private:
     PipelineModelListType getModelsByPipelineType(PipelineType type, const std::string &startDevice,
                                                   const std::string &pipelineName = "", const std::string &streamName = "", const std::string &edgeNode = "server");
     std::vector<std::string> getPipelineNames();
+    TaskHandle *CreatePipelineFromMessage(TaskDesc msg);
 
     // STARTUP
     void ApplyScheduling();
@@ -1011,6 +1016,7 @@ private:
     void estimatePipelineLatency(PipelineModel *currModel, const uint64_t start2HereLatency);
     void estimateModelTiming(PipelineModel *currModel, const uint64_t start2HereDutyCycle);
     void estimatePipelineTiming();
+    void estimatePipelineTiming(TaskHandle *task);
     void estimateTimeBudgetLeft(PipelineModel *currModel);
 
     // PIPELINE MERGING
@@ -1031,6 +1037,10 @@ private:
     void handleForwardFLRequest(const std::string &msg);
     void handleSinkMetrics(const std::string &msg);
     void sendMessageToDevice(const std::string &topik, const std::string &type, const std::string &content);
+
+    // API CALLS
+    void ScheduleSingleTask(const std::string &msg);
+    void StopSingleTask(const std::string &msg);
 
     /////////////////////////////////////////// PRIVATE VARIABLES ///////////////////////////////////////////
 
@@ -1069,10 +1079,9 @@ private:
     uint16_t ctrl_verbose;
 
     // MESSAGING & NETWORK
-    context_t ctx;
-    socket_t server_socket;
-    socket_t message_queue;
-    std::unordered_map<std::string, std::function<void(const std::string&)>> handlers;
+    context_t api_ctx, system_ctx;
+    socket_t api_socket, server_socket, message_queue;
+    std::unordered_map<std::string, std::function<void(const std::string&)>> api_handlers, system_handlers;
 
     // PROFILING DATA & METRICS
     std::unique_ptr<pqxx::connection> ctrl_metricsServerConn = nullptr;

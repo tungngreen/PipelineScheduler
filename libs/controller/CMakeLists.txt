@@ -98,18 +98,28 @@ elseif (SYSTEM_NAME STREQUAL "TUTTI")
                 systems/scheduling_tuti.cpp
         )
 elseif (SYSTEM_NAME STREQUAL "APIS")
-    set(HEADER_FILES
-            ${HEADER_FILES}
-            systems/scheduling_apis.h
-    )
+        set(HEADER_FILES
+                ${HEADER_FILES}
+                systems/scheduling_apis.h
+        )
 
-    set(SOURCE_FILES
-            ${SOURCE_FILES}
-            systems/scheduling_apis.cpp
-    )
+        set(SOURCE_FILES
+                ${SOURCE_FILES}
+                systems/scheduling_apis.cpp
+        )
 
-    set(apis_rl_DIR "${CMAKE_CURRENT_BINARY_DIR}/apis_rl")
-    find_package(apis_rl CONFIG REQUIRED)
+        set(apis_rl_DIR "${CMAKE_CURRENT_BINARY_DIR}/apis_rl")
+        find_package(apis_rl CONFIG REQUIRED)
+elseif (SYSTEM_NAME STREQUAL "OCTO")
+        set(HEADER_FILES
+                ${HEADER_FILES}
+                systems/scheduling_octo.h
+        )
+
+        set(SOURCE_FILES
+                ${SOURCE_FILES}
+                systems/scheduling_octo.cpp
+        )
 endif()
 
 # Here we define the library.
