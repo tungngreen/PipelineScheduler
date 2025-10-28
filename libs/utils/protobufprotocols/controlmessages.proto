@@ -5,13 +5,18 @@ option objc_class_prefix = "HLW";
 
 package controlmessages;
 
+message PipelineNeighbor {
+  string name = 1;
+  int32 classOfInterest = 2;
+}
+
 message PipeModelDesc {
   string device = 1;
   string type = 2;
   int32 position = 3;
   bool isSplitPoint = 4;
-  repeated string downstreams = 5;
-  repeated string upstreams = 6;
+  repeated PipelineNeighbor downstreams = 5;
+  repeated PipelineNeighbor upstreams = 6;
 }
 
 message TaskDesc {

@@ -1214,8 +1214,33 @@ TaskHandle *Controller::CreatePipelineFromMessage(TaskDesc msg) {
     if (task->tk_type != PipelineType::None)
         task->tk_pipelineModels = getModelsByPipelineType(task->tk_type, msg.srcdevice(), msg.name(), msg.stream(), msg.edgenode());
     else {
-        // TODO: Hand Construct the Models based on msg.models()
         task->tk_pipelineModels = PipelineModelListType();
+        std::map<std::string, std::vector<controlmessages::PipelineNeighbor>> downstreams, upstreams;
+        std::map<std::string, PipelineModel*> models;
+        for (auto &m: msg.models()){
+            auto *model = new PipelineModel{
+                    m.device(),
+                    m.type(),
+                    ModelTypeReverseList[m.type()],
+                    {},
+                    m.position(),
+                    m.issplitpoint()
+            };
+            task->tk_pipelineModels.push_back(model);
+            models[m.type()] = model;
+            downstreams[m.type()] = {};
+            for (auto &d: m.downstreams())
+                downstreams[m.type()].push_back(d);
+            upstreams[m.type()] = {};
+            for (auto &u: m.upstreams())
+                upstreams[m.type()].push_back(u);
+        }
+        for (auto &m: task->tk_pipelineModels){
+            for (auto &d: downstreams[m->name])
+                m->downstreams.push_back({models[d.name()], d.classofinterest()});
+            for (auto &u: upstreams[m->name])
+                m->upstreams.push_back({models[u.name()], u.classofinterest()});
+        }
     }
     for (auto &model: task->tk_pipelineModels) {
         model->datasourceName = {msg.stream()};
