@@ -1,6 +1,6 @@
 {
     "container": {
-        "cont_experimentName": "th0",
+        "cont_experimentName": "pf15",
         "cont_systemName": "ppp",
         "cont_pipeName": "traffic",
         "cont_taskName": "carcolor",
@@ -237,7 +237,7 @@
                 "cbs":1, 
                 "normalize": true,
                 "obs": 1,
-                "path": "../models/carcolor_dynamic_3090_fp32_64_1.engine",
+                "path": "../models/carcolor_dynamic_3090_126_fp32_64_1.engine",
                 "prec": 4,
                 "msvc_imgNormScale": "1/255",
                 "msvc_subVals": [
