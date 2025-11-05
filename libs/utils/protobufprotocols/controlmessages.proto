@@ -15,8 +15,10 @@ message PipeModelDesc {
   string type = 2;
   int32 position = 3;
   bool isSplitPoint = 4;
-  repeated PipelineNeighbor downstreams = 5;
-  repeated PipelineNeighbor upstreams = 6;
+  bool forwardInput = 5;
+  repeated PipelineNeighbor downstreams = 6;
+  repeated PipelineNeighbor upstreams = 7;
+  repeated string possibleDevices = 8;
 }
 
 message TaskDesc {

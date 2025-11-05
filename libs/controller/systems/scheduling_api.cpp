@@ -1,4 +1,4 @@
-#include "scheduling_octo.h"
+#include "scheduling_api.h"
 
 // ==================================================================Scheduling==================================================================
 // ==============================================================================================================================================
@@ -121,6 +121,11 @@ void Controller::queryingProfiles(TaskHandle *task) {
 }
 
 void Controller::Scheduling() {
+    api_handlers = {
+            {MSG_TYPE[START_TASK], std::bind(&Controller::ScheduleSingleTask, this, std::placeholders::_1)},
+            {MSG_TYPE[STOP_TASK], std::bind(&Controller::StopSingleTask, this, std::placeholders::_1)}
+    };
+
     while (running) {
         message_t message;
         if (api_socket.recv(message, recv_flags::none)) {
@@ -191,7 +196,7 @@ void Controller::ScheduleSingleTask(const std::string &msg) {
 
     estimatePipelineTiming(task);
     ctrl_scheduledPipelines.addTask(taskName, task);
-    server_socket.send(message_t("success"), send_flags::dontwait);
+    api_socket.send(message_t("success"), send_flags::dontwait);
     ApplyScheduling();
 }
 

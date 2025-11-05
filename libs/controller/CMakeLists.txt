@@ -110,15 +110,15 @@ elseif (SYSTEM_NAME STREQUAL "APIS")
 
         set(apis_rl_DIR "${CMAKE_CURRENT_BINARY_DIR}/apis_rl")
         find_package(apis_rl CONFIG REQUIRED)
-elseif (SYSTEM_NAME STREQUAL "OCTO")
+elseif (SYSTEM_NAME STREQUAL "API")
         set(HEADER_FILES
                 ${HEADER_FILES}
-                systems/scheduling_octo.h
+                systems/scheduling_api.h
         )
 
         set(SOURCE_FILES
                 ${SOURCE_FILES}
-                systems/scheduling_octo.cpp
+                systems/scheduling_api.cpp
         )
 endif()
 
@@ -127,7 +127,7 @@ add_library(controller
         ${HEADER_FILES}
         ${SOURCE_FILES})
 
-# We also add an alias definition so that we shadown
+# We also add an alias definition so that we shadow
 # the export namespace when using add_subdirectory() instead.
 add_library(controller::controller ALIAS controller)
 

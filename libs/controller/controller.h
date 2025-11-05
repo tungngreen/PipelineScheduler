@@ -60,17 +60,17 @@ struct GPUPortion {
     std::uint64_t start = 0;
     std::uint64_t end = MAX_PORTION_SIZE;
     ContainerHandle *container = nullptr;
-    GPULane * lane = nullptr;
+    GPULane *lane = nullptr;
     // The next portion in the device's global sorted list
-    GPUPortion* next = nullptr;
+    GPUPortion *next = nullptr;
     // The prev portion in the device's global sorted list
-    GPUPortion* prev = nullptr;
+    GPUPortion *prev = nullptr;
     // The next portion in the lane, used to quickly recover the lane's original structure
     // When a container is removed and its portion is freed
-    GPUPortion* nextInLane = nullptr;
+    GPUPortion *nextInLane = nullptr;
     // The prev portion in the lane, used to quickly recover the lane's original structure
     // When a container is removed and its portion is freed
-    GPUPortion* prevInLane = nullptr;
+    GPUPortion *prevInLane = nullptr;
     std::uint64_t getLength() const { return end - start; }
 
     GPUPortion() = default;
@@ -383,6 +383,8 @@ struct PipelineModel {
     int position_in_pipeline;
     // Whether the upstream is on another device
     bool isSplitPoint;
+    // Wether the container should also send the input data to the downstream
+    bool forwardInput;
     //
     ModelArrivalProfile arrivalProfiles;
     // Latency profile of preprocessor, batch inferencer and postprocessor
@@ -429,6 +431,7 @@ struct PipelineModel {
     bool merged = false;
     bool toBeRun = true;
     bool gpuScheduled = false;
+    bool canBeCombined = true;
 
     std::vector<std::string> possibleDevices;
     // Manifestations are the list of containers that will be created for this model
@@ -453,6 +456,7 @@ struct PipelineModel {
                   TaskHandle *task = nullptr,
                   int position_in_pipeline = 0,
                   bool isSplitPoint = false,
+                  bool forwardInput = false,
                   const ModelArrivalProfile& arrivalProfiles = ModelArrivalProfile(),
                   const PerDeviceModelProfileType& processProfiles = PerDeviceModelProfileType(),
                   const std::vector<std::pair<PipelineModel*, int>>& downstreams = {},
@@ -475,6 +479,7 @@ struct PipelineModel {
           task(task),
           position_in_pipeline(position_in_pipeline),
           isSplitPoint(isSplitPoint),
+          forwardInput(forwardInput),
           arrivalProfiles(arrivalProfiles),
           processProfiles(processProfiles),
           downstreams(downstreams),
@@ -504,6 +509,7 @@ struct PipelineModel {
         task = other.task;
         position_in_pipeline = other.position_in_pipeline;
         isSplitPoint = other.isSplitPoint;
+        forwardInput = other.forwardInput;
         arrivalProfiles = other.arrivalProfiles;
         processProfiles = other.processProfiles;
         downstreams = other.downstreams;
@@ -550,6 +556,7 @@ struct PipelineModel {
             task = other.task;
             position_in_pipeline = other.position_in_pipeline;
             isSplitPoint = other.isSplitPoint;
+            forwardInput = other.forwardInput;
             arrivalProfiles = other.arrivalProfiles;
             processProfiles = other.processProfiles;
             downstreams = other.downstreams;

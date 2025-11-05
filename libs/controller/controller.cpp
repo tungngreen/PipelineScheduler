@@ -624,10 +624,6 @@ Controller::Controller(int argc, char **argv) {
     api_socket = socket_t(api_ctx, ZMQ_REP);
     api_socket.bind(server_address);
     api_socket.set(zmq::sockopt::rcvtimeo, 1000);
-    api_handlers = {
-        {MSG_TYPE[START_TASK], std::bind(&Controller::ScheduleSingleTask, this, std::placeholders::_1)},
-        {MSG_TYPE[STOP_TASK], std::bind(&Controller::StopSingleTask, this, std::placeholders::_1)}
-    };
 
     server_address = absl::StrFormat("tcp://*:%d", CONTROLLER_RECEIVE_PORT + ctrl_port_offset);
     system_ctx = context_t(2);
@@ -706,7 +702,6 @@ bool Controller::AddTask(const TaskDescription::TaskStruct &t) {
     task->tk_src_device = t.srcDevice;
 
     task->tk_pipelineModels = getModelsByPipelineType(t.type, t.srcDevice, t.name, t.stream, t.edgeNode);
-    task->tk_edge_node = t.edgeNode;
     for (auto &model: task->tk_pipelineModels) {
         model->datasourceName = {t.stream};
         model->task = task;
@@ -811,7 +806,7 @@ void Controller::ApplyScheduling() {
             }
             bool upstreamIsDatasource = (std::find_if(model->upstreams.begin(), model->upstreams.end(),
                                                       [](const std::pair<PipelineModel *, int> &upstream) {
-                                                          return upstream.first->name.find("datasource") != std::string::npos;
+                                                          return upstream.first->canBeCombined && (upstream.first->name.find("datasource") != std::string::npos);
                                                       }) != model->upstreams.end());
             if (model->name.find("yolov5n") != std::string::npos && model->device != "server" && upstreamIsDatasource) {
                 if (model->name.find("yolov5ndsrc") == std::string::npos) {
@@ -933,7 +928,6 @@ void Controller::ApplyScheduling() {
     }
 
     ctrl_pastScheduledPipelines = ctrl_scheduledPipelines;
-
     spdlog::get("container_agent")->info("SCHEDULING DONE! SEE YOU NEXT TIME!");
 }
 
@@ -942,11 +936,9 @@ bool CheckMergable(const std::string &m) {
 }
 
 ContainerHandle *Controller::TranslateToContainer(PipelineModel *model, NodeHandle *device, unsigned int i) {
-    if (model->name.find("datasource") != std::string::npos) {
+    if (model->name.find("datasource") != std::string::npos && model->canBeCombined) {
         for (auto &[downstream, coi] : model->downstreams) {
-            if ((downstream->name.find("yolov5n") != std::string::npos ||
-                 downstream->name.find("retinamtface") != std::string::npos) &&
-                downstream->device != "server") {
+            if (CheckMergable(downstream->name) && downstream->device != "server") {
                 return nullptr;
             }
         }
@@ -974,7 +966,7 @@ ContainerHandle *Controller::TranslateToContainer(PipelineModel *model, NodeHand
     auto *container = new ContainerHandle{containerName, model->position_in_pipeline, i,
                                           class_of_interest,
                                           ModelTypeReverseList[modelName],
-                                          CheckMergable(modelName),
+                                          CheckMergable(modelName) && model->canBeCombined,
                                           {0},
                                           static_cast<uint64_t>(model->task->tk_slo),
                                           0.0,
