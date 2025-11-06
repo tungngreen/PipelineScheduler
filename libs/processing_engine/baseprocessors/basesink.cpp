@@ -94,9 +94,10 @@ void BaseSink::sink() {
             for (unsigned int j = 1; j < inferTimeReport.req_origGenTime[0].size(); j++)
                 msvc_logFile << std::chrono::duration_cast<TimePrecisionType>(inferTimeReport.req_origGenTime[0].at(j) - inferTimeReport.req_origGenTime[0].at(j-1)).count() << ",";
             msvc_logFile << std::chrono::duration_cast<TimePrecisionType>(inferTimeReport.req_origGenTime[0].back() - inferTimeReport.req_origGenTime[0].front()).count() << "|";
-            for (BatchSizeType j = 0; j < inferTimeReport.req_data.size() - 1; j++)
-                msvc_logFile << inferTimeReport.req_data[j].data << ",";
-            msvc_logFile << inferTimeReport.req_data.back().data;
+            //for (BatchSizeType j = 0; j < inferTimeReport.req_data.size() - 1; j++)
+            //    msvc_logFile << inferTimeReport.req_data[j].data << ",";
+            //msvc_logFile << inferTimeReport.req_data.back().data;
+            msvc_logFile << "data_placeholder";
             agg_Latency += std::chrono::duration_cast<TimePrecisionType>(inferTimeReport.req_origGenTime[0].at(1) - inferTimeReport.req_origGenTime[0].at(0)).count();
             msvc_logFile << std::endl;
         }
