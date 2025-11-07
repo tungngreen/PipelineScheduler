@@ -495,7 +495,7 @@ void DeviceAgent::StopContainer(ContainerSignal request) {
         file += "docker-compose.server.yml";
     else
         file += "docker-compose.jetson.yml";
-    std::string command ="docker compose -f " + file + " -p " + request.name() + " down";
+    std::string command ="CONTAINER_NAME=" + request.name() + " docker compose -f " + file + " -p " + request.name() + " down";
     spdlog::get("container_agent")->info("Stopping container via: {}", command);
     if (runCommand(command) == 0) {
         std::lock_guard<std::mutex> lock(containers_mutex);
