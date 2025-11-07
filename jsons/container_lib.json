@@ -117,13 +117,13 @@
       "taskName": "cardamage",
       "templateConfigPath": "../jsons/cardamage.json",
       "runCommand": "./Container_CarDamage",
-      "modelPath": "../models/cardamage_dynamic_3090_126_fp32_16_1.engine"
+      "modelPath": "../models/cardamage_dynamic_nms_3090_126_fp32_16_1.engine"
     },
     "fashioncolor_server": {
       "taskName": "fashioncolor",
       "templateConfigPath": "../jsons/fashioncolor.json",
       "runCommand": "./Container_FashionColor",
-      "modelPath": "../models/fashioncolor_dynamic_nms_3090_126_fp32_64_1.engine"
+      "modelPath": "../models/fashioncolor_dynamic_3090_126_fp32_64_1.engine"
     },
     "firedetect_server": {
       "taskName": "firedetect",
@@ -231,13 +231,13 @@
       "taskName": "cardamage",
       "templateConfigPath": "../jsons/cardamage.json",
       "runCommand": "./Container_CarDamage",
-      "modelPath": "../models/cardamage_dynamic_nx_fp32_8_1.engine"
+      "modelPath": "../models/cardamage_dynamic_nms_nx_fp32_8_1.engine"
     },
     "fashioncolor_nxavier": {
       "taskName": "fashioncolor",
       "templateConfigPath": "../jsons/fashioncolor.json",
       "runCommand": "./Container_FashionColor",
-      "modelPath": "../models/fashioncolor_dynamic_nms_nx_fp32_8_1.engine"
+      "modelPath": "../models/fashioncolor_dynamic_nx_fp32_8_1.engine"
     },
     "firedetect_nxavier": {
       "taskName": "firedetect",
@@ -345,13 +345,13 @@
       "taskName": "cardamage",
       "templateConfigPath": "../jsons/cardamage.json",
       "runCommand": "./Container_CarDamage",
-      "modelPath": "../models/cardamage_dynamic_agx_fp32_16_1.engine"
+      "modelPath": "../models/cardamage_dynamic_agx_nms_fp32_16_1.engine"
     },
     "fashioncolor_agxavier": {
       "taskName": "fashioncolor",
       "templateConfigPath": "../jsons/fashioncolor.json",
       "runCommand": "./Container_FashionColor",
-      "modelPath": "../models/fashioncolor_dynamic_nms_agx_fp32_16_1.engine"
+      "modelPath": "../models/fashioncolor_dynamic_agx_fp32_16_1.engine"
     },
     "firedetect_agxavier": {
       "taskName": "firedetect",
@@ -471,13 +471,13 @@
       "taskName": "cardamage",
       "templateConfigPath": "../jsons/cardamage.json",
       "runCommand": "./Container_CarDamage",
-      "modelPath": "../models/cardamage_dynamic_orn_fp32_8_1.engine"
+      "modelPath": "../models/cardamage_dynamic_nms_orn_fp32_8_1.engine"
     },
     "fashioncolor_orinano": {
       "taskName": "fashioncolor",
       "templateConfigPath": "../jsons/fashioncolor.json",
       "runCommand": "./Container_FashionColor",
-      "modelPath": "../models/fashioncolor_dynamic_nms_orn_fp32_8_1.engine"
+      "modelPath": "../models/fashioncolor_dynamic_orn_fp32_8_1.engine"
     },
     "firedetect_orinano": {
       "taskName": "firedetect",
@@ -669,13 +669,13 @@
       "taskName": "cardamage",
       "templateConfigPath": "../jsons/cardamage.json",
       "runCommand": "./Container_CarDamage",
-      "modelPath": "../models/cardamage_dynamic_1080_fp32_64_1.engine"
+      "modelPath": "../models/cardamage_dynamic_nms_1080_fp32_64_1.engine"
     },
     "fashioncolor_onprem": {
       "taskName": "fashioncolor",
       "templateConfigPath": "../jsons/fashioncolor.json",
       "runCommand": "./Container_FashionColor",
-      "modelPath": "../models/fashioncolor_dynamic_nms_1080_fp32_64_1.engine"
+      "modelPath": "../models/fashioncolor_dynamic_1080_fp32_64_1.engine"
     },
     "firedetect_onprem": {
       "taskName": "firedetect",
@@ -717,7 +717,7 @@
       "taskName": "yolov5",
       "templateConfigPath": "../jsons/yolov5.json",
       "runCommand": "./Container_Yolov5",
-      "modelPath": "../models/yolov5s_dynamic_nms_ogx_fp32_4_1.engine"
+      "modelPath": "../models/yolov5s_dynamic_nms_oagx_fp32_4_1.engine"
     },
     "yolov5sdsrc_orinagx": {
       "taskName": "yolov5",
@@ -795,13 +795,13 @@
       "taskName": "cardamage",
       "templateConfigPath": "../jsons/cardamage.json",
       "runCommand": "./Container_CarDamage",
-      "modelPath": "../models/cardamage_dynamic_oagx_fp32_16_1.engine"
+      "modelPath": "../models/cardamage_dynamic_nms_oagx_fp32_16_1.engine"
     },
     "fashioncolor_orinagx": {
       "taskName": "fashioncolor",
       "templateConfigPath": "../jsons/fashioncolor.json",
       "runCommand": "./Container_FashionColor",
-      "modelPath": "../models/fashioncolor_dynamic_nms_oagx_fp32_16_1.engine"
+      "modelPath": "../models/fashioncolor_dynamic_oagx_fp32_16_1.engine"
     },
     "firedetect_orinagx": {
       "taskName": "firedetect",
@@ -939,13 +939,13 @@
       "taskName": "cardamage",
       "templateConfigPath": "../jsons/cardamage.json",
       "runCommand": "./Container_CarDamage",
-      "modelPath": "../models/cardamage_dynamic_onx_fp32_8_1.engine"
+      "modelPath": "../models/cardamage_dynamic_nms_onx_fp32_8_1.engine"
     },
     "fashioncolor_orinnx": {
       "taskName": "fashioncolor",
       "templateConfigPath": "../jsons/fashioncolor.json",
       "runCommand": "./Container_FashionColor",
-      "modelPath": "../models/fashioncolor_dynamic_nms_onx_fp32_8_1.engine"
+      "modelPath": "../models/fashioncolor_dynamic_onx_fp32_8_1.engine"
     },
     "firedetect_orinnx": {
       "taskName": "firedetect",
