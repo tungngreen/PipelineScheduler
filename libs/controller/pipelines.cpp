@@ -1187,12 +1187,12 @@ void Controller::readInitialObjectCount(const std::string &path) {
         float maxPersonRate = 1.2 * std::max_element(
                 initialPerSecondRate[streamName]["person"].begin(),
                 initialPerSecondRate[streamName]["person"].end()
-        )->second * skipRate;
+        )->second * skipRate + 1;
         maxPersonRate = std::max(maxPersonRate, ctrl_systemFPS * 1.f);
         float maxCarRate = 1.2 * std::max_element(
                 initialPerSecondRate[streamName]["car"].begin(),
                 initialPerSecondRate[streamName]["car"].end()
-        )->second * skipRate;
+        )->second * skipRate + 1;
         maxCarRate = std::max(maxCarRate, ctrl_systemFPS * 1.f);
         stream->insert({"retinamtface", ctrl_systemFPS});
         stream->insert({"yolov5n", ctrl_systemFPS});
@@ -1247,7 +1247,6 @@ TaskHandle *Controller::CreatePipelineFromMessage(TaskDesc msg) {
         auto *datasource = new PipelineModel{msg.srcdevice(), "datasource", ModelType::DataSource, {}, 0, true};
         datasource->possibleDevices = {msg.srcdevice()};
         datasource->canBeCombined = false;
-        task->tk_pipelineModels.push_back(datasource);
         std::map<std::string, std::vector<controlmessages::PipelineNeighbor>> downstreams, upstreams;
         std::map<std::string, PipelineModel*> models;
         models["datasource"] = datasource;
@@ -1285,13 +1284,17 @@ TaskHandle *Controller::CreatePipelineFromMessage(TaskDesc msg) {
         for (auto &m: task->tk_pipelineModels){
             for (auto &d: downstreams[m->name])
                 m->downstreams.push_back({models[d.name()], d.classofinterest()});
-            for (auto &u: upstreams[m->name])
+            for (auto &u: upstreams[m->name]) {
                 m->upstreams.push_back({models[u.name()], u.classofinterest()});
+                if (u.name() == "datasource")
+                    datasource->downstreams.push_back({m, -1});
+            }
             if (m->downstreams.empty()) {
                 m->downstreams.push_back({sink, -1});
                 sink->upstreams.push_back({m, -1});
             }
         }
+        task->tk_pipelineModels.push_back(datasource);
         task->tk_pipelineModels.push_back(sink);
     }
 
