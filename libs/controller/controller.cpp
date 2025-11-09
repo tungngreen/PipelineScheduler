@@ -1500,6 +1500,11 @@ void Controller::handleSinkMetrics(const std::string& msg) {
     SinkMetrics request;
     if (!request.ParseFromString(msg)) {
         spdlog::get("container_agent")->error("Failed to parse sink metrics with msg: {}", msg);
+        server_socket.send(message_t("error"), send_flags::dontwait);
+        return;
+    }
+    if (!ctrl_scheduledPipelines.hasTask(request.name()))  {
+        server_socket.send(message_t("notfound"), send_flags::dontwait);
         return;
     }
     TaskHandle *task = ctrl_scheduledPipelines.getTask(request.name());

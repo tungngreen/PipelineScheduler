@@ -106,17 +106,20 @@ int main(int argc, char **argv) {
         uint32_t arrival_rate = receiver->getPerSecondArrivalRecord().numRequests;
         MsvcSLOType agg_Latency = sink->getAggLatency();
         float avg_latency = (float) agg_Latency / (float) arrival_rate;
-        logger->info("Arrival rate: {0:d} requests/s with avg latency: {1:.2f} ms", arrival_rate, avg_latency / 1000.f);
+        if (isnan(avg_latency)) avg_latency = 0.0;
         if (controllerIP != "none") {
             controlmessages::SinkMetrics request;
             request.set_name(taskName);
             request.set_avg_latency(avg_latency);
             request.set_throughput(arrival_rate);
             std::string message = MSG_TYPE[SINK_METRICS] + " " + request.SerializeAsString();
-            message_t zmq_msg(message.size());
+            message_t zmq_msg(message.size()), reply;
             memcpy(zmq_msg.data(), message.data(), message.size());
-            controller_socket.send(zmq_msg, send_flags::dontwait);
-        }
+            auto sent = controller_socket.send(zmq_msg, send_flags::none);
+            auto recvt = controller_socket.recv(reply, recv_flags::none);
+            logger->info("Arrival rate: {0:d} requests/s with avg latency: {1:.2f}, status({2:d}|{3:d})", arrival_rate, avg_latency, sent ? 1 : 0, recvt ? 1 : 0);
+        } else
+            logger->info("Arrival rate: {0:d} requests/s with avg latency: {1:.2f}, status(0|0)", arrival_rate, avg_latency);
     }
     return 0;
 }
