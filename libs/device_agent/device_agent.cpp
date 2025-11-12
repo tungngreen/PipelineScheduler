@@ -761,6 +761,7 @@ void DeviceAgent::ReceiveContainerMetrics(const std::string &msg) {
     }
 
     containers[request.name()].contextMetrics = request;
+    in_device_socket.send(message_t("success"), send_flags::dontwait);
 }
 
 void DeviceAgent::UpdateBatchSize(const std::string &msg) {
