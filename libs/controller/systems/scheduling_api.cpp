@@ -157,7 +157,10 @@ void Controller::ScheduleSingleTask(const std::string &msg) {
 
     TaskHandle *task = nullptr;
     std::string taskName = request.name();
-    if (ctrl_scheduledPipelines.hasTask(taskName)) task = ctrl_scheduledPipelines.getTask(taskName);
+    if (ctrl_scheduledPipelines.hasTask(taskName)) {
+        task = ctrl_scheduledPipelines.getTask(taskName);
+        UpdatePipelineFromMessage(task, request);
+    }
     else task = CreatePipelineFromMessage(request);
 
     if (task == nullptr) {

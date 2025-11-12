@@ -684,6 +684,7 @@ void DeviceAgent::ReceiveStartReport(const std::string &msg) {
     ProcessData request;
     if (!request.ParseFromString(msg)){
         spdlog::get("container_agent")->error("Error receiving container start report with msg: {}", msg);
+        in_device_socket.send(message_t("error"), send_flags::dontwait);
         return;
     }
 
@@ -701,6 +702,7 @@ void DeviceAgent::ForwardFL(const std::string &msg) {
     FlData request;
     if (!request.ParseFromString(msg)){
         spdlog::get("container_agent")->error("Failed stopping container with msg: {}", msg);
+        in_device_socket.send(message_t("error"), send_flags::dontwait);
         return;
     }
     request.set_device_name(dev_name);
@@ -726,6 +728,7 @@ void DeviceAgent::InferBCEdge(const std::string &msg) {
     BCEdgeData request;
     if (!request.ParseFromString(msg)){
         spdlog::get("container_agent")->error("Failed InferBCEdge with msg: {}", msg);
+        in_device_socket.send(message_t("error"), send_flags::dontwait);
         return;
     }
 
@@ -746,12 +749,14 @@ void DeviceAgent::ReceiveContainerMetrics(const std::string &msg) {
     ContainerMetrics request;
     if (!request.ParseFromString(msg)){
         spdlog::get("container_agent")->error("Failed to receive container metrics with msg: {}", msg);
+        in_device_socket.send(message_t("error"), send_flags::dontwait);
         return;
     }
 
     //check if cont_name is in containers
     if (containers.find(request.name()) == containers.end()) {
         spdlog::get("container_agent")->error("ReceiveContainerMetrics: Container {} not found!", request.name());
+        in_device_socket.send(message_t("error"), send_flags::dontwait);
         return;
     }
 

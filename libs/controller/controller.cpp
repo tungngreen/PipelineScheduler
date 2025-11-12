@@ -839,7 +839,9 @@ void Controller::ApplyScheduling() {
                     std::vector<ContainerHandle*> pastModelContainers = pastModel->task->tk_subTasks[model->name];
                     for (auto container: pastModelContainers) {
                         if (container->device_agent->name == model->device) {
-                            model->task->tk_subTasks[model->name].push_back(container);
+                            auto &subs = model->task->tk_subTasks[model->name];
+                            if (std::find(subs.begin(), subs.end(), container) == subs.end())
+                                subs.push_back(container);
                         }
                     }
                     pastModel->toBeRun = true;

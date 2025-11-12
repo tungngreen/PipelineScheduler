@@ -966,6 +966,7 @@ private:
                                                   const std::string &pipelineName = "", const std::string &streamName = "", const std::string &edgeNode = "server");
     std::vector<std::string> getPipelineNames();
     TaskHandle *CreatePipelineFromMessage(TaskDesc msg);
+    void UpdatePipelineFromMessage(TaskHandle* task, TaskDesc msg);
 
     // STARTUP
     void ApplyScheduling();

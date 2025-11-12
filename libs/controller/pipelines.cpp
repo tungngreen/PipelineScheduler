@@ -1306,3 +1306,125 @@ TaskHandle *Controller::CreatePipelineFromMessage(TaskDesc msg) {
     }
     return task;
 }
+
+void Controller::UpdatePipelineFromMessage(TaskHandle* task, TaskDesc msg) {
+    // Ensure to reset the naming for existing models
+    for (auto &model: task->tk_pipelineModels) {
+        if (model->name.find(task->tk_name) != std::string::npos)
+            model->name = model->name.substr(model->name.find('_') + 1);
+    }
+
+    std::map<std::string, std::vector<controlmessages::PipelineNeighbor>> downstreams, upstreams;
+    std::map<std::string, PipelineModel*> models;
+    PipelineModel *datasource = nullptr, *sink = nullptr;
+
+    // Add new models if necessary
+    for (auto &m: msg.models()){
+        PipelineModel *found = nullptr;
+        for (auto &model: task->tk_pipelineModels) {
+            if (datasource == nullptr && model->name.find("datasource") != std::string::npos)
+                datasource = model;
+            if (sink == nullptr && model->name.find("sink") != std::string::npos)
+                sink = model;
+            if (model->name.find(m.type()) == std::string::npos)
+                continue;
+            found = model;
+            break;
+        }
+
+        if (found != nullptr){
+            models[m.type()] = found;
+        } else {
+            auto *model = new PipelineModel{
+                    m.device(),
+                    m.type(),
+                    ModelTypeReverseList[m.type()],
+                    {},
+                    m.position(),
+                    m.issplitpoint(),
+                    m.forwardinput()
+            };
+            task->tk_pipelineModels.push_back(model);
+            models[m.type()] = model;
+            model->datasourceName = {msg.stream()};
+            model->task = task;
+            model->possibleDevices = {};
+            for (std::string d: m.possibledevices())
+                model->possibleDevices.push_back(d);
+            if (model->possibleDevices.empty())
+                model->possibleDevices = {msg.srcdevice(), msg.edgenode()};
+        }
+        downstreams[m.type()] = {};
+        for (auto &d: m.downstreams())
+            downstreams[m.type()].push_back(d);
+        upstreams[m.type()] = {};
+        for (auto &u: m.upstreams())
+            upstreams[m.type()].push_back(u);
+    }
+
+    // Restructure pipeline to include the new models and updated connections
+    for (auto &m: models){
+        m.second->downstreams = {};
+        m.second->upstreams = {};
+        auto contains_pair = [](const std::vector<std::pair<PipelineModel*, int>> &vec, PipelineModel *p, int cls) {for (const auto &e : vec) {if (e.first == p && e.second == cls) return true;}return false;};
+
+        for (auto &d: downstreams[m.second->name]) {
+            PipelineModel *dst = models[d.name()];
+            int cls = d.classofinterest();
+            if (!contains_pair(m.second->downstreams, dst, cls))
+                m.second->downstreams.push_back({dst, cls});
+            if (!contains_pair(dst->upstreams, m.second, cls))
+                dst->upstreams.push_back({m.second, cls});
+        }
+        for (auto &u: upstreams[m.second->name]) {
+            PipelineModel *src = (u.name() == "datasource") ? datasource : models[u.name()];
+            if (src == nullptr) continue;
+            int cls = u.classofinterest();
+            if (!contains_pair(m.second->upstreams, src, cls))
+                m.second->upstreams.push_back({src, cls});
+            if (!contains_pair(src->downstreams, m.second, cls))
+                src->downstreams.push_back({m.second, cls});
+        }
+        if (sink != nullptr && m.second->downstreams.empty()) {
+            m.second->downstreams.push_back({sink, -1});
+            sink->upstreams.push_back({m.second, -1});
+        }
+    }
+
+    // Remove models that are no longer present
+    std::vector<PipelineModel *> to_delete = {};
+    for (auto &model: task->tk_pipelineModels) {
+        bool found = false;
+        if (model != datasource && model != sink) {
+            for (auto &m: models)
+                if (m.second == model) {
+                    found = true;
+                    break;
+                }
+            if (!found)
+                to_delete.push_back(model);
+        }
+    }
+    for (auto *model: to_delete) {
+        task->tk_pipelineModels.erase(std::remove(task->tk_pipelineModels.begin(), task->tk_pipelineModels.end(), model), task->tk_pipelineModels.end());
+        for (auto &d: model->downstreams) {
+            d.first->upstreams.erase(std::remove_if(
+                    d.first->upstreams.begin(),
+                    d.first->upstreams.end(),
+                    [&model](const std::pair<PipelineModel *, int> &p) {
+                        return p.first == model;
+                    }
+            ), d.first->upstreams.end());
+        }
+        for (auto &u: model->upstreams) {
+            u.first->downstreams.erase(std::remove_if(
+                    u.first->downstreams.begin(),
+                    u.first->downstreams.end(),
+                    [&model](const std::pair<PipelineModel *, int> &p) {
+                        return p.first == model;
+                    }
+            ), u.first->downstreams.end());
+        }
+        delete model;
+    }
+}
