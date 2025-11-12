@@ -691,11 +691,11 @@ void DeviceAgent::ReceiveStartReport(const std::string &msg) {
     int pid = getContainerProcessPid(request.msvc_name());
     containers[request.msvc_name()].pid = pid;
     dev_profiler->addPid(pid);
-    spdlog::get("container_agent")->info("Received start report from {} with pid: {}", request.msvc_name(), pid);
     ProcessData reply;
     reply.set_msvc_name(request.msvc_name());
     reply.set_pid(pid);
-    in_device_socket.send(message_t(reply.SerializeAsString()), send_flags::dontwait);
+    in_device_socket.send(message_t(reply.SerializeAsString()), send_flags::none);
+    spdlog::get("container_agent")->info("Received start report from {} with pid: {}", request.msvc_name(), pid);
 }
 
 void DeviceAgent::ForwardFL(const std::string &msg) {
