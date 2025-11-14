@@ -718,7 +718,7 @@ void Controller::initialiseGPU(NodeHandle *node, int numGPUs, std::vector<int> m
         //GPUHandle *gpuNode = new GPUHandle{node->name, node->name, 0, memLimits[0] / 5, 1, node};
         node->gpuHandles.emplace_back(gpuNode);
     } else if (node->type == SystemDeviceType::Server) {
-        for (uint8_t gpuIndex = 0; gpuIndex < numGPUs; gpuIndex++) {
+        for (uint8_t gpuIndex = 0; gpuIndex < numGPUs - 2; gpuIndex++) {
             std::string gpuName = "gpu" + std::to_string(gpuIndex);
             GPUHandle *gpuNode = new GPUHandle{"3090", "server", gpuIndex, memLimits[gpuIndex] - 2000, NUM_LANES_PER_GPU, node};
             node->gpuHandles.emplace_back(gpuNode);
@@ -1446,6 +1446,7 @@ void Controller::handleDeviseAdvertisement(const std::string& msg) {
         return;
     }
     std::string deviceName = request.device_name();
+
     NodeHandle *node = new NodeHandle{deviceName, request.ip_address(), static_cast<SystemDeviceType>(request.device_type()),
                                       DATA_BASE_PORT + ctrl_port_offset + request.agent_port_offset(), {}};
     reply.set_name(ctrl_systemName);

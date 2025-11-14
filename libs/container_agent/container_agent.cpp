@@ -674,7 +674,7 @@ void ContainerAgent::initiateMicroservices(const json &configs) {
                 } else {
                     throw std::runtime_error("Unknown communication method" + std::to_string((int)pipeConfig.at("msvc_dnstreamMicroservices")[0].at("nb_commMethod")));
                 }
-                if (pipeConfigs.size() == 2) { // If this is a data source container
+                if (pipeConfigs.size() < 5) { // If this is a data source container
                     msvcsList.back()->SetInQueue({cont_msvcsGroups["receiver"].outQueue[numSenders]});
                 } else {
                     msvcsList.back()->SetInQueue({cont_msvcsGroups["postprocessor"].outQueue[numSenders]});

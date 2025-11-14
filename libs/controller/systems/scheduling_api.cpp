@@ -23,7 +23,7 @@ void Controller::queryingProfiles(TaskHandle *task) {
             continue;
         }
         model->deviceTypeName = getDeviceTypeName(deviceList.at(model->device)->type);
-        std::vector<std::string> upstreamPossibleDeviceList = model->upstreams.front().first->possibleDevices;
+        std::vector<std::string> upstreamPossibleDeviceList = model->upstreams.empty() ? model->possibleDevices : model->upstreams.front().first->possibleDevices;
         std::vector<std::string> thisPossibleDeviceList = model->possibleDevices;
         std::vector<std::pair<std::string, std::string>> possibleDevicePairList;
         for (const auto &deviceName : upstreamPossibleDeviceList) {
