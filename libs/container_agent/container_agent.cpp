@@ -674,7 +674,7 @@ void ContainerAgent::initiateMicroservices(const json &configs) {
                 } else {
                     throw std::runtime_error("Unknown communication method" + std::to_string((int)pipeConfig.at("msvc_dnstreamMicroservices")[0].at("nb_commMethod")));
                 }
-                if (pipeConfigs.size() < 5) { // If this is a data source container
+                if (cont_msvcsGroups["inference"].msvcList.empty()) { // If this is a data source container
                     msvcsList.back()->SetInQueue({cont_msvcsGroups["receiver"].outQueue[numSenders]});
                 } else {
                     msvcsList.back()->SetInQueue({cont_msvcsGroups["postprocessor"].outQueue[numSenders]});
@@ -874,7 +874,6 @@ void ContainerAgent::runService(const json &pipeConfigs, const json &configs) {
     } else {
         this->dispatchMicroservices();
 
-        this->waitReady();
         this->START();
 
         // if (cont_taskName.find("dsrc") == std::string::npos) {
@@ -1463,6 +1462,7 @@ void ContainerAgent::stopExecution(const std::string &msg) {
 }
 
 void ContainerAgent::updateSender(const std::string &msg) {
+    std::lock_guard<std::mutex> lock(cont_pipeStructureMutex);
     Connection request;
     if (!request.ParseFromString(msg)) {
         spdlog::get("container_agent")->error("Failed to parse updateSender request: {0:s}", msg);
@@ -1476,11 +1476,7 @@ void ContainerAgent::updateSender(const std::string &msg) {
             std::this_thread::sleep_for(start - now);
         } else if (now > start + std::chrono::seconds(request.offloading_duration())) {
             spdlog::get("container_agent")->error("Received Offloading Request for {0:s} too late", request.name());
-            for (auto &group : cont_msvcsGroups) {
-                for (auto msvc : group.second.msvcList) {
-                    msvc->unpauseThread();
-                }
-            }
+            START();
             return;
         }
     }
@@ -1493,9 +1489,69 @@ void ContainerAgent::updateSender(const std::string &msg) {
             msvc->pauseThread();
         }
     }
-    json *config;
     std::string link = absl::StrFormat("%s:%d", request.ip(), request.port());
     auto senders = &cont_msvcsGroups["sender"].msvcList;
+    if (request.mode() == AdjustUpstreamMode::Start) {
+        for (auto sender: *senders) {
+            if (sender->dnstreamMicroserviceList[0].name != request.name()) continue;
+            spdlog::get("container_agent")->error("Sender for downstream {0:s} already existing as: {1:s}", request.name(), sender->msvc_name);
+            START();
+            return;
+        }
+        json config = senders[0][0]->msvc_configs;
+        config["msvc_name"] = absl::StrFormat("sender%s", request.name());
+        config["msvc_dnstreamMicroservices"][0]["nb_name"] = request.name();
+        config["msvc_dnstreamMicroservices"][0]["nb_classOfInterest"] = request.class_of_interest();
+        config["msvc_dnstreamMicroservices"][0]["nb_link"] = {link};
+        config["msvc_dnstreamMicroservices"][0]["nb_portions"] = {};
+        Microservice* new_sender = new RemoteCPUSender(config);
+        cont_msvcsGroups["sender"].msvcList.push_back(new_sender);
+
+        json neighborconfig = cont_msvcsGroups["postprocessor"].msvcList[0]->msvc_configs["msvc_dnstreamMicroservices"][0];
+        neighborconfig["nb_name"] = new_sender->msvc_name;
+        neighborconfig["nb_classOfInterest"] = request.class_of_interest();
+        neighborconfig["nb_portions"] = {};
+        for (auto *postprocessor : cont_msvcsGroups["postprocessor"].msvcList) {
+            postprocessor->msvc_configs["msvc_dnstreamMicroservices"].push_back(neighborconfig);
+            postprocessor->reloadDnstreams();
+        }
+        new_sender->SetInQueue({cont_msvcsGroups["postprocessor"].outQueue.back()});
+        static_cast<Sender*>(new_sender)->dispatchThread();
+        START();
+        return;
+    }
+    if (request.mode() == AdjustUpstreamMode::Stop) {
+        for (auto sender: *senders) {
+            if (sender->dnstreamMicroserviceList[0].name != request.name()) continue;
+            for (auto *postprocessor : cont_msvcsGroups["postprocessor"].msvcList) {
+                std::vector<msvcconfigs::NeighborMicroservice *> old_dnstreams = {};
+                for (auto &dnstream : postprocessor->dnstreamMicroserviceList) {
+                    if (sender->msvc_name.find(dnstream.name) != std::string::npos) {
+                        old_dnstreams.push_back(&dnstream);
+                    }
+                }
+                for (auto dnstream : old_dnstreams) {
+                    auto &dnstreams_json = postprocessor->msvc_configs["msvc_dnstreamMicroservices"];
+                    dnstreams_json.erase(
+                        std::remove_if(dnstreams_json.begin(), dnstreams_json.end(),
+                                       [&](const json &n) { return n.value("nb_name", "") == dnstream->name; }),
+                        dnstreams_json.end()
+                    );
+                }
+                postprocessor->reloadDnstreams();
+            }
+            sender->stopThread();
+            cont_msvcsGroups["sender"].msvcList.erase(
+                    std::remove_if(cont_msvcsGroups["sender"].msvcList.begin(), cont_msvcsGroups["sender"].msvcList.end(),
+                                   [&](Microservice* msvc) { return msvc == sender; }), cont_msvcsGroups["sender"].msvcList.end());
+            START();
+            return;
+        }
+        spdlog::get("container_agent")->error("Sender for downstream {0:s} not found for deletion.", request.name());
+        START();
+        return;
+    }
+    json *config;
     for (auto sender: *senders) {
         if (sender->dnstreamMicroserviceList[0].name == request.name()) {
             config = &sender->msvc_configs;
@@ -1520,11 +1576,7 @@ void ContainerAgent::updateSender(const std::string &msg) {
                 auto it = std::find(nb_links.begin(), nb_links.end(), request.old_link());
                 if (it == nb_links.end()) {
                     spdlog::get("container_agent")->error("Link {0:s} not found in {1:s}", request.old_link(), sender->msvc_name);
-                    for (auto &group : cont_msvcsGroups) {
-                        for (auto msvc : group.second.msvcList) {
-                            msvc->unpauseThread();
-                        }
-                    }
+                    START();
                     return;
                 }
                 int index = std::distance(nb_links.begin(), it);
@@ -1553,22 +1605,14 @@ void ContainerAgent::updateSender(const std::string &msg) {
                         spdlog::get("container_agent")->trace("Added link {0:s} to {1:s}", link, sender->msvc_name);
                     } else {
                         spdlog::get("container_agent")->error("Link {0:s} already exists in {1:s}", link, sender->msvc_name);
-                        for (auto &group : cont_msvcsGroups) {
-                            for (auto msvc : group.second.msvcList) {
-                                msvc->unpauseThread();
-                            }
-                        }
+                        START();
                         return;
                     }
             } else {
                 auto it = std::find(nb_links.begin(), nb_links.end(), link);
                 if (it == nb_links.end()) {
                     spdlog::get("container_agent")->error("Link {0:s} not found in {1:s}", link, sender->msvc_name);
-                    for (auto &group : cont_msvcsGroups) {
-                        for (auto msvc : group.second.msvcList) {
-                            msvc->unpauseThread();
-                        }
-                    }
+                    START();
                     return;
                 }
                 int index = std::distance(nb_links.begin(), it);
@@ -1592,45 +1636,21 @@ void ContainerAgent::updateSender(const std::string &msg) {
                         postprocessor->portions[index] = request.data_portion();
                     }
                     spdlog::get("container_agent")->trace("Modified link {0:s} for {1:s} to portion {2:.2f}", link, sender->msvc_name, request.data_portion());
-                    for (auto &group : cont_msvcsGroups) {
-                        for (auto msvc : group.second.msvcList) {
-                            msvc->unpauseThread();
-                        }
-                    }
+                    START();
                     return;
                 }
             }
             static_cast<Sender*>(sender)->reloadDnstreams();
             static_cast<Sender*>(sender)->dispatchThread();
-            for (auto &group : cont_msvcsGroups) {
-                for (auto msvc : group.second.msvcList) {
-                    msvc->unpauseThread();
-                }
-            }
+            START();
             return;
         }
     }
-    spdlog::get("container_agent")->error("Could not find sender to {0:s} in current configuration.", request.name());
-    for (auto &group : cont_msvcsGroups) {
-        for (auto msvc : group.second.msvcList) {
-            msvc->unpauseThread();
-        }
-    }
-
-        // TODO: Add the following again into the logic when enabling GPU Communication
-//        if (request.ip() == "localhost") {
-//            // change postprocessing to keep the data on gpu
-//
-//            // start new GPU sender
-//            msvcs->push_back(new GPUSender(config));
-//        } else {
-        // change postprocessing to offload data from gpu
-        // start new serialized sender
-//        senders->push_back(new_sender);
-//        }
-        //start the new sender
-//        senders->back()->dispatchThread();
+    spdlog::get("container_agent")->error("Could not find sender to {0:s} in current configuration, please use Start to create a new sender or Stop to remove one.", request.name());
+    START();
 }
+
+
 
 void ContainerAgent::updateBatchSize(const std::string &msg) {
     indevicemessages::Int32 request;

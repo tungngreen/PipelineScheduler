@@ -100,7 +100,7 @@ protected:
     void UpdateContainerSender(const std::string &msg);
     void UpdateContainerSender(int mode, const std::string &cont_name, const std::string &dwnstr, const std::string &ip,
                                const int &port, const float &data_portion, const std::string &old_link,
-                               const int64_t &timestamp, const int &offloading_duration);
+                               const int64_t &timestamp, const int offloading_duration = 0, const int coi = -1);
     void SyncDatasources(const std::string &msg);
     void InferBCEdge(const std::string &msg);
     void UpdateBatchSize(const std::string &msg);

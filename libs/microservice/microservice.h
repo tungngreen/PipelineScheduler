@@ -502,7 +502,7 @@ namespace msvcconfigs {
      *
      *
      */
-    struct NeighborMicroserviceConfigs {
+    struct NeighborMicroservice {
         // Name of the up/downstream microservice
         std::string name;
         // The communication method for the microservice to
@@ -580,34 +580,20 @@ namespace msvcconfigs {
         RUNMODE msvc_RUNMODE = RUNMODE::DEPLOYMENT;
         bool msvc_RESTART = false;
         // List of upstream microservices
-        std::list<NeighborMicroserviceConfigs> msvc_upstreamMicroservices;
-        std::list<NeighborMicroserviceConfigs> msvc_dnstreamMicroservices;
+        std::list<NeighborMicroservice> msvc_upstreamMicroservices;
+        std::list<NeighborMicroservice> msvc_dnstreamMicroservices;
     };
 
-
-    /**
-     * @brief 
-     * 
-     */
-    struct NeighborMicroservice : NeighborMicroserviceConfigs {
-        NumQueuesType queueNum;
-
-        NeighborMicroservice(const NeighborMicroserviceConfigs &configs, NumQueuesType queueNum)
-                : NeighborMicroserviceConfigs(configs),
-                  queueNum(queueNum) {}
-    };
-
-
-    void from_json(const json &j, NeighborMicroserviceConfigs &val);
+    void from_json(const json &j, NeighborMicroservice &val);
 
     void from_json(const json &j, BaseMicroserviceConfigs &val);
 
-    void to_json(json &j, const NeighborMicroserviceConfigs &val);
+    void to_json(json &j, const NeighborMicroservice &val);
 
     void to_json(json &j, const BaseMicroserviceConfigs &val);
 }
 
-using msvcconfigs::NeighborMicroserviceConfigs;
+using msvcconfigs::NeighborMicroservice;
 using msvcconfigs::BaseMicroserviceConfigs;
 using msvcconfigs::MicroserviceType;
 
@@ -1223,8 +1209,6 @@ protected:
 
     //
     NumMscvType nummsvc_upstreamMicroservices = 0;
-    //
-    NumMscvType nummsvc_dnstreamMicroservices = 0;
 
     // The expected shape of the data for the next microservice
     std::vector<std::vector<RequestDataShapeType>> msvc_outReqShape;

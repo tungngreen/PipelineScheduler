@@ -517,7 +517,9 @@ enum AdjustUpstreamMode {
     Overwrite = 0,
     Add = 1,
     Remove = 2,
-    Modify = 3
+    Modify = 3,
+    Start = 4,
+    Stop = 5
 };
 
 typedef std::map<SystemDeviceType, std::string> DeviceInfoType;
@@ -550,7 +552,6 @@ enum ModelType {
     Yolov5nDsrc,
     Arcface,
     Retinaface,
-    RetinafaceDsrc,
     RetinaMtface,
     RetinaMtfaceDsrc,
     PlateDet,

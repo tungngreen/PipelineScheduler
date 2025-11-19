@@ -2,7 +2,7 @@
 
 using namespace msvcconfigs;
 
-void msvcconfigs::from_json(const json &j, msvcconfigs::NeighborMicroserviceConfigs &val) {
+void msvcconfigs::from_json(const json &j, msvcconfigs::NeighborMicroservice &val) {
     j.at("nb_name").get_to(val.name);
     j.at("nb_commMethod").get_to(val.commMethod);
     j.at("nb_link").get_to(val.link);
@@ -28,7 +28,7 @@ void msvcconfigs::from_json(const json &j, msvcconfigs::BaseMicroserviceConfigs 
     j.at("msvc_dnstreamMicroservices").get_to(val.msvc_dnstreamMicroservices);
 }
 
-void msvcconfigs::to_json(json &j, const msvcconfigs::NeighborMicroserviceConfigs &val) {
+void msvcconfigs::to_json(json &j, const msvcconfigs::NeighborMicroservice &val) {
     j["nb_name"] = val.name;
     j["nb_commMethod"] = val.commMethod;
     j["nb_link"] = val.link;
@@ -111,24 +111,23 @@ void Microservice::loadConfigs(const json &jsonConfigs, bool isConstructing) {
             msvc_OutQueue.emplace_back(new ThreadSafeFixSizedDoubleQueue(configs.msvc_maxQueueSize, it->classOfInterest, it->name));
             // Create downstream neigbor config and push that into a list for information later
             // Local microservice supposedly has only 1 downstream but `receiver` microservices could have multiple senders.
-            NeighborMicroservice dnStreamMsvc = NeighborMicroservice(*it, nummsvc_dnstreamMicroservices);
+            NeighborMicroservice dnStreamMsvc = NeighborMicroservice(*it);
             dnstreamMicroserviceList.emplace_back(dnStreamMsvc);
             // This maps the data class to be sent to this downstream microservice and the microservice's index.
-            std::pair<int16_t, uint16_t> map = {dnStreamMsvc.classOfInterest, nummsvc_dnstreamMicroservices++};
+            std::pair<int16_t, uint16_t> map = {dnStreamMsvc.classOfInterest, msvc_OutQueue.size()-1};
             classToDnstreamMap.emplace_back(map);
             msvc_outReqShape.emplace_back(it->expectedShape); // This is a dummy value for now
             if (it->commMethod == CommMethod::localGPU) {
                 msvc_activeOutQueueIndex.emplace_back(2);
             } else {
                 msvc_activeOutQueueIndex.emplace_back(1);
-                if (it->commMethod == CommMethod::encodedCPU) {
-                    msvc_OutQueue.back()->setEncoded(true);
-                }
+                msvc_OutQueue.back()->setEncoded(it->commMethod == CommMethod::encodedCPU);
             }
         }
 
         for (auto it = configs.msvc_upstreamMicroservices.begin(); it != configs.msvc_upstreamMicroservices.end(); ++it) {
-            NeighborMicroservice upStreamMsvc = NeighborMicroservice(*it, nummsvc_upstreamMicroservices++);
+            NeighborMicroservice upStreamMsvc = NeighborMicroservice(*it);
+            nummsvc_upstreamMicroservices++;
             upstreamMicroserviceList.emplace_back(upStreamMsvc);
             if (it->commMethod == CommMethod::localGPU) {
                 msvc_activeInQueueIndex.emplace_back(2);
@@ -141,25 +140,60 @@ void Microservice::loadConfigs(const json &jsonConfigs, bool isConstructing) {
 
 void Microservice::reloadDnstreams() {
     BaseMicroserviceConfigs configs = msvc_configs.get<BaseMicroserviceConfigs>();
-    dnstreamMicroserviceList = {};
+    std::unordered_set<size_t> indicesToKeep;
+
     for (auto it = configs.msvc_dnstreamMicroservices.begin(); it != configs.msvc_dnstreamMicroservices.end(); ++it) {
+        NeighborMicroservice dnStreamMsvc = NeighborMicroservice(*it);
+        auto existing = std::find_if(dnstreamMicroserviceList.begin(), dnstreamMicroserviceList.end(),
+                                       [&](const NeighborMicroservice &msvc) { return msvc.name == dnStreamMsvc.name; });
+        if (existing != dnstreamMicroserviceList.end()) {
+            size_t index = std::distance(dnstreamMicroserviceList.begin(), existing);
+            indicesToKeep.insert(index);
+            if (dnstreamMicroserviceList[index].classOfInterest != dnStreamMsvc.classOfInterest) {
+                auto mapExisting = std::find_if(classToDnstreamMap.begin(), classToDnstreamMap.end(),
+                                                [&](const std::pair<int16_t, uint16_t> &map) {return map.second == index;});
+                if (mapExisting != classToDnstreamMap.end()) {
+                    (*mapExisting).first = dnStreamMsvc.classOfInterest;
+                }
+                msvc_OutQueue[index]->setClassOfInterest(dnStreamMsvc.classOfInterest);
+            }
+            if (it->commMethod == CommMethod::localGPU) {
+                msvc_activeOutQueueIndex[index] = 2;
+            } else {
+                msvc_activeOutQueueIndex[index] = 1;
+                msvc_OutQueue[index]->setEncoded(it->commMethod == CommMethod::encodedCPU);
+            }
+            dnstreamMicroserviceList[index] = dnStreamMsvc;
+            continue;
+        }
+
         msvc_OutQueue.emplace_back(new ThreadSafeFixSizedDoubleQueue(configs.msvc_maxQueueSize, it->classOfInterest, it->name));
-        // Create downstream neigbor config and push that into a list for information later
-        // Local microservice supposedly has only 1 downstream but `receiver` microservices could have multiple senders.
-        NeighborMicroservice dnStreamMsvc = NeighborMicroservice(*it, nummsvc_dnstreamMicroservices);
         dnstreamMicroserviceList.emplace_back(dnStreamMsvc);
-        // This maps the data class to be sent to this downstream microservice and the microservice's index.
-        std::pair<int16_t, uint16_t> map = {dnStreamMsvc.classOfInterest, nummsvc_dnstreamMicroservices++};
+        indicesToKeep.insert(msvc_OutQueue.size() - 1);
+        std::pair<int16_t, uint16_t> map = {dnStreamMsvc.classOfInterest, (uint16_t)(msvc_OutQueue.size() - 1)};
         classToDnstreamMap.emplace_back(map);
-        msvc_outReqShape.emplace_back(it->expectedShape); // This is a dummy value for now
+        msvc_outReqShape.emplace_back(it->expectedShape); // This is a dummy value, updated later in creation
         if (it->commMethod == CommMethod::localGPU) {
             msvc_activeOutQueueIndex.emplace_back(2);
         } else {
             msvc_activeOutQueueIndex.emplace_back(1);
-            if (it->commMethod == CommMethod::encodedCPU) {
-                msvc_OutQueue.back()->setEncoded(true);
-            }
+            msvc_OutQueue.back()->setEncoded(it->commMethod == CommMethod::encodedCPU);
         }
+    }
+    for (int i = dnstreamMicroserviceList.size() - 1; i >= 0; --i) {
+        if (indicesToKeep.find(i) == indicesToKeep.end()) {
+            delete msvc_OutQueue[i];
+            msvc_OutQueue.erase(msvc_OutQueue.begin() + i);
+            dnstreamMicroserviceList.erase(dnstreamMicroserviceList.begin() + i);
+            msvc_outReqShape.erase(msvc_outReqShape.begin() + i);
+            msvc_activeOutQueueIndex.erase(msvc_activeOutQueueIndex.begin() + i);
+        }
+    }
+    classToDnstreamMap = {};
+    for (uint16_t i = 0; i < dnstreamMicroserviceList.size(); ++i) {
+        const NeighborMicroservice& msvc = dnstreamMicroserviceList[i];
+        std::pair<int16_t, uint16_t> mapEntry = {msvc.classOfInterest, i};
+        classToDnstreamMap.emplace_back(mapEntry);
     }
 }
 

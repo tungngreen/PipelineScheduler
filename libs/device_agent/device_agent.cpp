@@ -514,13 +514,13 @@ void DeviceAgent::UpdateContainerSender(const std::string &msg) {
         return;
     }
     UpdateContainerSender(request.mode(), request.name(), request.downstream_name(), request.ip(), request.port(),
-                          request.data_portion(), request.old_link(), request.timestamp(), request.offloading_duration());
+                          request.data_portion(), request.old_link(), request.timestamp(), request.offloading_duration(), request.class_of_interest());
 }
 
 void DeviceAgent::UpdateContainerSender(int mode, const std::string &cont_name, const std::string &dwnstr,
                                         const std::string &ip, const int &port, const float &data_portion,
                                         const std::string &old_link, const int64_t &timestamp,
-                                        const int &offloading_duration) {
+                                        const int offloading_duration, const int coi) {
     Connection request;
     request.set_mode(mode);
     request.set_name(dwnstr);
@@ -530,6 +530,7 @@ void DeviceAgent::UpdateContainerSender(int mode, const std::string &cont_name, 
     request.set_old_link(old_link);
     request.set_timestamp(timestamp);
     request.set_offloading_duration(offloading_duration);
+    request.set_class_of_interest(coi);
 
     //check if cont_name is in containers
     if (containers.find(cont_name) == containers.end()) {

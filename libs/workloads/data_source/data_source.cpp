@@ -13,7 +13,6 @@ void DataSourceAgent::runService(const json &pipeConfigs, const json &configs) {
         cont_msvcsGroups["receiver"].msvcList[0]->setReady();
     }
 
-    this->waitReady();
     this->START();
     collectRuntimeMetrics();
 

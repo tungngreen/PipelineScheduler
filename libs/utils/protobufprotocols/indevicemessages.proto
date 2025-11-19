@@ -19,6 +19,7 @@ message Connection {
   string old_link = 6;
   int64 timestamp = 7;
   int32 offloading_duration = 8;
+  int32 class_of_interest = 9;
 }
 
 message TimeKeeping {

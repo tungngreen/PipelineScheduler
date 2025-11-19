@@ -104,6 +104,7 @@ public:
     [[nodiscard]] bool running() const { return CONT_RUN; }
 
     void START() {
+        this->waitReady();
         for (auto msvcGroup: cont_msvcsGroups) {
             for (auto msvc: msvcGroup.second.msvcList) {
                 msvc->unpauseThread();

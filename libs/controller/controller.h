@@ -200,10 +200,6 @@ struct ContainerHandle {
     // Queue sizes of the model
     std::vector<QueueLengthType> queueSizes;
 
-    // Flag to indicate whether the container is running
-    // At the end of scheduling, all containerhandle marked with `running = false` object will be deleted
-    bool running = false;
-
     // Number of microservices packed inside this container. A regular container has 5 namely
     // receiver, preprocessor, inferencer, postprocessor, sender
     uint8_t numMicroservices = 5;
@@ -308,7 +304,6 @@ struct ContainerHandle {
         upstreams = other.upstreams;
         downstreams = other.downstreams;
         queueSizes = other.queueSizes;
-        running = other.running;
         numMicroservices = other.numMicroservices;
         expectedTransferLatency = other.expectedTransferLatency;
         expectedQueueingLatency = other.expectedQueueingLatency;
@@ -351,7 +346,6 @@ struct ContainerHandle {
             upstreams = other.upstreams;
             downstreams = other.downstreams;
             queueSizes = other.queueSizes;
-            running = other.running;
             numMicroservices = other.numMicroservices;
             expectedTransferLatency = other.expectedTransferLatency;
             expectedQueueingLatency = other.expectedQueueingLatency;
@@ -1002,8 +996,8 @@ private:
     void StartContainer(ContainerHandle *container, bool easy_allocation = true);
     void MoveContainer(ContainerHandle *container, NodeHandle *new_device);
     void StopContainer(ContainerHandle *container, NodeHandle *device, bool forced = false);
-    void AdjustUpstream(int port, ContainerHandle *upstr, NodeHandle *new_device,
-                               const std::string &dwnstr, AdjustUpstreamMode mode, const std::string &old_link = "");
+    void AdjustUpstream(ContainerHandle *cont, ContainerHandle *upstr, NodeHandle *new_device,
+                               AdjustUpstreamMode mode, const std::string &old_link = "");
     void SyncDatasource(ContainerHandle *prev, ContainerHandle *curr);
     void AdjustBatchSize(ContainerHandle *msvc, int new_bs);
     void AdjustCudaDevice(ContainerHandle *msvc, GPUHandle *new_device);

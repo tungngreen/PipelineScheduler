@@ -874,23 +874,55 @@ void Controller::ApplyScheduling() {
     }
     // Rearranging the upstreams and downstreams for containers;
     for (auto pipe: ctrl_scheduledPipelines.getList()) {
+        std::vector<std::tuple<ContainerHandle*, ContainerHandle*, AdjustUpstreamMode>> adjust_list = {};
         for (auto &model: pipe->tk_pipelineModels) {
             // If it's a datasource, we don't have to do it now
-            // datasource doesn't have upstreams
-            // and the downstreams will be set later
-            if (model->name.find("datasource") != std::string::npos) {
-                continue;
-            }
+            // datasource doesn't have upstreams and the downstreams will be set later
+            if (model->name.find("datasource") != std::string::npos) continue;
 
             for (auto &container: model->task->tk_subTasks[model->name]) {
-                container->upstreams = {};
+                std::unordered_set<ContainerHandle *> desiredUpstreams;
                 for (auto &[upstream, coi]: model->upstreams) {
                     for (auto &upstreamContainer: upstream->task->tk_subTasks[upstream->name]) {
-                        container->upstreams.push_back(upstreamContainer);
-                        upstreamContainer->downstreams.push_back(container);
+                        desiredUpstreams.insert(upstreamContainer);
+                    }
+                }
+
+                // remove old upstreams that are no longer desired
+                std::vector<ContainerHandle *> keptUpstreams;
+                keptUpstreams.reserve(container->upstreams.size());
+                for (auto *oldUp: container->upstreams) {
+                    if (desiredUpstreams.find(oldUp) != desiredUpstreams.end()) {
+                        keptUpstreams.push_back(oldUp);
+                    } else {
+                        auto &downs = oldUp->downstreams;
+                        auto it = std::find(downs.begin(), downs.end(), container);
+                        if (it != downs.end()) {
+                            downs.erase(it);
+                            adjust_list.push_back({oldUp, container, AdjustUpstreamMode::Stop});
+                        }
+                    }
+                }
+                container->upstreams.swap(keptUpstreams);
+
+                // add missing upstreams
+                for (auto *wantUp: desiredUpstreams) {
+                    auto &ups = container->upstreams;
+                    if (std::find(ups.begin(), ups.end(), wantUp) != ups.end()) continue;
+                    ups.push_back(wantUp);
+                    auto &downs = wantUp->downstreams;
+                    if (std::find(downs.begin(), downs.end(), container) == downs.end()) {
+                        downs.push_back(container);
+                        adjust_list.push_back({wantUp, container, AdjustUpstreamMode::Start});
                     }
                 }
             }
+        }
+
+        for (auto &[upstream, c, mode]: adjust_list) {
+            if (std::find(new_containers.begin(), new_containers.end(), upstream) != new_containers.end() || upstream->model == Sink)
+                continue;
+            AdjustUpstream(c, upstream, c->device_agent, mode);
 
         }
     }
@@ -906,9 +938,8 @@ void Controller::ApplyScheduling() {
             //int i = 0;
             std::vector<ContainerHandle *> candidates = model->task->tk_subTasks[model->name];
             for (auto *candidate: candidates) {
-                if (std::find(new_containers.begin(), new_containers.end(), candidate) != new_containers.end() || candidate->model == Sink) {
+                if (std::find(new_containers.begin(), new_containers.end(), candidate) != new_containers.end() || candidate->model == Sink)
                     continue;
-                }
                 if (candidate->device_agent->name != model->device) {
                     candidate->batch_size = model->batchSize;
                     //candidate->cuda_device = model->cudaDevices[i++];
@@ -1261,7 +1292,7 @@ void Controller::MoveContainer(ContainerHandle *container, NodeHandle *device) {
             SyncDatasource(upstr, container);
             StopContainer(upstr, old_device);
         } else {
-            AdjustUpstream(container->recv_port, upstr, device, container->pipelineModel->name, AdjustUpstreamMode::Overwrite, old_link);
+            AdjustUpstream(container, upstr, device, AdjustUpstreamMode::Overwrite, old_link);
         }
     }
     StopContainer(container, old_device);
@@ -1269,20 +1300,21 @@ void Controller::MoveContainer(ContainerHandle *container, NodeHandle *device) {
     old_device->containers.erase(container->name);
 }
 
-void Controller::AdjustUpstream(int port, ContainerHandle *upstr, NodeHandle *new_device,
-                                const std::string &dwnstr, AdjustUpstreamMode mode, const std::string &old_link) {
+void Controller::AdjustUpstream(ContainerHandle *cont, ContainerHandle *upstr, NodeHandle *new_device,
+                                AdjustUpstreamMode mode, const std::string &old_link) {
     ContainerLink request;
     request.set_mode(mode);
     request.set_name(upstr->name);
-    request.set_downstream_name(dwnstr);
+    request.set_downstream_name(cont->pipelineModel->name);
     request.set_ip(new_device->ip);
-    request.set_port(port);
+    request.set_port(cont->recv_port);
     request.set_data_portion(1.0);
     request.set_old_link(old_link);
     request.set_offloading_duration(0);
+    request.set_class_of_interest(cont->class_of_interest);
 
     sendMessageToDevice(upstr->device_agent->name, MSG_TYPE[ADJUST_UPSTREAM], request.SerializeAsString());
-    spdlog::get("container_agent")->info("Upstream of {0:s} adjusted to container {1:s}", dwnstr, upstr->name);
+    spdlog::get("container_agent")->info("Upstream of {0:s} adjusted to container {1:s}", upstr->name, cont->pipelineModel->name);
 }
 
 void Controller::SyncDatasource(ContainerHandle *prev, ContainerHandle *curr) {
