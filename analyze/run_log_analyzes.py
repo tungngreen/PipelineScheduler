@@ -111,13 +111,15 @@ def analyze_single_experiment(base_dir, dirs, num_results = 3, latency_target = 
             c = len([x for x in cars[d] if int(x[1]) < latency_target])
             p = len([x for x in people[d] if int(x[1]) < people_latency_target])
             goodput[d] = (c + p) / num_results / running_seconds
-        avg_latency = {}
+        avg_latency, all_latencies = {}, {}
         for d in dirs:
             avg_latency[d] = sum([int(x[1]) / 1000 for x in cars[d]] + [int(x[1]) / 1000 for x in people[d]]) / (len(cars[d]) + len(people[d])) if (len(cars[d]) + len(people[d])) > 0 else 1
+            all_latencies[d] = [int(x[1]) / 1000 for x in cars[d]] + [int(x[1]) / 1000 for x in people[d]]
 
         return {'throughput': throughput,
                 'goodput': goodput,
                 'latency': avg_latency,
+                'full_latencies': all_latencies,
                 'max_throughput': (total) / running_seconds}
     else:
         traffic_people, traffic_cars, people_people, people_cars = {}, {}, {}, {}
@@ -310,9 +312,8 @@ def get_bandwidths(base_dir):
     return bandwidths
 
 
-def logSystemMetrics(base_directory):
+def logSystemMetrics(base_directory, experiments = ['fcty', 'camp'], running_seconds = 1800):
     results = {}
-    experiments = ['fcty', 'camp']
     for exp in experiments:
         directory = os.path.join(base_directory, exp)
         if not os.path.exists(os.path.join(directory, 'processed_logs.pkl')):
@@ -322,7 +323,7 @@ def logSystemMetrics(base_directory):
             elif exp == 'camp':
                 results[exp] = analyze_single_experiment(directory, systems, 1, 250, True, 7200)
             else:
-                results[exp] = analyze_single_experiment(directory, systems, 1, 250, True)
+                results[exp] = analyze_single_experiment(directory, systems, 1, 250, True, running_seconds)
             with open(os.path.join(directory, 'processed_logs.pkl'), 'wb') as f:
                 pickle.dump(results[exp], f)
         else:
@@ -333,5 +334,7 @@ def logSystemMetrics(base_directory):
         for exp in experiments:
             f.write(f"Experiment: {exp}\n".encode())
             for key, value in results[exp].items():
+                if key == 'full_latencies':
+                    continue
                 f.write(f"{key}: {value}\n".encode())
             f.write("\n".encode())
