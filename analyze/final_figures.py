@@ -19,7 +19,7 @@ from natsort import natsorted
 from pandas import DataFrame
 
 from run_log_analyzes import read_file, get_total_objects, analyze_single_experiment, get_bandwidths
-from database_connection import bucket_and_average, align_timestamps, avg_memory, avg_edge_power
+from database_connection import bucket_and_average, align_timestamps, avg_memory, full_edge_power
 from analyze_object_counts import load_data
 
 colors = ['#365d8d', '#e6ab02', '#471164', '#5dc863', '#21908c']
@@ -176,6 +176,131 @@ def closest_index(array, value):
         return after
     else:
         return before
+
+
+def fcpoMainFigure(base_directory):
+    cases = ['centralized', 'distributed']
+    case_labels = ['i-Centralized', 'ii-Distributed']
+    scenarios = ['camp', 'fcty']
+    scenario_labels = ['Urban Surveillance', 'Smart Factory']
+    latencies = ['100', '200', '250']
+    systems = ['fcpo', 'base', 'rule', 'bce']
+    system_labels = ['FCPO', 'Base', 'Rule', 'BCEdge']
+
+    # create 2 barplots, one for each case
+    total = {}
+    for case in cases:
+        fig, axs = plt.subplots(1, 1, figsize=(6.5, 2.5), gridspec_kw={'height_ratios': [1], 'width_ratios': [1]})
+        directory = os.path.join(base_directory, case)
+
+        data = {}
+        for lat in latencies:
+            data[lat] = {}
+        for exp in scenarios:
+            if not os.path.exists(os.path.join(directory, exp, f'processed_logs.pkl')):
+                for lat in latencies:
+                    dir = os.path.join(directory, exp, lat)
+                    if exp == 'fcty':
+                        data[lat][exp] = analyze_single_experiment(dir, systems, 1, int(lat), True, 2160)
+                    elif exp == 'camp':
+                        data[lat][exp] = analyze_single_experiment(dir, systems, 1, int(lat), True, 7200)
+                with open(os.path.join(directory, exp, f'processed_logs.pkl'), 'wb') as f:
+                    pickle.dump(data, f)
+            else:
+                with open(os.path.join(directory, exp, f'processed_logs.pkl'), 'rb') as f:
+                    data = pickle.load(f)
+
+        total[case] = data
+        xticks = []
+        xtick_labels = []
+        for k, exp in enumerate(scenarios):
+            for j, lat in enumerate(latencies):
+                for i, sys in enumerate(systems):
+                    throughput_rate = data[lat][exp]['throughput'][sys] / data[lat][exp]['max_throughput'] * 100
+                    goodput_rate = data[lat][exp]['goodput'][sys] / data[lat][exp]['max_throughput'] * 100
+
+                    bar_id = i + len(systems) * (j + k * len(latencies))
+                    group_id = bar_id // len(systems)
+                    in_group_index = bar_id % len(systems)
+                    pattern_width = len(systems) * bar_width
+                    cumulative_gap = sum(0.4 if (g % len(latencies)) == 2 else 0.1 for g in range(group_id))
+                    x_base = group_id * pattern_width + cumulative_gap + in_group_index * bar_width
+
+                    if group_id % 3 == 1 and in_group_index == 0:
+                        xticks.append(x_base + (len(systems) * bar_width) / 2 - bar_width / 2)
+                        xtick_labels.append(f'{lat}ms\n{scenario_labels[k]}')
+                    elif in_group_index == 0:
+                        xticks.append(x_base + (len(systems) * bar_width) / 2 - bar_width / 2)
+                        xtick_labels.append(f'{lat}ms')
+                    axs.bar(x_base, throughput_rate,
+                            bar_width, alpha=0.5, color=colors[i], hatch='//', edgecolor='white')
+                    axs.bar(x_base, goodput_rate,
+                            bar_width, label=system_labels[i] if k == 0 and j == 0 else "",
+                            color=colors[i], hatch=markers[i], edgecolor='white', linewidth=0.5, hatch_linewidth=0.5)
+                    axs.text(x_base, goodput_rate, f'{goodput_rate:.0f}',
+                             ha='center', va='bottom', size=12)
+
+        if case == 'distributed':
+            striped_patch = mpatches.Patch(facecolor='grey', alpha=0.5, hatch='//', edgecolor='white', label='Throughput')
+            solid_patch = mpatches.Patch(facecolor='grey', label='Goodput')
+            mpl.rcParams['hatch.linewidth'] = 2
+            ax2 = axs.twinx()
+            ax2.set_yticks([])
+            ax2.legend(handles=[striped_patch, solid_patch], loc='lower center', fontsize=12, frameon=True, bbox_to_anchor=(0.85, -0.12), ncol=1)
+        axs.set_xticks(xticks)
+        axs.set_xticklabels(xtick_labels, size=13)
+        axs.set_yticks([0, 50, 100])
+        axs.set_yticklabels([0, 50, 100], size=13, rotation=90)
+        axs.set_ylabel('Success Rate (%)', size=13)
+        if case == 'centralized':
+            axs.legend(fontsize=13, ncol=4)
+        plt.tight_layout()
+        plt.savefig(f'fcpo-{case}-throughput-comparison.pdf')
+        plt.show()
+
+
+    fig, axs = plt.subplots(1, 1, figsize=(6.5, 2.5), gridspec_kw={'height_ratios': [1], 'width_ratios': [1]})
+    box_width = 0.6
+    xticks = []
+    xtick_labels = []
+    for k, case in enumerate(cases):
+        for j, lat in enumerate(latencies):
+            for i, sys in enumerate(systems):
+                data = []
+                for exp in scenarios:
+                    total[case][lat][exp]['full_latencies'][sys] = [max(7, x) for x in total[case][lat][exp]['full_latencies'][sys]]
+                    data += total[case][lat][exp]['full_latencies'][sys]
+
+                box_id = i + len(systems) * (j + k * len(latencies))
+                group_id = box_id // len(systems)
+                in_group_index = box_id % len(systems)
+                pattern_width = len(systems) * box_width
+                cumulative_gap = sum(0.4 if (g % len(latencies)) == 2 else 0.1 for g in range(group_id))
+                x_base = group_id * pattern_width + cumulative_gap + in_group_index * box_width
+                if in_group_index == 0:
+                    xticks.append(x_base + (len(systems) * box_width) / 2 - box_width / 2)
+                    if group_id % len(latencies) == 1:
+                        xtick_labels.append(f'{lat}ms\n{case_labels[k]}')
+                    else:
+                        xtick_labels.append(f'{lat}ms')
+
+                axs.boxplot(
+                    [data], positions=[x_base], widths=box_width,
+                    patch_artist=True, label=system_labels[i] if k == 0 and j == 0 else "",
+                    boxprops=dict(facecolor=colors[i], hatch=markers[i], edgecolor='black', linewidth=0.5),
+                    medianprops=dict(color='black'),
+                    flierprops=dict(marker='o', markersize=3, alpha=0.6)
+                )
+
+    axs.set_xticks(xticks)
+    axs.set_xticklabels(xtick_labels, size=13)
+    axs.set_ylabel('Latency (ms)', size=13)
+    axs.set_yscale('log')
+    axs.set_ylim(5, 1000)
+    axs.legend(fontsize=13, ncol=4, loc='lower center')
+    plt.tight_layout()
+    plt.savefig(f'fcpo-latency-boxplot.png', dpi=900)
+    plt.show()
 
 
 def individual_figures(ax, directory, data, key, offset, bandwidth_timestamps, bandwidth, row, col):
@@ -609,9 +734,10 @@ def reduced_slo(base_directory):
 def system_overhead(directory):
     # Memory
     systems = ['fcpo', 'bce', 'ppp']
-    labels = ['FCPO', 'BCE', 'OInf']
-    fig1, ax1 = plt.subplots(1, 1, figsize=(2.5, 2.2), gridspec_kw={'height_ratios': [1], 'width_ratios': [1]})
-    fig2, ax2 = plt.subplots(1, 1, figsize=(2.5, 2.2), gridspec_kw={'height_ratios': [1], 'width_ratios': [1]})
+    labels = ['FCPO', 'BCE', 'Rule']
+    fig1, ax1 = plt.subplots(1, 1, figsize=(2.75, 2.1), gridspec_kw={'height_ratios': [1], 'width_ratios': [1]})
+    fig2, ax2 = plt.subplots(1, 1, figsize=(2.75, 2.1), gridspec_kw={'height_ratios': [1], 'width_ratios': [1]})
+    fig3, ax3 = plt.subplots(1, 1, figsize=(2.75, 2.1), gridspec_kw={'height_ratios': [1], 'width_ratios': [1]})
     if not os.path.exists(os.path.join(directory, '..', 'processed_logs', 'memory.pkl')):
         server_memory = avg_memory('nful', systems, 0)
         edge_memory = avg_memory('nful', systems, 1)
@@ -623,14 +749,17 @@ def system_overhead(directory):
     for i, system in enumerate(systems):
         ax1.bar(i, (server_memory[system][0] + server_memory[system][1]) / 1024, 0.7, label=labels[i], color=colors[i])
         ax2.bar(i, edge_memory[system][0] / (1024 * 1024), 0.7, label=labels[i], color=colors[i])
+        ax3.bar(i, (server_memory[system][0] + server_memory[system][1] + (edge_memory[system][0] / 1024)) / 1024, 0.7, label=labels[i], color=colors[i])
         ax1.plot([-.4, 2.4], [(server_memory['ppp'][0] + server_memory['ppp'][1]) / 1024,
                                          (server_memory['ppp'][0] + server_memory['ppp'][1]) / 1024], color='black')
         ax2.plot([-.4, 2.4], [edge_memory['ppp'][0] / (1024 * 1024), edge_memory['ppp'][0] / (1024 * 1024)], color='black')
+        ax3.plot([-.4, 2.4], [(server_memory['ppp'][0] + server_memory['ppp'][1] + (edge_memory['ppp'][0] / 1024)) / 1024,
+                                         (server_memory['ppp'][0] + server_memory['ppp'][1] + (edge_memory['ppp'][0] / 1024)) / 1024], color='black')
     ax1.legend(fontsize=16, loc='lower center')
     ax1.set_ylabel('Memory (10 GB) ', size=17)
-    ax1.set_yticks([50, 100])
-    ax1.set_yticklabels([5, 10], size=16)
-    ax1.set_ylim([45, 125])
+    ax1.set_yticks([60, 80, 100, 120])
+    ax1.set_yticklabels([6, 8, 10, 12], size=16)
+    ax1.set_ylim([45, 135])
     ax1.set_xticks([])
     ax2.legend(fontsize=16, loc='lower center')
     ax2.set_ylabel('Memory (GB)', size=17)
@@ -638,38 +767,62 @@ def system_overhead(directory):
     ax2.set_yticklabels([2, 4], size=16)
     ax2.set_ylim([1.5, 6])
     ax2.set_xticks([])
+    ax3.legend(fontsize=16, loc='lower center')
+    ax3.set_ylabel('Memory (10 GB)', size=17)
+    ax3.set_yticks([60, 80, 100, 120])
+    ax3.set_yticklabels([6, 8, 10, 12], size=16)
+    ax3.set_ylim([45, 135])
+    ax3.set_xticks([])
     fig1.tight_layout()
     fig2.tight_layout()
+    fig3.tight_layout()
     fig1.savefig('server-memory.pdf')
     fig2.savefig('edge-memory.pdf')
+    fig3.savefig('centralized-memory.pdf')
     fig1.show()
     fig2.show()
+    fig3.show()
 
     # Power consumption
-    fig1, ax1 = plt.subplots(1, 1, figsize=(2.5, 2.2), gridspec_kw={'height_ratios': [1], 'width_ratios': [1]})
+    fig1, ax1 = plt.subplots(1, 1, figsize=(6.5, 2), gridspec_kw={'height_ratios': [1], 'width_ratios': [1]})
+    energy_labels = ['FCPO', 'BCE', 'Rule']
     if not os.path.exists(os.path.join(directory, '..', 'processed_logs', 'power.pkl')):
-        power = avg_edge_power('nful', systems)
+        power = full_edge_power('nful', systems)
+        for system in systems:
+            start_time = power[system]['timestamps'][0]
+            power[system]['timestamps'] = [(t - start_time) / 60000000 for t in power[system]['timestamps']]
         with open(os.path.join(directory, '..', 'processed_logs', 'power.pkl'), 'wb') as f:
             pickle.dump(power, f)
     else:
         with open(os.path.join(directory, '..', 'processed_logs', 'power.pkl'), 'rb') as f:
             power = pickle.load(f)
+
     for i, system in enumerate(systems):
+        sys_arr = np.array(power[system]['gpu_0_power_consumption'])
+        ppp_arr = np.array(power['ppp']['gpu_0_power_consumption'])
+        min_len = min(len(sys_arr), len(ppp_arr))
+        diff = sys_arr[:min_len] - ppp_arr[:min_len]
+        # for the baseline itself, plot zeros
         if system == 'ppp':
-            continue
-        ax1.bar(i, (power[system][0] - power['ppp'][0]), 0.7, label=labels[i], color=colors[i])
-    ax1.legend(fontsize=16, loc='upper right', bbox_to_anchor=(1, 0.9))
-    ax1.set_ylabel('Avg. Power used \nfor RL (100 mW) ', size=17)
-    ax1.set_yticks([0, 100, 200])
-    ax1.set_yticklabels([0, 1, 2], size=16)
-    ax1.set_xticks([])
+            diff = np.zeros(min_len)
+            label = f"{energy_labels[i]} (baseline)"
+        else:
+            label = energy_labels[i]
+        ax1.plot(diff, styles[i], label=label, color=colors[i], linewidth=1, markevery=0.1)
+    ax1.legend(fontsize=15, loc='upper right', bbox_to_anchor=(1, 0.9))
+    ax1.set_ylabel('Power Use (mW)', size=15)
+    ax1.set_yticks([0, 200, 400])
+    ax1.set_yticklabels([0, 200, 400], size=15)
+    ax1.set_xlim(1000, 2900)
+    ax1.set_xticks([1000, 1600, 2200, 2800])
+    ax1.set_xticklabels([0, 10, 20, '30min'], size=15)
     fig1.tight_layout()
     fig1.savefig('power-consumption.pdf')
     fig1.show()
 
     # RL Latency
-    fig1, ax1 = plt.subplots(1, 1, figsize=(4, 2.2), gridspec_kw={'height_ratios': [1], 'width_ratios': [1]})
-    fig2, ax2 = plt.subplots(1, 1, figsize=(4, 2.2), gridspec_kw={'height_ratios': [1], 'width_ratios': [1]})
+    fig1, ax1 = plt.subplots(1, 1, figsize=(3.5, 2.2), gridspec_kw={'height_ratios': [1], 'width_ratios': [1]})
+    fig2, ax2 = plt.subplots(1, 1, figsize=(3.5, 2.2), gridspec_kw={'height_ratios': [1], 'width_ratios': [1]})
     x_labels = ['Server', 'AGX', 'NX', 'Nano']
     x = np.arange(len(x_labels))
     data = json.loads(open(os.path.join(directory, 'latency.json')).read())
@@ -690,12 +843,12 @@ def system_overhead(directory):
     handles, labels = ax1.get_legend_handles_labels()
     ax1.legend([handles[0], handles[5]], [labels[0], labels[5]], fontsize=15, loc='upper center', ncol=2, bbox_to_anchor=(0.5, 1.05))
     ax1.set_xticks(x + 0.2)
-    ax1.set_xticklabels(x_labels, size=15)
+    ax1.set_xticklabels(x_labels, size=15, rotation=15)
     ax1.set_ylabel('Latency (ms)', size=15)
     ax1.tick_params(axis='y', labelsize=15)
     ax2.legend([handles[0], handles[5]], [labels[0], labels[5]], fontsize=15, loc='upper center', ncol=2, bbox_to_anchor=(0.5, 1.05))
     ax2.set_xticks(x + 0.2)
-    ax2.set_xticklabels(x_labels, size=15)
+    ax2.set_xticklabels(x_labels, size=15, rotation=15)
     ax2.set_ylabel('Latency (100ms)    ', size=15)
     ax2.tick_params(axis='y', labelsize=14)
     ax2.set_yticks([0, 500, 1000])
@@ -845,23 +998,34 @@ def reward_param_plot(directory):
             values="throughput",
             aggfunc="mean"
         )
+        # draw heatmaps without colorbars; colorbar will be in a separate figure
         sns.heatmap(
-           pivot_table,
-           ax=ax,
-           cmap="viridis",
-           cbar=i == len(pairs) - 1,  # Only last plot gets colorbar
-           cbar_kws={"ticks": [pivot_table.min().min(), pivot_table.max().max()], "format": '%.0f'}
+            pivot_table,
+            ax=ax,
+            cmap="viridis",
+            cbar=False
         )
-        if i == len(pairs) - 1:
-           cbar = ax.collections[0].colorbar
-           cbar.set_ticks([pivot_table.min().min(), pivot_table.max().max()])
-           cbar.set_ticklabels(['min', 'max'], fontsize=14, rotation=90)
         ax.tick_params(axis='both', which='major', labelsize=13)
         ax.set_xlabel(xparam, fontsize=14)
         ax.set_ylabel(yparam, fontsize=14)
     plt.tight_layout()
     plt.savefig('reward-hyperparameters-heatmaps.pdf')
     plt.show()
+
+    # separate vertical colorbar figure (very narrow, tall)
+    vmin = df["throughput"].min()
+    vmax = df["throughput"].max()
+    fig_cb = plt.figure(figsize=(0.5, 5.5))
+    ax_cb = fig_cb.add_axes([0.05, 0.1, 0.4, 0.85])
+    norm = plt.Normalize(vmin=vmin, vmax=vmax)
+    sm = plt.cm.ScalarMappable(cmap='viridis', norm=norm)
+    sm.set_array([])  # for matplotlib < 3.1 compatibility
+    cbar = fig_cb.colorbar(sm, cax=ax_cb, orientation='vertical')
+    cbar.set_ticks([vmin, vmax])
+    cbar.set_ticklabels(['min', 'max'], rotation=90, fontsize=14)
+    cbar.ax.tick_params(labelsize=14)
+    fig_cb.savefig('reward-hyperparameters-colorbar.pdf')
+    fig_cb.show()
 
     #parallel axis plot
     df = df.sort_values(by='throughput', ascending=True).reset_index(drop=True)

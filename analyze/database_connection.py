@@ -5,7 +5,7 @@ from sqlalchemy import create_engine, text
 
 # Hide SettingWithCopyWarning
 pd.options.mode.chained_assignment = None  # default='warn'
-conn_str = "postgresql://postgres:pipe@db_host:port/pipeline"
+conn_str = "postgresql://postgres:pipe@143.248.57.18:60004/pipeline"
 
 
 def get_table_names(conn, schema, keyword):
@@ -124,6 +124,24 @@ def avg_edge_power(exp, algos=['fcpo', 'bce', 'ppp']):
             df = df.loc[(df[['gpu_0_mem_usage']] != 0).any(axis=1)]
         powers[algo] = [df['gpu_0_power_consumption'].mean()]
     print(powers)
+    return powers
+
+def full_edge_power(exp, algos=['fcpo', 'bce', 'ppp']):
+    engine = create_engine(conn_str)
+    powers = {}
+    df = pd.DataFrame()
+    for algo in algos:
+        full_schema = f"{exp}_{algo}"
+        with engine.connect() as connection:
+            table_names = get_table_names(connection, full_schema, 'agx%_hw')
+            table_names.extend(get_table_names(connection, full_schema, 'nx%_hw'))
+            table_names.extend(get_table_names(connection, full_schema, 'orn%_hw'))
+            df = pd.DataFrame()
+            for table in table_names:
+                query = text(f"SELECT timestamps, gpu_0_mem_usage, gpu_0_power_consumption FROM {full_schema}.{table};")
+                df_tmp = pd.read_sql(query, connection)
+                df = pd.concat([df, df_tmp], axis=0)
+            powers[algo] = df.loc[(df[['gpu_0_mem_usage']] != 0).any(axis=1)]
     return powers
 
 def full_memory(schema, buckets):

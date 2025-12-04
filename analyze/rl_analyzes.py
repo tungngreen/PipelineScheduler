@@ -56,14 +56,26 @@ def reward_plot(base_directory):
         fcpof_loss = {}
         read_rl_logs(fcpo_fed, natsorted(os.listdir(fcpo_fed)), fcpof_rewards, fcpof_loss)
 
+        fcpo_w_tutti = os.path.join(base_directory, 'fcpo_logs_with_tutti')
+        fcpowt_rewards = {}
+        fcpowt_loss = {}
+        read_rl_logs(fcpo_w_tutti, natsorted(os.listdir(fcpo_w_tutti)), fcpowt_rewards, fcpowt_loss)
+
         bce = os.path.join(base_directory, 'bce_logs')
         bce_rewards = {}
         bce_loss = {}
         read_rl_logs(bce, natsorted(os.listdir(bce)), bce_rewards, bce_loss)
 
+        bce_w_tutti = os.path.join(base_directory, 'bce_logs_with_tutti')
+        bcewt_rewards = {}
+        bcewt_loss = {}
+        read_rl_logs(bce_w_tutti, natsorted(os.listdir(bce_w_tutti)), bcewt_rewards, bcewt_loss)
+
         rewards = {}
         loss = {}
-        for algo, data in {'FCPO': [fcpo_rewards, fcpo_loss], 'BCE': [bce_rewards, bce_loss], 'FCPO-reduced': [fcpor_rewards, fcpor_loss], 'without local optimization': [fcpog_rewards, fcpog_loss]}.items():
+        for algo, data in {'FCPO': [fcpo_rewards, fcpo_loss], 'BCE': [bce_rewards, bce_loss],
+                           'FCPO-tutti': [fcpowt_rewards, fcpowt_loss], 'BCE-tutti': [bcewt_rewards, bcewt_loss],
+                           'FCPO-reduced': [fcpor_rewards, fcpor_loss], 'without local optimization': [fcpog_rewards, fcpog_loss]}.items():
             rewards[algo] = []
             loss[algo] = []
             for agent in data[0]:
@@ -77,41 +89,44 @@ def reward_plot(base_directory):
             for i in range(len(rewards[algo])):
                 rewards[algo][i] = rewards[algo][i] / len(data[0])
                 loss[algo][i] = loss[algo][i] / len(data[0])
-        with open(os.path.join(base_directory, 'processed_logs', 'reward-loss.pkl'), 'wb') as f:
-            pickle.dump([rewards, loss, fcpo_rewards, fcpo_loss, bce_rewards, bce_loss, fcpof_rewards, fcpof_loss, fcpor_rewards, fcpor_loss, fcpog_rewards, fcpog_loss], f)
+            with open(os.path.join(base_directory, 'processed_logs', 'reward-loss.pkl'), 'wb') as f:
+                pickle.dump([rewards, loss, fcpo_rewards, fcpo_loss, bce_rewards, bce_loss, fcpof_rewards, fcpof_loss, fcpor_rewards, fcpor_loss, fcpog_rewards, fcpog_loss], f)
     else:
         with open(os.path.join(base_directory, 'processed_logs', 'reward-loss.pkl'), 'rb') as f:
             rewards, loss, fcpo_rewards, fcpo_loss, bce_rewards, bce_loss, fcpof_rewards, fcpof_loss, fcpor_rewards, fcpor_loss, fcpog_rewards, fcpog_loss = pickle.load(f)
 
     # plot the results
-    learning_algos=['FCPO', 'BCE', 'FCPO-reduced', 'without local optimization']
+    learning_algos=['FCPO', 'BCE', 'FCPO-reduced', 'FCPO-tutti', 'BCE-tutti', 'without local optimization']
     for j, algo in enumerate(learning_algos):
-        if j != 0 and j != len(learning_algos) - 1:
-            fig1, ax1 = plt.subplots(1, 1, figsize=(2, 1.75), gridspec_kw={'height_ratios': [1], 'width_ratios': [1]})
+        if j % 3 == 1:
+            fig1, ax1 = plt.subplots(1, 1, figsize=(2, 1.5), gridspec_kw={'height_ratios': [1], 'width_ratios': [1]})
+        elif j % 3 == 0:
+            fig1, ax1 = plt.subplots(1, 1, figsize=(2.3, 1.5), gridspec_kw={'height_ratios': [1], 'width_ratios': [1]})
         else:
-            fig1, ax1 = plt.subplots(1, 1, figsize=(2.5, 1.75), gridspec_kw={'height_ratios': [1], 'width_ratios': [1]})
+            fig1, ax1 = plt.subplots(1, 1, figsize=(2.5, 1.5), gridspec_kw={'height_ratios': [1], 'width_ratios': [1]})
         ax2 = ax1.twinx()
+
         ax1.plot(rewards[algo], label='reward', color=colors[0], linewidth=1)
         ax2.plot(loss[algo], label='loss', color=colors[0], linestyle=(0, (8, 8)), linewidth=1)
 
         ax1.set_xlim(0, 80)
         ax1.set_xticks([0, 80])
-        if j == 0:
-            ax1.set_ylabel(r'Reward  ', size=17)
+        if j % 3 == 0:
+            ax1.set_ylabel(r'Reward  ', size=15)
 
-        if j == len(learning_algos) - 1:
-            ax2.set_ylabel(r'Loss', size=17)
-            ax1.set_xticklabels([0, '80 Episodes'], size=17)
+        if j % 3 == 2:
+            ax2.set_ylabel(r'Loss', size=15)
+            ax1.set_xticklabels([0, '80 Episodes'], size=15)
         else:
-            ax1.set_xticklabels([0, 80], size=17)
+            ax1.set_xticklabels([0, 80], size=15)
 
 
         ax1.set_ylim([0, 1])
         ax1.set_yticks([0, 1])
-        ax1.set_yticklabels([0, 1], size = 17)
+        ax1.set_yticklabels([0, 1], size = 15)
         ax2.set_ylim([0, max(loss[algo])])
         ax2.set_yticks([0, max(loss[algo])])
-        ax2.set_yticklabels([0, 1], size=17)
+        ax2.set_yticklabels([0, 1], size=15)
 
         fig1.tight_layout()
         fig1.savefig(f"{algo}-learning.pdf")
