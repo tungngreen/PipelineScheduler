@@ -142,10 +142,61 @@ int main(int argc, char **argv) {
             }
         }
 
+    } else if (algorithm == "MOMAPPO") {
+        // Instantiate FCPOAgent with MOMAPPO constructor
+        // NO Federated Learning args, NO Socket
+        // Args: name, state, timeout, max_batch, scaling, profile(empty), base_batch, precision,
+        //       update_steps, inc, lambda, gamma, clip, penalty, theta, sigma, phi, rho, seed
+
+        auto *fcpo = new FCPOAgent(algorithm, 7, 2, 16, 2, nullptr, {}, 1, torch::kF32, steps, 0, 0,
+                                   0.95, 0.99, 0.2, 0.1,
+                                   1.0, 0.5, 0.5, 0.1, 42); // Weights: theta=1, sigma=0.5, phi=0.5, rho=0.1
+
+        std::cout << "Starting FCPO (MOMAPPO) Training..." << std::endl;
+
+        for (int i = 0; i < epochs; i++) {
+            int last_resolution = 0, last_batch_size = 1, last_threading = 0;
+            std::cout << "Epoch " << i << "/" << epochs << std::endl;
+
+            for (int j = 0; j < steps; j++) {
+                double arrival = 30.0;
+                auto device = deviceTypes[rand() % deviceTypes.size()];
+                auto model = modelNames[device][0];
+
+                // Set State
+                double mem_usage = profiles[device][model.first].batchInfer[last_batch_size].gpuMemUsage;
+                fcpo->setState(last_resolution, last_batch_size, last_threading, arrival, 0.0, 0.0, 0.0, slo, mem_usage);
+
+                // Run Step
+                std::tie(last_resolution, last_batch_size, last_threading) = fcpo->runStep();
+
+                // Avoid 0 batch size for simulation
+                if (last_batch_size < 1) last_batch_size = 1;
+
+                // Simulate Environment (Latency Calculation)
+                double p95prep = profiles[device][model.first].batchInfer[last_batch_size].p95prepLat;
+                double p95infer = profiles[device][model.first].batchInfer[last_batch_size].p95inferLat;
+                double p95post = profiles[device][model.first].batchInfer[last_batch_size].p95postLat;
+
+                double avg_latency = p95prep + (p95infer * last_batch_size) + p95post + ((rand() % 500) - 250.0);
+                if (avg_latency < 1.0) avg_latency = 1.0;
+
+                // Provide Reward
+                // Throughput ~ batch/arrival (simplified), Latency (normalized), Oversize (0), Memory
+                // Time precision assumed to be 1e6 (microseconds) for consistency with previous vars
+                double time_precision = 1000000.0;
+
+                fcpo->rewardCallback(std::max(arrival, time_precision / avg_latency), // Throughput
+                                     0.0, // Latency Penalty (handled in reward calc via sigma)
+                                     avg_latency / time_precision, // Oversize/Latency raw
+                                     (double)last_batch_size / arrival); // Memory/Load
+            }
+        }
+
     } else if (algorithm == "edgevision") {
-        // TBD
-        std::cerr << "EdgeVision training is not implemented yet." << std::endl;
-        return 1;
+            std::cerr << "EdgeVision training is not implemented yet." << std::endl;
+            return 1;
+            
     } else {
         std::cerr << "Invalid algorithm: " << algorithm << std::endl;
         return 1;
