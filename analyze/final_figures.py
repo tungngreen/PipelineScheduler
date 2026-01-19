@@ -190,7 +190,10 @@ def fcpoMainFigure(base_directory):
     # create 2 barplots, one for each case
     total = {}
     for case in cases:
-        fig, axs = plt.subplots(1, 1, figsize=(6.5, 2.5), gridspec_kw={'height_ratios': [1], 'width_ratios': [1]})
+        if case == 'centralized':
+            fig, axs = plt.subplots(1, 1, figsize=(6.5, 2.4), gridspec_kw={'height_ratios': [1], 'width_ratios': [1]})
+        else:
+            fig, axs = plt.subplots(1, 1, figsize=(6.5, 2.3), gridspec_kw={'height_ratios': [1], 'width_ratios': [1]})
         directory = os.path.join(base_directory, case)
 
         data = {}
@@ -240,26 +243,24 @@ def fcpoMainFigure(base_directory):
                     axs.text(x_base, goodput_rate, f'{goodput_rate:.0f}',
                              ha='center', va='bottom', size=12)
 
-        if case == 'distributed':
-            striped_patch = mpatches.Patch(facecolor='grey', alpha=0.5, hatch='//', edgecolor='white', label='Throughput')
-            solid_patch = mpatches.Patch(facecolor='grey', label='Goodput')
-            mpl.rcParams['hatch.linewidth'] = 2
-            ax2 = axs.twinx()
-            ax2.set_yticks([])
-            ax2.legend(handles=[striped_patch, solid_patch], loc='lower center', fontsize=12, frameon=True, bbox_to_anchor=(0.85, -0.12), ncol=1)
         axs.set_xticks(xticks)
         axs.set_xticklabels(xtick_labels, size=13)
         axs.set_yticks([0, 50, 100])
         axs.set_yticklabels([0, 50, 100], size=13, rotation=90)
         axs.set_ylabel('Success Rate (%)', size=13)
         if case == 'centralized':
-            axs.legend(fontsize=13, ncol=4)
+            axs.legend(loc='upper center', fontsize=13, frameon=True, bbox_to_anchor=(0.5, 0.92), ncol=4)
+            striped_patch = mpatches.Patch(facecolor='grey', alpha=0.5, hatch='//', edgecolor='white', label='Throughput')
+            solid_patch = mpatches.Patch(facecolor='grey', label='Goodput')
+            mpl.rcParams['hatch.linewidth'] = 2
+            ax2 = axs.twinx()
+            ax2.set_yticks([])
+            ax2.legend(handles=[striped_patch, solid_patch], loc='upper center', fontsize=13, frameon=True, bbox_to_anchor=(0.5, 1.12), ncol=2)
         plt.tight_layout()
         plt.savefig(f'fcpo-{case}-throughput-comparison.pdf')
         plt.show()
 
-
-    fig, axs = plt.subplots(1, 1, figsize=(6.5, 2.5), gridspec_kw={'height_ratios': [1], 'width_ratios': [1]})
+    fig, axs = plt.subplots(1, 1, figsize=(6.5, 2.2), gridspec_kw={'height_ratios': [1], 'width_ratios': [1]})
     box_width = 0.6
     xticks = []
     xtick_labels = []
@@ -275,7 +276,7 @@ def fcpoMainFigure(base_directory):
                 group_id = box_id // len(systems)
                 in_group_index = box_id % len(systems)
                 pattern_width = len(systems) * box_width
-                cumulative_gap = sum(0.4 if (g % len(latencies)) == 2 else 0.1 for g in range(group_id))
+                cumulative_gap = sum(0.6 if (g % len(latencies)) == 2 else 0.2 for g in range(group_id))
                 x_base = group_id * pattern_width + cumulative_gap + in_group_index * box_width
                 if in_group_index == 0:
                     xticks.append(x_base + (len(systems) * box_width) / 2 - box_width / 2)
@@ -287,17 +288,16 @@ def fcpoMainFigure(base_directory):
                 axs.boxplot(
                     [data], positions=[x_base], widths=box_width,
                     patch_artist=True, label=system_labels[i] if k == 0 and j == 0 else "",
-                    boxprops=dict(facecolor=colors[i], hatch=markers[i], edgecolor='black', linewidth=0.5),
+                    boxprops=dict(facecolor=colors[i], hatch=markers[i], edgecolor='white', linewidth=0.5),
                     medianprops=dict(color='black'),
-                    flierprops=dict(marker='o', markersize=3, alpha=0.6)
-                )
+                    flierprops=dict(marker='o', markersize=3, alpha=0.6))
 
     axs.set_xticks(xticks)
     axs.set_xticklabels(xtick_labels, size=13)
     axs.set_ylabel('Latency (ms)', size=13)
     axs.set_yscale('log')
     axs.set_ylim(5, 1000)
-    axs.legend(fontsize=13, ncol=4, loc='lower center')
+    axs.legend(fontsize=13, ncol=4, loc='lower center', bbox_to_anchor=(0.5, -0.1))
     plt.tight_layout()
     plt.savefig(f'fcpo-latency-boxplot.png', dpi=900)
     plt.show()
@@ -784,7 +784,7 @@ def system_overhead(directory):
     fig3.show()
 
     # Power consumption
-    fig1, ax1 = plt.subplots(1, 1, figsize=(6.5, 2), gridspec_kw={'height_ratios': [1], 'width_ratios': [1]})
+    fig1, ax1 = plt.subplots(1, 1, figsize=(7, 2), gridspec_kw={'height_ratios': [1], 'width_ratios': [1]})
     energy_labels = ['FCPO', 'BCE', 'Rule']
     if not os.path.exists(os.path.join(directory, '..', 'processed_logs', 'power.pkl')):
         power = full_edge_power('nful', systems)
@@ -809,13 +809,13 @@ def system_overhead(directory):
         else:
             label = energy_labels[i]
         ax1.plot(diff, styles[i], label=label, color=colors[i], linewidth=1, markevery=0.1)
-    ax1.legend(fontsize=15, loc='upper right', bbox_to_anchor=(1, 0.9))
-    ax1.set_ylabel('Power Use (mW)', size=15)
+    ax1.legend(fontsize=13, loc='upper right', bbox_to_anchor=(1, 0.9))
+    ax1.set_ylabel('Power (mW) \n Consumption', size=13)
     ax1.set_yticks([0, 200, 400])
-    ax1.set_yticklabels([0, 200, 400], size=15)
+    ax1.set_yticklabels([0, 200, 400], size=13)
     ax1.set_xlim(1000, 2900)
     ax1.set_xticks([1000, 1600, 2200, 2800])
-    ax1.set_xticklabels([0, 10, 20, '30min'], size=15)
+    ax1.set_xticklabels([0, 10, 20, '30min'], size=13)
     fig1.tight_layout()
     fig1.savefig('power-consumption.pdf')
     fig1.show()
