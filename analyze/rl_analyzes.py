@@ -101,9 +101,9 @@ def reward_plot(base_directory):
         if j % 3 == 1:
             fig1, ax1 = plt.subplots(1, 1, figsize=(2, 1.3), gridspec_kw={'height_ratios': [1], 'width_ratios': [1]})
         elif j % 3 == 0:
-            fig1, ax1 = plt.subplots(1, 1, figsize=(2.3, 1.3), gridspec_kw={'height_ratios': [1], 'width_ratios': [1]})
+            fig1, ax1 = plt.subplots(1, 1, figsize=(2.2, 1.3), gridspec_kw={'height_ratios': [1], 'width_ratios': [1]})
         else:
-            fig1, ax1 = plt.subplots(1, 1, figsize=(2.5, 1.3), gridspec_kw={'height_ratios': [1], 'width_ratios': [1]})
+            fig1, ax1 = plt.subplots(1, 1, figsize=(2.2, 1.3), gridspec_kw={'height_ratios': [1], 'width_ratios': [1]})
         ax2 = ax1.twinx()
 
         ax1.plot(rewards[algo], label='reward', color=colors[0], linewidth=1)
@@ -111,22 +111,24 @@ def reward_plot(base_directory):
 
         ax1.set_xlim(0, 80)
         ax1.set_xticks([0, 80])
+        ax1.set_xticklabels([0, 80], size=13)
+
         if j % 3 == 0:
             ax1.set_ylabel(r'Reward  ', size=13)
+            ax1.set_yticks([0, 1])
+            ax1.set_yticklabels([0, 1], size=13)
+        else:
+            ax1.set_yticks([])
 
         if j % 3 == 2:
             ax2.set_ylabel(r'Loss', size=13)
-            ax1.set_xticklabels([0, '80 Episodes'], size=13)
+            ax2.set_yticks([0, max(loss[algo])])
+            ax2.set_yticklabels([0, 1], size=13)
         else:
-            ax1.set_xticklabels([0, 80], size=13)
-
+            ax2.set_yticks([])
 
         ax1.set_ylim([0, 1])
-        ax1.set_yticks([0, 1])
-        ax1.set_yticklabels([0, 1], size = 13)
         ax2.set_ylim([0, max(loss[algo])])
-        ax2.set_yticks([0, max(loss[algo])])
-        ax2.set_yticklabels([0, 1], size=13)
 
         fig1.tight_layout()
         fig1.savefig(f"{algo}-learning.pdf")
