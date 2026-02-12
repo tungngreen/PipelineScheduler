@@ -1,0 +1,95 @@
+{
+    "expName": "aic",
+    "system_fps": 10,
+    "systemName": "ippo",
+    "runtime": 7,
+    "port_offset": 0,
+    "sink_ip": "143.248.55.76",
+    "yolov5_batch_size": 2,
+    "edge_batch_size": 4,
+    "server_batch_size": 8,
+    "scheduling_interval_sec": 360,
+    "rescaling_interval_sec": 30,
+    "scale_up_interval_threshold_sec": 150,
+    "scale_down_interval_threshold_sec": 240,
+    "cluster_count": 1,
+    "initial_pipelines": [
+        {
+            "pipeline_name": "traffic1",
+            "pipeline_target_slo": 250000,
+            "pipeline_type": 0,
+            "video_source": "../data/S05-c010.mp4",
+            "pipeline_source_device": "nxavier1"
+        },
+        {
+            "pipeline_name": "traffic2",
+            "pipeline_target_slo": 250000,
+            "pipeline_type": 0,
+            "video_source": "../data/S05-c016.mp4",
+            "pipeline_source_device": "nxavier2"
+        },
+        {
+            "pipeline_name": "traffic3",
+            "pipeline_target_slo": 250000,
+            "pipeline_type": 0,
+            "video_source": "../data/S05-c018.mp4",
+            "pipeline_source_device": "nxavier3"
+        },
+        {
+            "pipeline_name": "traffic4",
+            "pipeline_target_slo": 250000,
+            "pipeline_type": 0,
+            "video_source": "../data/S05-c017.mp4",
+            "pipeline_source_device": "orinano1"
+        },
+        {
+            "pipeline_name": "traffic5",
+            "pipeline_target_slo": 250000,
+            "pipeline_type": 0,
+            "video_source": "../data/S05-c020.mp4",
+            "pipeline_source_device": "orinano2"
+        },
+                {
+            "pipeline_name": "traffic6",
+            "pipeline_target_slo": 250000,
+            "pipeline_type": 0,
+            "video_source": "../data/S05-c023.mp4",
+            "pipeline_source_device": "orinano3"
+        },
+        {
+            "pipeline_name": "traffic7",
+            "pipeline_target_slo": 250000,
+            "pipeline_type": 0,
+            "video_source": "../data/S05-c022.mp4",
+            "pipeline_source_device": "agxavier1"
+        },
+        {
+            "pipeline_name": "traffic20",
+            "pipeline_target_slo": 250000,
+            "pipeline_type": 0,
+            "video_source": "../data/S05-c026.mp4",
+            "pipeline_source_device": "agxavier3"
+        },
+        {
+         	"pipeline_name":"traffic30",
+         	"pipeline_target_slo" : 250000,
+         	"pipeline_type" : 0,
+         	"video_source" : "../data/S05-c027.mp4",
+         	"pipeline_source_device" : 	"agxavier2"
+        }
+    ],
+  "fcpo_parameters": {
+    "lambda": 0.1,
+    "gamma": 0.1,
+    "clip_epsilon": 0.9,
+    "penalty_weight": 0.2,
+    "theta": 1.0,
+    "sigma": 1.0,
+    "phi": 1.0,
+    "rho": 1.0,
+    "update_steps": 10,
+    "update_step_incs": 10,
+    "federated_steps": 0,
+    "seed": 42
+  }
+}
