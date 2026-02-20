@@ -1600,11 +1600,13 @@ NetworkEntryType Controller::initNetworkCheck(NodeHandle &node, uint32_t minPack
     if (entries.empty()) entries = {std::pair<uint32_t, uint64_t>{1, 1}};
     node.latestNetworkEntries["server"] = entries;
     node.lastNetworkCheckTime = std::chrono::system_clock::now();
-    if (node.transmissionLatencyHistory.size() > ctrl_bandwidth_predictor.getWindowSize()) {
-        node.transmissionLatencyHistory.erase(node.transmissionLatencyHistory.begin());
+    if (ctrl_systemName == "fcpo") {
+        if (node.transmissionLatencyHistory.size() > ctrl_bandwidth_predictor.getWindowSize()) {
+            node.transmissionLatencyHistory.erase(node.transmissionLatencyHistory.begin());
+        }
+        node.transmissionLatencyHistory.push_back(latency / 1000.0f); // convert to ms
+        node.transmissionLatencyPrediction = ctrl_bandwidth_predictor.predict(node.transmissionLatencyHistory);
     }
-    node.transmissionLatencyHistory.push_back(latency / 1000.0f); // convert to ms
-    node.transmissionLatencyPrediction = ctrl_bandwidth_predictor.predict(node.transmissionLatencyHistory);
     node.networkCheckMutex.unlock();
     return entries;
 };

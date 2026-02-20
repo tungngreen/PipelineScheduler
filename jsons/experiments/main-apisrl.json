@@ -2,7 +2,7 @@
   "expName": "apis",
   "system_fps": 15,
   "systemName": "apis",
-  "runtime": 9999,
+  "runtime": 30,
   "port_offset": 0,
   "sink_ip": "143.248.55.76",
   "yolov5_batch_size": 2,
@@ -55,7 +55,7 @@
     "rho": 1.0,
     "update_steps": 100,
     "update_step_incs": 10,
-    "federated_steps": 10,
+    "federated_steps": 0,
     "seed": 42
   }
 }

@@ -97,7 +97,7 @@ public:
         return {rewards.begin(), rewards.begin() + current_index  - 1};
     }
 
-    void clear() {
+    virtual void clear() {
         current_index = 0;
         is_full = false;
     }
