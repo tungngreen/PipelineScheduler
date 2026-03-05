@@ -36,19 +36,21 @@ message TaskCommand {
   string task_srcDevice = 2;
 }
 
-message ConnectionConfigs {
-  string device_name = 1;
-  uint32 device_type = 2;
-  string ip_address = 3;
-  int32 agent_port_offset = 4;
-  int32 processors = 5;
-  repeated uint64 memory = 6;
+message DeviceInfo {
+  string name = 1;
+  uint32 type = 2;
+  int32 processors = 3;
+  repeated uint64 memory = 4;
+  string ip_address = 5;
+  int32 agent_port_offset = 6;
 }
 
 message SystemInfo {
   string name = 1;
   string experiment = 2;
-  repeated DownStreamElement offloading_targets = 3;
+  string ctrl_ip_address = 3;
+  int32 bandwidth_setting = 4;
+  repeated DownStreamElement offloading_targets = 5;
 }
 
 message DownStreamElement {

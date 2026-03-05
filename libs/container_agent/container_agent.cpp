@@ -564,11 +564,11 @@ ContainerAgent::ContainerAgent(const json& configs) {
 
     };
     messaging_ctx = context_t(1);
-    std::string server_address = absl::StrFormat("tcp://localhost:%d", IN_DEVICE_RECEIVE_PORT + absl::GetFlag(FLAGS_port_offset));
+    std::string server_address = absl::StrFormat("tcp://localhost:%d", DEVICE_RECEIVE_PORT + absl::GetFlag(FLAGS_port_offset));
     sending_socket = socket_t(messaging_ctx, ZMQ_REQ);
     sending_socket.connect(server_address);
     sending_socket.setsockopt(ZMQ_RCVTIMEO, 100);
-    server_address = absl::StrFormat("tcp://localhost:%d", IN_DEVICE_MESSAGE_QUEUE_PORT + absl::GetFlag(FLAGS_port_offset));
+    server_address = absl::StrFormat("tcp://localhost:%d", DEVICE_MESSAGE_QUEUE_PORT + absl::GetFlag(FLAGS_port_offset));
     device_message_queue = socket_t(messaging_ctx, ZMQ_SUB);
     device_message_queue.setsockopt(ZMQ_SUBSCRIBE, (cont_name + "|").c_str(), cont_name.size() + 1);
     device_message_queue.connect(server_address);
@@ -587,7 +587,7 @@ ContainerAgent::ContainerAgent(const json& configs) {
     }
     if ((cont_systemName == "fcpo" || cont_systemName == "apis") && !isDataSource) {
         nlohmann::json rl_conf = configs["fcpo"];
-        cont_fcpo_agent = new FCPOAgent(cont_name, rl_conf["state_size"], rl_conf["timeout_size"],
+        cont_fcpo_agent = new FCPOAgent(cont_name, cont_hostDevice, rl_conf["state_size"], rl_conf["timeout_size"],
                                         rl_conf["batch_size"], rl_conf["threads_size"], &sending_socket,
                                         cont_batchInferProfileList,
                                         cont_msvcsGroups["batcher"].msvcList[0]->msvc_idealBatchSize,

@@ -86,51 +86,14 @@ struct MultiPolicyNet: torch::nn::Module {
     torch::nn::Linear policy_head3{nullptr};
 };
 
-struct SinglePolicyNet: torch::nn::Module {
-    SinglePolicyNet(int state_size, int action1_size, int action2_size, int action3_size) {
-        shared_layer1 = register_module("shared_layer", torch::nn::Linear(state_size, 64));
-        shared_layer2 = register_module("shared_layer2", torch::nn::Linear(64, 48));
-        policy_head = register_module("policy_head", torch::nn::Linear(48, action1_size * action2_size * action3_size));
-        value_head = register_module("value_head", torch::nn::Linear(48, 1));
-    }
-
-    std::tuple<T, T> forward(T state) {
-        T x = torch::relu(shared_layer1->forward(state));
-        x = torch::relu(shared_layer2->forward(x));
-        T policy_output = torch::softmax(policy_head->forward(x), -1);
-        T value = value_head->forward(x);
-        return std::make_tuple(policy_output, value);
-    }
-
-    T combine_actions(std::vector<int> timeout, std::vector<int> batching, std::vector<int> scaling, int action2_size, int action3_size) {
-        T action = torch::zeros({static_cast<long>(timeout.size()), 1});
-        for (unsigned int i = 0; i < timeout.size(); i++) {
-            action[i] = timeout[i] * action2_size * action3_size + batching[i] * action3_size + scaling[i];
-        }
-        return action;
-    }
-
-    std::tuple<int, int, int> interpret_action(int action, int action2_size, int action3_size) {
-        int timeout = action / (action2_size * action3_size);
-        int remainder = action % (action2_size * action3_size);
-        int batching = remainder / action3_size;
-        int scaling = remainder % action3_size;
-        return std::make_tuple(timeout, batching, scaling);
-    }
-
-    torch::nn::Linear shared_layer1{nullptr};
-    torch::nn::Linear shared_layer2{nullptr};
-    torch::nn::Linear policy_head{nullptr};
-    torch::nn::Linear value_head{nullptr};
-};
-
 class FCPOAgent {
 public:
-    FCPOAgent(std::string& cont_name, uint state_size, uint timeout_size, uint max_batch, uint scaling_size,
-             socket_t *socket, BatchInferProfileListType profile, int base_batch, torch::Dtype precision = torch::kF64,
-             uint update_steps = 60, uint update_steps_inc = 5, uint federated_steps = 5, double lambda = 0.95,
-             double gamma = 0.99, double clip_epsilon = 0.2, double penalty_weight = 0.1, double theta = 1.0,
-             double sigma = 10.0, double phi = 2.0, double rho = 1.0, int seed = 42);
+    FCPOAgent(std::string& cont_name, std::string& dev_name, uint state_size, uint timeout_size, uint max_batch,
+              uint scaling_size, socket_t *socket, BatchInferProfileListType profile, int base_batch,
+              torch::Dtype precision = torch::kF64, uint update_steps = 60, uint update_steps_inc = 5,
+              uint federated_steps = 5, double lambda = 0.95, double gamma = 0.99, double clip_epsilon = 0.2,
+              double penalty_weight = 0.1, double theta = 1.0, double sigma = 10.0, double phi = 2.0, double rho = 1.0,
+              int seed = 42);
 
     ~FCPOAgent() {
         torch::save(model, path + "/latest_model.pt");
@@ -172,7 +135,7 @@ private:
 
     std::ofstream out;
     std::string path;
-    std::string cont_name;
+    std::string cont_name, device_name;
     socket_t *device_socket;
 
     // PPO Hyperparameters

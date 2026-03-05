@@ -24,9 +24,4 @@ SinkAgent::SinkAgent(const std::string &ctrl_url) : DeviceAgent() {
     );
 
     running = true;
-    threads = std::vector<std::thread>();
-    threads.emplace_back(&DeviceAgent::HandleControlCommands, this);
-    for (auto &thread: threads) {
-        thread.detach();
-    }
 }

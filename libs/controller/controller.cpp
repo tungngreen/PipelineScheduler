@@ -494,6 +494,18 @@ void Controller::readConfigFile(const std::string &path) {
     ctrl_controlTimings.scaleUpIntervalThresholdSec = j["scale_up_interval_threshold_sec"];
     ctrl_controlTimings.scaleDownIntervalThresholdSec = j["scale_down_interval_threshold_sec"];
     initialTasks = j["initial_pipelines"];
+    if (j.contains("initial_devices")) {
+        auto initialDevices = j["initial_devices"];
+        for (const auto &device: initialDevices) {
+            AddDevice(device);
+        }
+    } else {
+        for (const auto &task : initialTasks) {
+            AddDevice(task.srcDevice);
+            AddDevice(task.edgeNode);
+        }
+    }
+
     if (ctrl_systemName == "fcpo" || ctrl_systemName== "apis") ctrl_fcpo_config = j["fcpo_parameters"];
 }
 
@@ -552,7 +564,7 @@ bool GPUHandle::removeContainer(ContainerHandle *container) {
 }
 
 
-// ============================================================= Con/Destructors ============================================================= //
+// ============================================================= Con/Destructors ============================================================== //
 // ============================================================================================================================================ //
 // ============================================================================================================================================ //
 // ============================================================================================================================================ //
@@ -560,8 +572,10 @@ bool GPUHandle::removeContainer(ContainerHandle *container) {
 
 Controller::Controller(int argc, char **argv) {
     absl::ParseCommandLine(argc, argv);
+    std::ifstream file("../jsons/experiments/cluster_info.json");
+    ctrl_clusterInfo = json::parse(file);
     readConfigFile(absl::GetFlag(FLAGS_ctrl_configPath));
-    readInitialObjectCount("../jsons/object_count.json");
+    readInitialObjectCount("../jsons/experiments/object_count.json");
 
     ctrl_logPath = absl::GetFlag(FLAGS_ctrl_logPath);
     ctrl_logPath += "/" + ctrl_experimentName;
@@ -683,6 +697,51 @@ MemUsageType ContainerHandle::getExpectedTotalMemUsage() const {
             pipelineModel->processProfiles.at(deviceTypeName).batchInfer[pipelineModel->batchSize].rssMemUsage) / 1000;
 }
 
+void Controller::AddDevice(const std::string name) {
+    // check if devices already contains the device
+    if (devices.hasDevice(name)) return;
+    std::string ip = ctrl_clusterInfo[name]["ip"];
+    std::string port = ctrl_clusterInfo[name]["port"];
+    SystemInfo request;
+    request.set_name(ctrl_systemName);
+    request.set_experiment(ctrl_experimentName);
+    std::string message = absl::StrFormat("%s %s", MSG_TYPE[CONNECT_DEVICE], request.SerializeAsString());
+    message_t zmq_msg(message.size()), reply;
+    memcpy(zmq_msg.data(), message.data(), message.size());
+    context_t ctx(1);
+    socket_t socket(ctx, ZMQ_REQ);
+    std::string address = absl::StrFormat("tcp://%s:%s", ip, port);
+    socket.connect(address);
+    if (!socket.send(zmq_msg, send_flags::dontwait)) {
+        spdlog::get("container_agent")->error("Failed to send connection request to device %s.", ip.c_str());
+        return;
+    }
+    if (!socket.recv(reply)) {
+        spdlog::get("container_agent")->error("Failed to receive reply from device %s.", ip.c_str());
+        return;
+    }
+    DeviceInfo info;
+    if (!info.ParseFromString(reply.to_string())) {
+        spdlog::get("container_agent")->error("Failed to parse reply from device %s.", ip.c_str());
+        return;
+    }
+    std::string deviceName = info.name();
+    NodeHandle *node = new NodeHandle{deviceName, ip, static_cast<SystemDeviceType>(info.type()),
+                                      DATA_BASE_PORT + (std::stoi(port) - DEVICE_RECEIVE_PORT), {}};
+    initialiseGPU(node, info.processors(), std::vector<int>(info.memory().begin(), info.memory().end()));
+    devices.addDevice(deviceName, node);
+    spdlog::get("container_agent")->info("Device {} is connected to the system", deviceName);
+
+    queryInDeviceNetworkEntries(devices.getDevice(deviceName));
+
+    if (node->type != SystemDeviceType::Server) {
+        std::thread networkCheck(&Controller::initNetworkCheck, this, std::ref(*(devices.getDevice(deviceName))), 1000, 300000, 30);
+        networkCheck.detach();
+    } else {
+        node->initialNetworkCheck = true;
+    }
+}
+
 bool Controller::AddTask(const TaskDescription::TaskStruct &t) {
     std::cout << "Adding task: " << t.name << std::endl;
     TaskHandle *task = new TaskHandle{t.name, t.type, t.stream, t.srcDevice, t.slo, {}};
@@ -713,7 +772,7 @@ bool Controller::AddTask(const TaskDescription::TaskStruct &t) {
 
 void Controller::initialiseGPU(NodeHandle *node, int numGPUs, std::vector<int> memLimits) {
     if (node->type == SystemDeviceType::Virtual) {
-        GPUHandle *gpuNode = new GPUHandle{"3090", node->name, 0, memLimits[0] - 2000, NUM_LANES_PER_GPU, node};
+        GPUHandle *gpuNode = new GPUHandle{node->name, node->name, 0, memLimits[0] - 2000, NUM_LANES_PER_GPU, node};
         // TODO: differentiate between virtualEdge and virtualServer
         //GPUHandle *gpuNode = new GPUHandle{node->name, node->name, 0, memLimits[0] / 5, 1, node};
         node->gpuHandles.emplace_back(gpuNode);
@@ -1471,22 +1530,22 @@ void Controller::HandleControlMessages() {
 }
 
 void Controller::handleDeviseAdvertisement(const std::string& msg) {
-    ConnectionConfigs request;
+    DeviceInfo request;
     SystemInfo reply;
     if (!request.ParseFromString(msg)){
         spdlog::get("container_agent")->error("Failed to connect device with msg: {}", msg);
         return;
     }
-    std::string deviceName = request.device_name();
+    std::string deviceName = request.name();
 
-    NodeHandle *node = new NodeHandle{deviceName, request.ip_address(), static_cast<SystemDeviceType>(request.device_type()),
+    NodeHandle *node = new NodeHandle{deviceName, request.ip_address(), static_cast<SystemDeviceType>(request.type()),
                                       DATA_BASE_PORT + ctrl_port_offset + request.agent_port_offset(), {}};
     reply.set_name(ctrl_systemName);
     reply.set_experiment(ctrl_experimentName);
     server_socket.send(message_t(reply.SerializeAsString()), send_flags::dontwait);
     initialiseGPU(node, request.processors(), std::vector<int>(request.memory().begin(), request.memory().end()));
     devices.addDevice(deviceName, node);
-    spdlog::get("container_agent")->info("Device {} is connected to the system", request.device_name());
+    spdlog::get("container_agent")->info("Device {} is connected to the system", request.name());
     queryInDeviceNetworkEntries(devices.getDevice(deviceName));
 
     if (node->type != SystemDeviceType::Server) {

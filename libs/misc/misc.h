@@ -49,13 +49,13 @@ const int DATA_BASE_PORT = 55001;
 const int CONTROLLER_API_PORT = 60000;
 const int CONTROLLER_RECEIVE_PORT = 60001;
 const int CONTROLLER_MESSAGE_QUEUE_PORT = 60002;
-const int IN_DEVICE_RECEIVE_PORT = 60011;
-const int IN_DEVICE_MESSAGE_QUEUE_PORT = 60012;
+const int DEVICE_RECEIVE_PORT = 60011;
+const int DEVICE_MESSAGE_QUEUE_PORT = 60012;
 
 const std::string COMPOSE_PATH = "../dockerfiles/tmp/";
 
 enum MESSAGE_TYPE_VALUES {
-    DEVICE_ADVERTISEMENT,
+    FORWARD,
     DUMMY_DATA,
 
     NETWORK_CHECK,
@@ -79,8 +79,11 @@ enum MESSAGE_TYPE_VALUES {
     CRL_WEIGHTS,
     BCEDGE_UPDATE,
 
+    DEVICE_ADVERTISEMENT,
+    CONNECT_DEVICE,
     START_TASK,
-    STOP_TASK
+    STOP_TASK,
+    STOP_EXPERIMENT
 };
 
 extern std::unordered_map<MESSAGE_TYPE_VALUES, std::string> MSG_TYPE;
@@ -510,7 +513,9 @@ enum SystemDeviceType {
 
     AGXXavier,
     NXXavier,
-    NanoXavier
+    NanoXavier,
+
+    SinkDevice
 };
 
 enum AdjustUpstreamMode {
@@ -625,6 +630,7 @@ public:
 
     bool empty() { return limits.empty(); }
     unsigned int size() { return limits.size(); }
+    void clear() { limits.clear(); }
 
     const BandwidthLimit& operator[](size_t index) const { return limits.at(index); }
 private:

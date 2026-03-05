@@ -11,11 +11,16 @@ int main(int argc, char **argv) {
     while (controller->isRunning()) {
         while (true) {
             // Get input from user
-            std::cout << "You need to connect the devices before adding task. Ready? (yes/no): " << std::endl;
+            std::cout << "You need to connect the devices before adding task. Ready? (yes/add node/wait): " << std::endl;
             std::cin >> command;
             if (command == "yes") {
                 break;
-            } else if (command == "no") {
+            } else if (command == "add node") {
+                std::string name;
+                std::cout << "Enter the name of the node to add: ";
+                std::cin >> name;
+                controller->AddDevice(name);
+            } else if (command == "wait") {
                 std::this_thread::sleep_for(std::chrono::seconds(5));
             } else {
                 std::cout << "Invalid command" << std::endl;
@@ -33,7 +38,7 @@ int main(int argc, char **argv) {
         } else if (command == "init_remain") {
             controller->InitRemain();
             continue;
-        }  else if (command == "traffic") {
+        } else if (command == "traffic") {
             task.type = PipelineType::Traffic;
         } else if (command == "video_call") {
             task.type = PipelineType::Indoor;
@@ -54,7 +59,7 @@ int main(int argc, char **argv) {
         bool added = controller->AddTask(task);
         if (!added) {
             std::cout << "Failed to add task" << std::endl;
-            controller->addRemainTask(task);
+            controller->AddRemainTask(task);
         }
     }
     delete controller;

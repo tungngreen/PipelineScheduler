@@ -19,7 +19,7 @@ using controlmessages::ContainerConfig;
 using controlmessages::ContainerLink;
 using controlmessages::ContainerInts;
 using controlmessages::SinkMetrics;
-using controlmessages::ConnectionConfigs;
+using controlmessages::DeviceInfo;
 using controlmessages::SystemInfo;
 using controlmessages::DummyMessage;
 using indevicemessages::FlData;
@@ -932,8 +932,10 @@ public:
             }
         }
     }
+
+    void AddDevice(const std::string name);
     bool AddTask(const TaskDescription::TaskStruct &task);
-    void addRemainTask(const TaskDescription::TaskStruct &task) {remainTasks.push_back(task);}
+    void AddRemainTask(const TaskDescription::TaskStruct &task) {remainTasks.push_back(task);}
 
     void Scheduling();
     void HandleControlMessages();
@@ -1068,6 +1070,7 @@ private:
     // EXPERIMENT CONFIG
     std::string ctrl_experimentName;
     std::string ctrl_systemName;
+    json ctrl_clusterInfo;
     std::vector<TaskDescription::TaskStruct> initialTasks;
     std::vector<TaskDescription::TaskStruct> remainTasks;
     uint16_t ctrl_systemFPS;

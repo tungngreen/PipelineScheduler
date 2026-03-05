@@ -47,7 +47,6 @@ using EmptyMessage = google::protobuf::Empty;
 class DeviceAgent {
 public:
     DeviceAgent();
-    explicit DeviceAgent(const std::string &controller_url);
 
     virtual ~DeviceAgent() {
         running = false;
@@ -65,11 +64,7 @@ public:
 
     [[nodiscard]] bool isRunning() const { return running; }
 
-    void collectRuntimeMetrics();
-
-    void limitBandwidth(const std::string& scriptPath, std::string interface);
-
-    void HandleControlCommands();
+    void SelfReady();
 
 protected:
 
@@ -90,7 +85,10 @@ protected:
     /////////////////////////////////////////// PROTECTED FUNCTIONS ///////////////////////////////////////////
 
     // GENERAL OPERATION
-    SystemInfo Ready(const std::string &ip);
+    void Ready(const std::string &msg);
+    void StartExperiment(const SystemInfo &info);
+    void collectRuntimeMetrics();
+    void StopExperiment(const std::string &msg);
     void Shutdown(const std::string &msg);
 
     // CONTAINER CONTROL
@@ -113,8 +111,11 @@ protected:
     void StopContainer(ContainerSignal request);
 
     // MESSAGING & NETWORK
+    void ConnectController();
+    void HandleControlCommands();
     void HandleDeviceMessages();
     void testNetwork(const std::string &msg);
+    void limitBandwidth(std::string interface);
     void sendMessageToContainer(const std::string &topik, const std::string &type, const std::string &content);
 
     // SYSTEM COMMANDS
@@ -180,6 +181,7 @@ protected:
     // RUNTIME VARIABLES
     std::atomic<bool> running;
     std::atomic<bool> deploy_mode = false;
+    std::atomic<bool> experiment_active = false;
     std::chrono::high_resolution_clock::time_point dev_startTime;
     std::map<std::string, DevContainerHandle> containers;
     std::mutex containers_mutex;
@@ -197,11 +199,10 @@ protected:
     context_t controller_ctx;
     socket_t controller_socket;
     socket_t controller_message_queue;
-    context_t in_device_ctx;
-    socket_t in_device_socket;
-    socket_t in_device_message_queue;
-    std::unordered_map<std::string, std::function<void(const std::string&)>> in_device_handlers;
-    std::unordered_map<std::string, std::function<void(const std::string&)>> controller_handlers;
+    context_t device_msg_ctx;
+    socket_t device_socket;
+    socket_t device_message_queue;
+    std::unordered_map<std::string, std::function<void(const std::string&)>> msg_handlers;
     std::vector<BandwidthManager> dev_totalBandwidthData;
     BandwidthManager dev_bandwidthLimit;
 
@@ -210,6 +211,7 @@ protected:
     MetricsServerConfigs dev_metricsServerConfigs;
     std::vector<DeviceHardwareMetrics> dev_runtimeMetrics;
     uint16_t dev_numCudaDevices{};
+    std::vector<long> memory_sizes;
     std::unique_ptr<pqxx::connection> dev_metricsServerConn = nullptr;
     std::string dev_hwMetricsTableName;
     std::string dev_networkTableName;
