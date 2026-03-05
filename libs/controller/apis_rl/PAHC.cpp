@@ -83,7 +83,7 @@ std::vector<float> PAHC::runStep() {
     sw.stop();
 
     out << "step," << sw.elapsed_microseconds() << "," << steps_counter << "," << cumu_reward  << "," ;
-    for (int i = 0; i < weights_size; i++) {
+    for (unsigned int i = 0; i < weights_size; i++) {
         out << output[i].item<float>();
         weights.emplace_back(output[i].item<float>());
         if (i < weights_size - 1) out << ",";
@@ -151,7 +151,7 @@ void PAHC::update() {
     }
     rewards.to(precision);
 
-    int buffer_size = rewards.size(0);
+    size_t buffer_size = rewards.size(0);
     if (buffer_size < new_states.size()) {
         new_states.erase(new_states.begin(), new_states.end() - buffer_size);
     } else if (buffer_size > new_states.size()) {

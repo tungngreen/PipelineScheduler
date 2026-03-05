@@ -35,14 +35,12 @@ ABSL_DECLARE_FLAG(std::string, dev_networkInterface);
 ABSL_DECLARE_FLAG(int, dev_gpuID);
 ABSL_DECLARE_FLAG(bool, dev_verbose_compose);
 
-using indevicemessages::ContainerSignal;
-using indevicemessages::Connection;
-using indevicemessages::TimeKeeping;
-using indevicemessages::ProcessData;
-using indevicemessages::BCEdgeConfig;
-using indevicemessages::BCEdgeData;
-using indevicemessages::ContainerMetrics;
-using EmptyMessage = google::protobuf::Empty;
+using controlmessages::ContainerSignal;
+using controlmessages::TimeKeeping;
+using controlmessages::ProcessData;
+using controlmessages::BCEdgeConfig;
+using controlmessages::BCEdgeData;
+using controlmessages::ContainerMetrics;
 
 class DeviceAgent {
 public:
@@ -95,18 +93,13 @@ protected:
     void CreateContainer(const std::string &msg);
     void ReceiveStartReport(const std::string &msg);
     void ReceiveContainerMetrics(const std::string &msg);
-    void UpdateContainerSender(const std::string &msg);
     void UpdateContainerSender(int mode, const std::string &cont_name, const std::string &dwnstr, const std::string &ip,
                                const int &port, const float &data_portion, const std::string &old_link,
                                const int64_t &timestamp, const int offloading_duration = 0, const int coi = -1);
     void SyncDatasources(const std::string &msg);
     void InferBCEdge(const std::string &msg);
-    void UpdateBatchSize(const std::string &msg);
-    void UpdateResolution(const std::string &msg);
-    void UpdateTimeKeeping(const std::string &msg);
-    void ForwardFL(const std::string &msg);
-    void ReturnFL(const std::string &msg);
-    void ForwardUtilityWeights(const std::string &msg);
+    void ForwardToController(const std::string &msg);
+    void ForwardToContainer(const std::string &msg);
     void StopContainer(const std::string &msg);
     void StopContainer(ContainerSignal request);
 
@@ -117,6 +110,7 @@ protected:
     void testNetwork(const std::string &msg);
     void limitBandwidth(std::string interface);
     void sendMessageToContainer(const std::string &topik, const std::string &type, const std::string &content);
+    void sendMessageToContainer(const std::string &topik, const std::string &content);
 
     // SYSTEM COMMANDS
     std::string runCompose(const std::string &executable, const std::string &cont_name, const std::string &start_string,

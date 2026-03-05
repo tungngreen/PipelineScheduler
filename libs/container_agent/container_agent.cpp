@@ -1069,8 +1069,8 @@ void ContainerAgent::collectRuntimeMetrics() {
                 cont_nextOptimizationMetricsTime = std::chrono::high_resolution_clock::now() + std::chrono::milliseconds(cont_localOptimizationIntervalMillisec);
             } else if (cont_systemName == "bce") {
                 ClientContext context;
-                indevicemessages::BCEdgeData request;
-                indevicemessages::BCEdgeConfig reply;
+                controlmessages::BCEdgeData request;
+                controlmessages::BCEdgeConfig reply;
                 request.set_msvc_name(cont_name);
                 request.set_slo(cont_msvcsGroups["inference"].msvcList[0]->msvc_contSLO);
                 aggExecutedBatchSize = 0.1;
@@ -1653,7 +1653,7 @@ void ContainerAgent::updateSender(const std::string &msg) {
 
 
 void ContainerAgent::updateBatchSize(const std::string &msg) {
-    indevicemessages::Int32 request;
+    controlmessages::Int32 request;
     if (!request.ParseFromString(msg)) {
         spdlog::get("container_agent")->error("Failed to parse updateBatchSize request: {0:s}", msg);
         return;
@@ -1704,7 +1704,7 @@ void ContainerAgent::updateTimeKeeping(const std::string &msg) {
 }
 
 void ContainerAgent::transferFrameID(const std::string &msg) {
-    indevicemessages::Int32 request;
+    controlmessages::Int32 request;
     if (!request.ParseFromString(msg)) {
         spdlog::get("container_agent")->error("Failed to parse transferFrameID request: {0:s}", msg);
         return;
@@ -1729,7 +1729,7 @@ void ContainerAgent::transferFrameID(const std::string &msg) {
 }
 
 void ContainerAgent::setFrameID(const std::string &msg) {
-    indevicemessages::Int32 request;
+    controlmessages::Int32 request;
     if (!request.ParseFromString(msg)) {
         spdlog::get("container_agent")->error("Failed to parse setFrameID request: {0:s}", msg);
         return;

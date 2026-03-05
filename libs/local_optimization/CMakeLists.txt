@@ -64,7 +64,6 @@ target_link_libraries(local_optimization
         PUBLIC
         cppzmq
         control_mess_grpc_proto
-        device_mess_grpc_proto
         ${_REFLECTION}
         ${_PROTOBUF_LIBPROTOBUF}
         ${PostgreSQL_LIBRARIES}

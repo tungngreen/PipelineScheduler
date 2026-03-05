@@ -126,19 +126,14 @@ DeviceAgent::DeviceAgent() {
     msg_handlers = {
             {MSG_TYPE[CONNECT_DEVICE], std::bind(&DeviceAgent::Ready, this, std::placeholders::_1)},
             {MSG_TYPE[MSVC_START_REPORT], std::bind(&DeviceAgent::ReceiveStartReport, this, std::placeholders::_1)},
-            {MSG_TYPE[START_FL], std::bind(&DeviceAgent::ForwardFL, this, std::placeholders::_1)},
+            {MSG_TYPE[TO_CONTROLLER], std::bind(&DeviceAgent::ForwardToController, this, std::placeholders::_1)},
+            {MSG_TYPE[TO_CONTAINER], std::bind(&DeviceAgent::ForwardToContainer, this, std::placeholders::_1)},
             {MSG_TYPE[BCEDGE_UPDATE], std::bind(&DeviceAgent::InferBCEdge, this, std::placeholders::_1)},
             {MSG_TYPE[CONTEXT_METRICS], std::bind(&DeviceAgent::ReceiveContainerMetrics, this, std::placeholders::_1)},
             {MSG_TYPE[NETWORK_CHECK], std::bind(&DeviceAgent::testNetwork, this, std::placeholders::_1)},
             {MSG_TYPE[CONTAINER_START], std::bind(&DeviceAgent::CreateContainer, this, std::placeholders::_1)},
-            {MSG_TYPE[ADJUST_UPSTREAM], std::bind(static_cast<void (DeviceAgent::*)(const std::string&)>(&DeviceAgent::UpdateContainerSender), this, std::placeholders::_1)},
             {MSG_TYPE[SYNC_DATASOURCES], std::bind(&DeviceAgent::SyncDatasources, this, std::placeholders::_1)},
-            {MSG_TYPE[BATCH_SIZE_UPDATE], std::bind(&DeviceAgent::UpdateBatchSize, this, std::placeholders::_1)},
-            {MSG_TYPE[RESOLUTION_UPDATE], std::bind(&DeviceAgent::UpdateResolution, this, std::placeholders::_1)},
-            {MSG_TYPE[TIME_KEEPING_UPDATE], std::bind(&DeviceAgent::UpdateTimeKeeping, this, std::placeholders::_1)},
             {MSG_TYPE[CONTAINER_STOP], std::bind(static_cast<void (DeviceAgent::*)(const std::string&)>(&DeviceAgent::StopContainer), this, std::placeholders::_1)},
-            {MSG_TYPE[RETURN_FL], std::bind(&DeviceAgent::ReturnFL, this, std::placeholders::_1)},
-            {MSG_TYPE[CRL_WEIGHTS], std::bind(&DeviceAgent::ForwardUtilityWeights, this, std::placeholders::_1)},
             {MSG_TYPE[STOP_EXPERIMENT], std::bind(&DeviceAgent::StopExperiment, this, std::placeholders::_1)},
             {MSG_TYPE[DEVICE_SHUTDOWN], std::bind(&DeviceAgent::Shutdown, this, std::placeholders::_1)}
     };
@@ -377,7 +372,6 @@ void DeviceAgent::collectRuntimeMetrics() {
                     local_downstreams.push_back(&container.second);
                 }
             }
-            EmptyMessage request;
             int i = 0, target = 0;
             for (auto *dnstr: local_downstreams) {
                 if (i == 0) {
@@ -548,16 +542,6 @@ void DeviceAgent::StopContainer(ContainerSignal request) {
     }
 }
 
-void DeviceAgent::UpdateContainerSender(const std::string &msg) {
-    ContainerLink request;
-    if (!request.ParseFromString(msg)){
-        spdlog::get("container_agent")->error("Failed update container sender with msg: {}", msg);
-        return;
-    }
-    UpdateContainerSender(request.mode(), request.name(), request.downstream_name(), request.ip(), request.port(),
-                          request.data_portion(), request.old_link(), request.timestamp(), request.offloading_duration(), request.class_of_interest());
-}
-
 void DeviceAgent::UpdateContainerSender(int mode, const std::string &cont_name, const std::string &dwnstr,
                                         const std::string &ip, const int &port, const float &data_portion,
                                         const std::string &old_link, const int64_t &timestamp,
@@ -582,13 +566,13 @@ void DeviceAgent::UpdateContainerSender(int mode, const std::string &cont_name, 
 }
 
 void DeviceAgent::SyncDatasources(const std::string &msg) {
-    ContainerLink link;
+    Connection link;
     if (!link.ParseFromString(msg)){
         spdlog::get("container_agent")->error("Failed sync datasources with msg: {}", msg);
         return;
     }
-    indevicemessages::Int32 request;
-    request.set_value(containers[link.downstream_name()].port);
+    controlmessages::Int32 request;
+    request.set_value(containers[link.old_link()].port);
     //check if cont_name is in containers
     if (containers.find(link.name()) == containers.end()) {
         spdlog::get("container_agent")->error("SyncDatasources: Container {} not found!", link.name());
@@ -768,30 +752,36 @@ void DeviceAgent::ReceiveStartReport(const std::string &msg) {
     spdlog::get("container_agent")->info("Received start report from {} with pid: {}", request.msvc_name(), pid);
 }
 
-void DeviceAgent::ForwardFL(const std::string &msg) {
-    FlData request;
-    if (!request.ParseFromString(msg)){
-        spdlog::get("container_agent")->error("Failed stopping container with msg: {}", msg);
-        device_socket.send(message_t("error"), send_flags::dontwait);
-        return;
-    }
-    request.set_device_name(dev_name);
-
-    std::string message = absl::StrFormat("%s %s", MSG_TYPE[START_FL], request.SerializeAsString());
-    message_t zmq_msg(message.size()), reply;
-    memcpy(zmq_msg.data(), message.data(), message.size());
+void DeviceAgent::ForwardToController(const std::string &msg) {
+    message_t zmq_msg(msg.size()), reply;
+    memcpy(zmq_msg.data(), msg.data(), msg.size());
     if (!controller_socket.send(zmq_msg, send_flags::dontwait)) {
-        spdlog::get("container_agent")->error("Failed to send FL data to controller.");
+        spdlog::get("container_agent")->error("Failed to Forward Message to controller: {}", msg);
         device_socket.send(message_t("error"), send_flags::dontwait);
         return;
     }
     if (controller_socket.recv(reply)) {
-        spdlog::get("container_agent")->info("Forwarded FL data to controller successfully.");
+        spdlog::get("container_agent")->info("Forwarded Message to controller successfully.");
         device_socket.send(reply, send_flags::dontwait);
     } else {
-        spdlog::get("container_agent")->error("Failed to receive reply from controller for FL data forwarding.");
+        spdlog::get("container_agent")->error("Failed to receive reply from controller for Message Forwarding: {}", msg);
         device_socket.send(message_t("error"), send_flags::dontwait);
     }
+}
+
+void DeviceAgent::ForwardToContainer(const std::string &msg) {
+    PackagedMsg request;
+    if (!request.ParseFromString(msg)){
+        spdlog::get("container_agent")->error("Failed unpacking data for Forwarding to Container with msg: {}", msg);
+        return;
+    }
+
+    //check if cont_name is in containers
+    if (containers.find(request.target_name()) == containers.end()) {
+        spdlog::get("container_agent")->error("Forward Target Container {} not found!", request.target_name());
+        return;
+    }
+    sendMessageToContainer(request.target_name(), request.payload());
 }
 
 void DeviceAgent::InferBCEdge(const std::string &msg) {
@@ -834,95 +824,19 @@ void DeviceAgent::ReceiveContainerMetrics(const std::string &msg) {
     device_socket.send(message_t("success"), send_flags::dontwait);
 }
 
-void DeviceAgent::UpdateBatchSize(const std::string &msg) {
-    ContainerInts request;
-    if (!request.ParseFromString(msg)){
-        spdlog::get("container_agent")->error("Failed UpdateBatchSize container with msg: {}", msg);
-        return;
-    }
-
-    indevicemessages::Int32 bs;
-    bs.set_value(request.value().at(0));
-
-    //check if cont_name is in containers
-    if (containers.find(request.name()) == containers.end()) {
-        spdlog::get("container_agent")->error("UpdateBatchSize: Container {} not found!", request.name());
-        return;
-    }
-    sendMessageToContainer(request.name(), MSG_TYPE[BATCH_SIZE_UPDATE], bs.SerializeAsString());
-}
-
-void DeviceAgent::UpdateResolution(const std::string &msg) {
-    ContainerInts request;
-    if (!request.ParseFromString(msg)){
-        spdlog::get("container_agent")->error("Failed UpdateResolution container with msg: {}", msg);
-        return;
-    }
-
-    indevicemessages::Dimensions dims;
-    dims.set_channels(request.value().at(0));
-    dims.set_height(request.value().at(1));
-    dims.set_width(request.value().at(2));
-
-    //check if cont_name is in containers
-    if (containers.find(request.name()) == containers.end()) {
-        spdlog::get("container_agent")->error("UpdateResolution: Container {} not found!", request.name());
-        return;
-    }
-    sendMessageToContainer(request.name(), MSG_TYPE[RESOLUTION_UPDATE], dims.SerializeAsString());
-}
-
-void DeviceAgent::UpdateTimeKeeping(const std::string &msg) {
-    TimeKeeping request;
-    if (!request.ParseFromString(msg)){
-        spdlog::get("container_agent")->error("Failed UpdateTimeKeeping container with msg: {}", msg);
-        return;
-    }
-
-    //check if cont_name is in containers
-    if (containers.find(request.name()) == containers.end()) {
-        spdlog::get("container_agent")->error("UpdateTimeKeeping: Container {} not found!", request.name());
-        return;
-    }
-    sendMessageToContainer(request.name(), MSG_TYPE[TIME_KEEPING_UPDATE], msg);
-}
-
-void DeviceAgent::ReturnFL(const std::string &msg) {
-    FlData request;
-    if (!request.ParseFromString(msg)){
-        spdlog::get("container_agent")->error("Failed returning FL to container with msg: {}", msg);
-        return;
-    }
-
-    //check if cont_name is in containers
-    if (containers.find(request.name()) == containers.end()) {
-        spdlog::get("container_agent")->error("ReturnFL: Container {} not found!", request.name());
-        return;
-    }
-    sendMessageToContainer(request.name(), MSG_TYPE[RETURN_FL], msg);
-}
-
-void DeviceAgent::ForwardUtilityWeights(const std::string &msg) {
-    CrlUtilityWeights request;
-    if (!request.ParseFromString(msg)){
-        spdlog::get("container_agent")->error("Failed forwarding utility weights to container with msg: {}", msg);
-        return;
-    }
-
-    //check if cont_name is in containers
-    if (containers.find(request.name()) == containers.end()) {
-        spdlog::get("container_agent")->error("ForwardUtilityWeights: Container {} not found!", request.name());
-        return;
-    }
-    sendMessageToContainer(request.name(), MSG_TYPE[CRL_WEIGHTS], msg);
-}
-
 void DeviceAgent::Shutdown(const std::string &msg) {
     running = false;
 }
 
 void DeviceAgent::sendMessageToContainer(const std::string &topik, const std::string &type, const std::string &content) {
     std::string msg = absl::StrFormat("%s| %s %s", topik, type, content);
+    message_t zmq_msg(msg.size());
+    memcpy(zmq_msg.data(), msg.data(), msg.size());
+    device_message_queue.send(zmq_msg, send_flags::none);
+}
+
+void DeviceAgent::sendMessageToContainer(const std::string &topik, const std::string &content) {
+    std::string msg = absl::StrFormat("%s| %s", topik, content);
     message_t zmq_msg(msg.size());
     memcpy(zmq_msg.data(), msg.data(), msg.size());
     device_message_queue.send(zmq_msg, send_flags::none);

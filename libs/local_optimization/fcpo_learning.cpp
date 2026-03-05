@@ -124,7 +124,7 @@ void FCPOAgent::federatedUpdate(const double loss) {
     request.set_network(oss.str());
     oss.str("");
 
-    std::string msg = absl::StrFormat("%s %s", MSG_TYPE[START_FL], request.SerializeAsString());
+    std::string msg = absl::StrFormat("%s %s %s", MSG_TYPE[TO_CONTROLLER], MSG_TYPE[START_FL], request.SerializeAsString());
     message_t zmq_msg(msg.size()), reply;
     memcpy(zmq_msg.data(), msg.data(), msg.size());
     if (!device_socket->send(zmq_msg, send_flags::dontwait)) {

@@ -1117,15 +1117,19 @@ void Controller::AdjustTiming(ContainerHandle *container) {
     // `container->task->tk_slo` for the total SLO of the pipeline
     container->cycleStartTime = ctrl_currSchedulingTime;
 
-    TimeKeeping request;
-    request.set_name(container->name);
-    request.set_slo(container->pipelineSLO);
-    request.set_time_budget(container->timeBudgetLeft);
-    request.set_start_time(container->startTime);
-    request.set_end_time(container->endTime);
-    request.set_local_duty_cycle(container->localDutyCycle);
-    request.set_cycle_start_time(std::chrono::duration_cast<TimePrecisionType>(container->cycleStartTime.time_since_epoch()).count());
-    sendMessageToDevice(container->device_agent->name, MSG_TYPE[TIME_KEEPING_UPDATE], request.SerializeAsString());
+    TimeKeeping message;
+    message.set_slo(container->pipelineSLO);
+    message.set_time_budget(container->timeBudgetLeft);
+    message.set_start_time(container->startTime);
+    message.set_end_time(container->endTime);
+    message.set_local_duty_cycle(container->localDutyCycle);
+    message.set_cycle_start_time(std::chrono::duration_cast<TimePrecisionType>(container->cycleStartTime.time_since_epoch()).count());
+
+    PackagedMsg request;
+    request.set_target_name(container->name);
+    request.set_payload(absl::StrFormat("%s %s", MSG_TYPE[TIME_KEEPING_UPDATE], message.SerializeAsString()));
+
+    sendMessageToDevice(container->device_agent->name, MSG_TYPE[TO_CONTAINER], request.SerializeAsString());
     spdlog::get("container_agent")->info("Requested container {0:s} to update time keeping!", container->name);
 }
 
@@ -1355,25 +1359,28 @@ void Controller::MoveContainer(ContainerHandle *container, NodeHandle *device) {
 
 void Controller::AdjustUpstream(ContainerHandle *cont, ContainerHandle *upstr, NodeHandle *new_device,
                                 AdjustUpstreamMode mode, const std::string &old_link) {
-    ContainerLink request;
-    request.set_mode(mode);
-    request.set_name(upstr->name);
-    request.set_downstream_name(cont->pipelineModel->name);
-    request.set_ip(new_device->ip);
-    request.set_port(cont->recv_port);
-    request.set_data_portion(1.0);
-    request.set_old_link(old_link);
-    request.set_offloading_duration(0);
-    request.set_class_of_interest(cont->class_of_interest);
+    Connection message;
+    message.set_mode(mode);
+    message.set_name(cont->pipelineModel->name);
+    message.set_ip(new_device->ip);
+    message.set_port(cont->recv_port);
+    message.set_data_portion(1.0);
+    message.set_old_link(old_link);
+    message.set_offloading_duration(0);
+    message.set_class_of_interest(cont->class_of_interest);
 
-    sendMessageToDevice(upstr->device_agent->name, MSG_TYPE[ADJUST_UPSTREAM], request.SerializeAsString());
+    PackagedMsg request;
+    request.set_target_name(upstr->name);
+    request.set_payload(absl::StrFormat("%s %s", MSG_TYPE[UPDATE_SENDER], message.SerializeAsString()));
+
+    sendMessageToDevice(upstr->device_agent->name, MSG_TYPE[TO_CONTAINER], request.SerializeAsString());
     spdlog::get("container_agent")->info("Upstream of {0:s} adjusted to container {1:s}", upstr->name, cont->pipelineModel->name);
 }
 
 void Controller::SyncDatasource(ContainerHandle *prev, ContainerHandle *curr) {
-    ContainerLink request;
+    Connection request;
     request.set_name(prev->name);
-    request.set_downstream_name(curr->name);
+    request.set_old_link(curr->name);
 
     sendMessageToDevice(curr->device_agent->name, MSG_TYPE[SYNC_DATASOURCES], request.SerializeAsString());
     spdlog::get("container_agent")->info("Datasource {0:s} synced with {1:s}", prev->name, curr->name);
@@ -1381,11 +1388,14 @@ void Controller::SyncDatasource(ContainerHandle *prev, ContainerHandle *curr) {
 
 void Controller::AdjustBatchSize(ContainerHandle *msvc, int new_bs) {
     msvc->batch_size = new_bs;
-    ContainerInts request;
-    request.set_name(msvc->name);
-    request.add_value(new_bs);
+    controlmessages::Int32 bs;
+    bs.set_value(new_bs);
 
-    sendMessageToDevice(msvc->device_agent->name, MSG_TYPE[BATCH_SIZE_UPDATE], request.SerializeAsString());
+    PackagedMsg request;
+    request.set_target_name(msvc->name);
+    request.set_payload(absl::StrFormat("%s %s", MSG_TYPE[BATCH_SIZE_UPDATE], bs.SerializeAsString()));
+
+    sendMessageToDevice(msvc->device_agent->name, MSG_TYPE[TO_CONTAINER], request.SerializeAsString());
     spdlog::get("container_agent")->info("Batch size of {0:s} adjusted to {1:d}", msvc->name, new_bs);
 }
 
@@ -1396,13 +1406,16 @@ void Controller::AdjustCudaDevice(ContainerHandle *msvc, GPUHandle *new_device) 
 
 void Controller::AdjustResolution(ContainerHandle *msvc, std::vector<int> new_resolution) {
     msvc->dimensions = new_resolution;
-    ContainerInts request;
-    request.set_name(msvc->name);
-    request.add_value(new_resolution[0]);
-    request.add_value(new_resolution[1]);
-    request.add_value(new_resolution[2]);
+    controlmessages::Dimensions dims;
+    dims.set_channels(new_resolution[0]);
+    dims.set_height(new_resolution[1]);
+    dims.set_width(new_resolution[2]);
 
-    sendMessageToDevice(msvc->device_agent->name, MSG_TYPE[RESOLUTION_UPDATE], request.SerializeAsString());
+    PackagedMsg request;
+    request.set_target_name(msvc->name);
+    request.set_payload(absl::StrFormat("%s %s", MSG_TYPE[RESOLUTION_UPDATE], dims.SerializeAsString()));
+
+    sendMessageToDevice(msvc->device_agent->name, MSG_TYPE[TO_CONTAINER], request.SerializeAsString());
     spdlog::get("container_agent")->info("Resolution of {0:s} adjusted to {1:d}x{2:d}x{3:d}",
                                       msvc->name, new_resolution[0], new_resolution[1], new_resolution[2]);
 }

@@ -35,13 +35,12 @@ ABSL_DECLARE_FLAG(bool, restart);
 
 using json = nlohmann::ordered_json;
 
-using indevicemessages::ContainerSignal;
-using indevicemessages::Connection;
-using indevicemessages::TimeKeeping;
-using indevicemessages::Dimensions;
-using indevicemessages::ProcessData;
-using indevicemessages::ContainerMetrics;
-using EmptyMessage = google::protobuf::Empty;
+using controlmessages::ContainerSignal;
+using controlmessages::Connection;
+using controlmessages::TimeKeeping;
+using controlmessages::Dimensions;
+using controlmessages::ProcessData;
+using controlmessages::ContainerMetrics;
 
 extern std::atomic<bool> CONT_RUN;
 

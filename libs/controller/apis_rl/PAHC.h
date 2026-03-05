@@ -21,7 +21,7 @@ public:
     }
 
     virtual void add_reward(const double x) final {
-        if (reward_index == capacity) return;
+        if (reward_index == (int) capacity) return;
         rewards[reward_index] = x;
         reward_index = (reward_index + 1) % capacity;
         if (reward_index == 0) is_full = true;
@@ -42,7 +42,7 @@ public:
         if (is_full)
             indices =  std::vector<int>(capacity);
         else {
-            if (n > reward_index - 1) n = reward_index - 1;
+            if ((int) n > reward_index - 1) n = reward_index - 1;
             indices = std::vector<int>(reward_index - 1);
         }
         std::iota(indices.begin(), indices.end(), 0);

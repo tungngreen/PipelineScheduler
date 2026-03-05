@@ -55,7 +55,8 @@ const int DEVICE_MESSAGE_QUEUE_PORT = 60012;
 const std::string COMPOSE_PATH = "../dockerfiles/tmp/";
 
 enum MESSAGE_TYPE_VALUES {
-    FORWARD,
+    TO_CONTROLLER,
+    TO_CONTAINER,
     DUMMY_DATA,
 
     NETWORK_CHECK,

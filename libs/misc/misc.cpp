@@ -7,7 +7,8 @@ using json = nlohmann::json;
 std::ofstream errOutFile;
 
 std::unordered_map<MESSAGE_TYPE_VALUES, std::string> MSG_TYPE = {
-        {DEVICE_ADVERTISEMENT, "DEV_AD"},
+        {TO_CONTROLLER, "FWD_CTRL"},
+        {TO_CONTAINER, "FWD_CONT"},
         {DUMMY_DATA, "DUMMY"},
 
         {NETWORK_CHECK, "NET_CHECK"},
@@ -31,8 +32,12 @@ std::unordered_map<MESSAGE_TYPE_VALUES, std::string> MSG_TYPE = {
         {CRL_WEIGHTS, "CRLW"},
         {BCEDGE_UPDATE, "BCEDGE_UPD"},
 
+
+        {DEVICE_ADVERTISEMENT, "DEV_AD"},
+        {CONNECT_DEVICE, "CON_DEV"},
         {START_TASK, "START"},
-        {STOP_TASK, "STOP"}
+        {STOP_TASK, "STOP"},
+        {STOP_EXPERIMENT, "STOP_EXP"}
 };
 
 std::chrono::time_point<std::chrono::_V2::system_clock, std::chrono::milliseconds> timePointCastMillisecond(
