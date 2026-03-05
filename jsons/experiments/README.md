@@ -20,7 +20,6 @@ Here's a breakdown of the key fields:
 | `systemName`  | The system to use, [FCPO, PPP, DIS, JLF, RIM, BCE].            |
 | `runtime`     | Duration of the experiment in minutes.                         |
 | `port_offset` | Optional port number offset (e.g., for development setups).    |
-| `sink_ip`     | IP address of the result SinkAgent.                            |
 
 ### 🔹 Inference Batch Sizes
 

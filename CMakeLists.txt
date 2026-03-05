@@ -183,7 +183,6 @@ add_subdirectory(libs/controller/apis_rl)
 add_subdirectory(libs/controller)
 add_subdirectory(libs/communicator)
 add_subdirectory(libs/device_agent)
-add_subdirectory(libs/device_agent/sink_agent)
 
 
 if (ON_HOST STREQUAL "ON" OR ON_HOST STREQUAL "BOTH")
@@ -202,9 +201,6 @@ if (ON_HOST STREQUAL "ON" OR ON_HOST STREQUAL "BOTH")
 
     add_executable(DeviceAgent libs/device_agent/main.cpp)
     target_link_libraries(DeviceAgent device_agent)
-
-    add_executable(SinkAgent libs/device_agent/sink_agent/main.cpp)
-    target_link_libraries(SinkAgent sink_agent)
 endif()
 
 if (ON_HOST STREQUAL "BOTH" OR (NOT (ON_HOST STREQUAL "ON")))

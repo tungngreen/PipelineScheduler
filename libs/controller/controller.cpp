@@ -485,7 +485,6 @@ void Controller::readConfigFile(const std::string &path) {
     ctrl_clusterCount = j["cluster_count"];
     ctrl_port_offset = j["port_offset"];
     ctrl_systemFPS = j["system_fps"];
-    ctrl_sinkNodeIP = j["sink_ip"];
     ctrl_initialBatchSizes["yolov5"] = j["yolov5_batch_size"];
     ctrl_initialBatchSizes["edge"] = j["edge_batch_size"];
     ctrl_initialBatchSizes["server"] = j["server_batch_size"];
@@ -494,11 +493,11 @@ void Controller::readConfigFile(const std::string &path) {
     ctrl_controlTimings.scaleUpIntervalThresholdSec = j["scale_up_interval_threshold_sec"];
     ctrl_controlTimings.scaleDownIntervalThresholdSec = j["scale_down_interval_threshold_sec"];
     initialTasks = j["initial_pipelines"];
+    AddDevice("sink");
     if (j.contains("initial_devices")) {
         auto initialDevices = j["initial_devices"];
-        for (const auto &device: initialDevices) {
+        for (const auto &device: initialDevices)
             AddDevice(device);
-        }
     } else {
         for (const auto &task : initialTasks) {
             AddDevice(task.srcDevice);
@@ -655,11 +654,6 @@ Controller::Controller(int argc, char **argv) {
     message_queue = socket_t(system_ctx, ZMQ_PUB);
     message_queue.bind(server_address);
     message_queue.set(zmq::sockopt::sndtimeo, 100);
-
-    // append one device for sink of type server
-    NodeHandle *sink_node = new NodeHandle("sink", ctrl_sinkNodeIP,  SystemDeviceType::Server,
-                                            DATA_BASE_PORT + ctrl_port_offset, {});
-    devices.addDevice("sink", sink_node);
 
     if (ctrl_systemName == "fcpo" || ctrl_systemName== "apis") {
         ctrl_fcpo_server = new FCPOServer(ctrl_systemName + "_" + ctrl_experimentName, ctrl_fcpo_config, ctrl_clusterCount, &message_queue);

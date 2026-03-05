@@ -1080,7 +1080,6 @@ private:
     std::map<std::string, BatchSizeType> ctrl_initialBatchSizes;
     TimingControl ctrl_controlTimings;
     ContainerLibType ctrl_containerLib;
-    std::string ctrl_sinkNodeIP;
 
     // LOGGING
     std::string ctrl_logPath;

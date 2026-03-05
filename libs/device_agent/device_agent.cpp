@@ -200,10 +200,12 @@ DeviceAgent::DeviceAgent() {
 void DeviceAgent::StartExperiment(const SystemInfo &info) {
     if (experiment_active)
         spdlog::get("container_agent")->warn("Received start experiment command while another experiment is still active. Overwriting current experiment with new one.");
+    if (dev_type == SinkDevice) {
+        dev_startTime = std::chrono::high_resolution_clock::now();
+        experiment_active = true;
+        return;
+    }
     spdlog::get("container_agent")->info("Starting new experiment: {}", dev_experiment_name);
-
-    dev_logPath = absl::GetFlag(FLAGS_dev_logPath) + "/" + dev_experiment_name + "/" + dev_system_name;
-    std::filesystem::create_directories(dev_logPath);
 
     dev_metricsServerConfigs.schema = abbreviate(dev_experiment_name + "_" + dev_system_name);
     dev_hwMetricsTableName =  dev_metricsServerConfigs.schema + "." + abbreviate(dev_experiment_name + "_" + dev_name) + "_hw";
@@ -597,7 +599,7 @@ void DeviceAgent::SyncDatasources(const std::string &msg) {
 
 void DeviceAgent::SelfReady() {
     std::string ip = getHostIP();
-    if (controller_url == "") return; // Wait for Connection from Cluster Controller
+    if (controller_url.empty()) return; // Wait for Connection from Cluster Controller
 
     ConnectController();
     DeviceInfo request;

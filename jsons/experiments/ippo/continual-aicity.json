@@ -4,7 +4,6 @@
     "systemName": "ippo",
     "runtime": 7,
     "port_offset": 0,
-    "sink_ip": "143.248.55.76",
     "yolov5_batch_size": 2,
     "edge_batch_size": 4,
     "server_batch_size": 8,
