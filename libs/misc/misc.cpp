@@ -1539,9 +1539,9 @@ void addTimestampsToPath(
 }
 
 std::string generateComposeConfig(const std::string &base_file, const std::string &cont_name,
-                                   const std::string &docker_tag, const std::string &executable,
-                                   const std::string &start_string, int device, int port, int port_offset,
-                                   bool deploy_mode) {
+                                  const std::string &docker_name, const std::string &executable,
+                                  const std::string &start_string, int device,
+                                  int port, int port_offset, bool deploy_mode) {
     std::ifstream infile(base_file);
     if (!infile.is_open()) {
         spdlog::get("container_agent")->error("Failed to open base compose file: {}", base_file);
@@ -1559,8 +1559,8 @@ std::string generateComposeConfig(const std::string &base_file, const std::strin
         }
     };
 
+    replaceAll(yaml_content, "${DOCKER_NAME}", docker_name);
     replaceAll(yaml_content, "${CONTAINER_NAME}", cont_name);
-    replaceAll(yaml_content, "${DOCKER_TAG}", docker_tag);
     replaceAll(yaml_content, "${EXECUTABLE}", executable);
     replaceAll(yaml_content, "${START_STRING}", start_string);
     replaceAll(yaml_content, "${DEVICE}", std::to_string(device));

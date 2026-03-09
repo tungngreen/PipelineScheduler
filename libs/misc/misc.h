@@ -904,7 +904,7 @@ void addTimestampsToPath(
 );
 
 std::string generateComposeConfig(const std::string &base_file, const std::string &cont_name,
-                                  const std::string &docker_tag, const std::string &executable,
-                                  const std::string &start_string, int device, int port, int port_offset,
-                                  bool deploy_mode);
+                                  const std::string &docker_name, const std::string &executable,
+                                  const std::string &start_string, int device,
+                                  int port, int port_offset, bool deploy_mode);
 #endif

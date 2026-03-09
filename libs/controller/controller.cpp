@@ -1290,6 +1290,15 @@ void Controller::StartContainer(ContainerHandle *container, bool easy_allocation
     container->fcpo_conf = start_config["fcpo"];
 
     request.set_name(container->name);
+    std::string docker_tag = "lucasliebe/pipeplusplus:";
+    auto dev_type = container->device_agent->type;
+    if (dev_type == Virtual || dev_type == Server || dev_type == OnPremise)
+        docker_tag += "amd64-torch";
+    else if (dev_type == NanoXavier || dev_type == NXXavier || dev_type == AGXXavier)
+        docker_tag += "jp512-torch";
+    else if (dev_type == OrinNano || dev_type == OrinNX || dev_type == OrinAGX)
+        docker_tag += "jp61-torch";
+    request.set_docker_tag(docker_tag);
     request.set_json_config(start_config.dump());
     std::cout << start_config.dump() << std::endl;
     request.set_executable(ctrl_containerLib[modelName].runCommand);

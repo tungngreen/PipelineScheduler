@@ -93,9 +93,9 @@ torch::Tensor TPALSTM::forward(torch::Tensor input) {
         // z = x[:, -hw:, :] -> [B, F, hw] -> view(-1, hw) -> Linear(hw->1) -> reshape [B, F]
         auto z = input.index({torch::indexing::Slice(), torch::indexing::Slice(T - hw, T), torch::indexing::Slice()}); // [B,hw,F]
         z = z.permute({0, 2, 1}).contiguous();                 // [B,F,hw]
-        z = z.view({-1, hw});                                   // [B*F, hw]
+        z = z.view({-1, hw});                                  // [B*F, hw]
         z = highway->forward(z);                               // [B*F, 1]
-        z = z.view({-1, D.original_columns});                   // [B,F]
+        z = z.view({-1, D.original_columns});                  // [B,F]
         res = res + z;
     }
 
@@ -126,7 +126,7 @@ BandwidthPredictor::BandwidthPredictor() {
 }
 
 float BandwidthPredictor::predict(const std::vector<float> &input) {
-    if (input.size() < args.window) {
+    if ((int64_t) input.size() < args.window) {
         spdlog::get("container_agent")->warn("Input size {} is smaller than the model window size {}. Cannot predict bandwidth.", input.size(), args.window);
         return 0.0f;
     }

@@ -113,19 +113,14 @@ protected:
     void sendMessageToContainer(const std::string &topik, const std::string &content);
 
     // SYSTEM COMMANDS
-    std::string runCompose(const std::string &executable, const std::string &cont_name, const std::string &start_string,
-                           int device, const int &port) {
-        std::string command, docker_tag, compose_file = "../dockerfiles/";
+    std::string runCompose(const std::string &executable, const std::string &cont_name, const std::string &docker_tag,
+                           const std::string &start_string, int device, const int &port) {
+        std::string command, compose_file = "../dockerfiles/";
         if (dev_type == Virtual || dev_type == Server || dev_type == OnPremise) {
             if (dev_gpuID >= 0) device = dev_gpuID;
             compose_file += "docker-compose.server.yml";
-            docker_tag = "amd64-torch";
-        } else if (dev_type == NanoXavier || dev_type == NXXavier || dev_type == AGXXavier) {
+        } else if (dev_type == NanoXavier || dev_type == NXXavier || dev_type == AGXXavier || dev_type == OrinNano || dev_type == OrinNX || dev_type == OrinAGX) {
             compose_file += "docker-compose.jetson.yml";
-            docker_tag = "jp512-torch";
-        } else if (dev_type == OrinNano || dev_type == OrinNX || dev_type == OrinAGX) {
-            compose_file += "docker-compose.jetson.yml";
-            docker_tag = "jp61-torch";
         } else {
             spdlog::get("container_agent")->error("Unknown device type while trying to start container!");
             return "";
@@ -140,12 +135,10 @@ protected:
             command = "docker compose -f " + config + " -p " + cont_name + " up -d";
         } else {
             std::string env = absl::StrFormat(
-                    "CONTAINER_NAME=%s EXECUTABLE=%s START_STRING='%s' DEVICE=%i PORT=%i PORT_OFFSET=%i "
-                    "LOGGING_ARGS='%s' DOCKER_TAG=%s",
-                    cont_name, executable, start_string, device, port, dev_system_port_offset,
-                    (deploy_mode ? "--logging_mode 1" : "--verbose 0 --logging_mode 2"),
-                    docker_tag
-            );
+                    "DOCKER_NAME=%s CONTAINER_NAME=%s EXECUTABLE=%s START_STRING='%s' DEVICE=%i PORT=%i PORT_OFFSET=%i "
+                    "LOGGING_ARGS='%s'",
+                    docker_tag, cont_name, executable, start_string, device, port, dev_system_port_offset,
+                    (deploy_mode ? "--logging_mode 1" : "--verbose 0 --logging_mode 2"));
             command = env + " docker compose -f " + compose_file + " -p " + cont_name + " up -d";
         }
         if (runCommand(command) != 0) {

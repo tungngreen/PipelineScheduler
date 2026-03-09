@@ -489,7 +489,7 @@ void DeviceAgent::CreateContainer(const std::string &msg) {
         if (c.name().find("sink") != std::string::npos) {
             c.set_json_config(replaceSubstring(c.json_config(), "<IP>", controller_url));
         }
-        std::string command = runCompose(c.executable(), c.name(), c.json_config(), c.device(), c.control_port());
+        std::string command = runCompose(c.executable(), c.name(), c.docker_tag(), c.json_config(), c.device(), c.control_port());
         std::string target = absl::StrFormat("%s:%d", "localhost", c.control_port());
         if (c.name().find("sink") != std::string::npos) {
             return;

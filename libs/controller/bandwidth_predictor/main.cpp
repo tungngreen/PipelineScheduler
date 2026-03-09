@@ -87,7 +87,7 @@ int main(int argc, char** argv) {
 
     spdlog::info("Loading data from database...");
     std::vector<double> latency_data = load_latency_data();
-    if (latency_data.size() < seq_len + 1) {
+    if ((int) latency_data.size() < seq_len + 1) {
         spdlog::error("Not enough data for training.");
         return 1;
     }
