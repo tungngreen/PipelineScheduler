@@ -599,7 +599,7 @@ Controller::Controller(int argc, char **argv) {
 
     ctrl_containerLib = getContainerLib("all");
 
-    json metricsCfgs = json::parse(std::ifstream("../jsons/metricsserver.json"));
+    json metricsCfgs = json::parse(std::ifstream("../jsons/experiments/metricsserver.json"));
     ctrl_metricsServerConfigs.from_json(metricsCfgs);
     ctrl_metricsServerConfigs.schema = abbreviate(ctrl_experimentName + "_" + ctrl_systemName);
     ctrl_metricsServerConfigs.user = "controller";

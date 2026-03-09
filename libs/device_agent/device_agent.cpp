@@ -95,7 +95,7 @@ DeviceAgent::DeviceAgent() {
         std::filesystem::create_directories(COMPOSE_PATH);
 
     // connect to metrics server and init profiler
-    dev_metricsServerConfigs.from_json(json::parse(std::ifstream("../jsons/metricsserver.json")));
+    dev_metricsServerConfigs.from_json(json::parse(std::ifstream("../jsons/experiments/metricsserver.json")));
     dev_metricsServerConfigs.user = "device_agent";
     dev_metricsServerConfigs.password = "agent";
     dev_metricsServerConn = connectToMetricsServer(dev_metricsServerConfigs, "Device_agent");

@@ -52,7 +52,7 @@ int main(int argc, char **argv) {
     uint16_t epochs = absl::GetFlag(FLAGS_epochs);
     uint16_t steps = absl::GetFlag(FLAGS_steps);
 
-    nlohmann::json metricsCfgs = nlohmann::json::parse(std::ifstream("../jsons/metricsserver.json"));
+    nlohmann::json metricsCfgs = nlohmann::json::parse(std::ifstream("../jsons/experiments/metricsserver.json"));
     MetricsServerConfigs metricsServerConfigs;
     metricsServerConfigs.from_json(metricsCfgs);
     metricsServerConfigs.schema = "pf15_ppp";
