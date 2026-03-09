@@ -35,13 +35,6 @@ ABSL_DECLARE_FLAG(std::string, dev_networkInterface);
 ABSL_DECLARE_FLAG(int, dev_gpuID);
 ABSL_DECLARE_FLAG(bool, dev_verbose_compose);
 
-using controlmessages::ContainerSignal;
-using controlmessages::TimeKeeping;
-using controlmessages::ProcessData;
-using controlmessages::BCEdgeConfig;
-using controlmessages::BCEdgeData;
-using controlmessages::ContainerMetrics;
-
 class DeviceAgent {
 public:
     DeviceAgent();

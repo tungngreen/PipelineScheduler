@@ -35,13 +35,6 @@ ABSL_DECLARE_FLAG(bool, restart);
 
 using json = nlohmann::ordered_json;
 
-using controlmessages::ContainerSignal;
-using controlmessages::Connection;
-using controlmessages::TimeKeeping;
-using controlmessages::Dimensions;
-using controlmessages::ProcessData;
-using controlmessages::ContainerMetrics;
-
 extern std::atomic<bool> CONT_RUN;
 
 enum TransferMethod {

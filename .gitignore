@@ -1,3 +1,4 @@
+##folders
 __pycache__/
 .local
 .cache
@@ -19,8 +20,6 @@ __pycache__/
 .wget-hsts
 .gk
 .pip
-*.a
-*.o
 build
 build_host
 runs
@@ -37,12 +36,14 @@ model_profiles
 logs
 videos
 */env/*
-analyze/*.txt
 
 data
 curve
 
-# files
+## compiled files
+*.a
+*.o
+
 
 ## videos
 *.mp4
@@ -62,3 +63,5 @@ curve
 *.svg
 *.csv
 analyze/*.png
+analyze/*.txt
+python_containers/controlmessages_pb2.py

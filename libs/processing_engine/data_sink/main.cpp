@@ -108,7 +108,7 @@ int main(int argc, char **argv) {
         float avg_latency = (float) agg_Latency / (float) arrival_rate;
         if (isnan(avg_latency)) avg_latency = 0.0;
         if (controllerIP != "none") {
-            controlmessages::SinkMetrics request;
+            SinkMetrics request;
             request.set_name(taskName);
             request.set_avg_latency(avg_latency);
             request.set_throughput(arrival_rate);

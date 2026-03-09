@@ -927,7 +927,7 @@ void Controller::ApplyScheduling() {
     }
     // Rearranging the upstreams and downstreams for containers;
     for (auto pipe: ctrl_scheduledPipelines.getList()) {
-        std::vector<std::tuple<ContainerHandle*, ContainerHandle*, AdjustUpstreamMode>> adjust_list = {};
+        std::vector<std::tuple<ContainerHandle*, ContainerHandle*, AdjustMode>> adjust_list = {};
         for (auto &model: pipe->tk_pipelineModels) {
             // If it's a datasource, we don't have to do it now
             // datasource doesn't have upstreams and the downstreams will be set later
@@ -952,7 +952,7 @@ void Controller::ApplyScheduling() {
                         auto it = std::find(downs.begin(), downs.end(), container);
                         if (it != downs.end()) {
                             downs.erase(it);
-                            adjust_list.push_back({oldUp, container, AdjustUpstreamMode::Stop});
+                            adjust_list.push_back({oldUp, container, AdjustMode::Stop});
                         }
                     }
                 }
@@ -966,7 +966,7 @@ void Controller::ApplyScheduling() {
                     auto &downs = wantUp->downstreams;
                     if (std::find(downs.begin(), downs.end(), container) == downs.end()) {
                         downs.push_back(container);
-                        adjust_list.push_back({wantUp, container, AdjustUpstreamMode::Start});
+                        adjust_list.push_back({wantUp, container, AdjustMode::Start});
                     }
                 }
             }
@@ -1358,7 +1358,7 @@ void Controller::MoveContainer(ContainerHandle *container, NodeHandle *device) {
             SyncDatasource(upstr, container);
             StopContainer(upstr, old_device);
         } else {
-            AdjustUpstream(container, upstr, device, AdjustUpstreamMode::Overwrite, old_link);
+            AdjustUpstream(container, upstr, device, AdjustMode::Overwrite, old_link);
         }
     }
     StopContainer(container, old_device);
@@ -1367,7 +1367,7 @@ void Controller::MoveContainer(ContainerHandle *container, NodeHandle *device) {
 }
 
 void Controller::AdjustUpstream(ContainerHandle *cont, ContainerHandle *upstr, NodeHandle *new_device,
-                                AdjustUpstreamMode mode, const std::string &old_link) {
+                                AdjustMode mode, const std::string &old_link) {
     Connection message;
     message.set_mode(mode);
     message.set_name(cont->pipelineModel->name);
@@ -1397,7 +1397,7 @@ void Controller::SyncDatasource(ContainerHandle *prev, ContainerHandle *curr) {
 
 void Controller::AdjustBatchSize(ContainerHandle *msvc, int new_bs) {
     msvc->batch_size = new_bs;
-    controlmessages::Int32 bs;
+    Int32 bs;
     bs.set_value(new_bs);
 
     PackagedMsg request;
@@ -1415,7 +1415,7 @@ void Controller::AdjustCudaDevice(ContainerHandle *msvc, GPUHandle *new_device) 
 
 void Controller::AdjustResolution(ContainerHandle *msvc, std::vector<int> new_resolution) {
     msvc->dimensions = new_resolution;
-    controlmessages::Dimensions dims;
+    Dimensions dims;
     dims.set_channels(new_resolution[0]);
     dims.set_height(new_resolution[1]);
     dims.set_width(new_resolution[2]);

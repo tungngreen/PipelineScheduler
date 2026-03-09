@@ -11,21 +11,6 @@
 #include "fcpo_learning.h"
 #include "bandwidth_predictor/bandwidth_predictor.h"
 
-using controlmessages::TaskCommand;
-using controlmessages::TaskDesc;
-using controlmessages::PipeModelDesc;
-using controlmessages::LoopRange;
-using controlmessages::ContainerConfig;
-using controlmessages::SinkMetrics;
-using controlmessages::DeviceInfo;
-using controlmessages::SystemInfo;
-using controlmessages::DummyMessage;
-using controlmessages::PackagedMsg;
-using controlmessages::FlData;
-using controlmessages::TimeKeeping;
-using controlmessages::ContainerSignal;
-using controlmessages::Connection;
-
 ABSL_DECLARE_FLAG(std::string, ctrl_configPath);
 ABSL_DECLARE_FLAG(uint16_t, ctrl_verbose);
 ABSL_DECLARE_FLAG(uint16_t, ctrl_loggingMode);
@@ -1003,7 +988,7 @@ private:
     void MoveContainer(ContainerHandle *container, NodeHandle *new_device);
     void StopContainer(ContainerHandle *container, NodeHandle *device, bool forced = false);
     void AdjustUpstream(ContainerHandle *cont, ContainerHandle *upstr, NodeHandle *new_device,
-                               AdjustUpstreamMode mode, const std::string &old_link = "");
+                               AdjustMode mode, const std::string &old_link = "");
     void SyncDatasource(ContainerHandle *prev, ContainerHandle *curr);
     void AdjustBatchSize(ContainerHandle *msvc, int new_bs);
     void AdjustCudaDevice(ContainerHandle *msvc, GPUHandle *new_device);

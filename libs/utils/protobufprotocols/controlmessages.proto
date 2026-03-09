@@ -5,6 +5,102 @@ option objc_class_prefix = "HLW";
 
 package controlmessages;
 
+enum SystemPorts {
+  UNKNOWN_PORT = 0;
+  DATA_BASE_PORT = 55001;
+  CONTROLLER_API_PORT = 60000;
+  CONTROLLER_RECEIVE_PORT = 60001;
+  CONTROLLER_MESSAGE_QUEUE_PORT = 60002;
+  DEVICE_RECEIVE_PORT = 60011;
+  DEVICE_MESSAGE_QUEUE_PORT = 60012;
+}
+
+enum MESSAGE_TYPE_VALUES {
+    TO_CONTROLLER = 0;
+    TO_CONTAINER = 1;
+    DUMMY_DATA = 2;
+
+    NETWORK_CHECK = 3;
+    DEVICE_SHUTDOWN = 4;
+
+    CONTAINER_START = 5;
+    MSVC_START_REPORT = 6;
+    CONTEXT_METRICS = 7;
+    SINK_METRICS = 8;
+    ADJUST_UPSTREAM = 9;
+    UPDATE_SENDER = 10;
+    SYNC_DATASOURCES = 11;
+    TRANSFER_FRAME_ID = 12;
+    BATCH_SIZE_UPDATE = 13;
+    RESOLUTION_UPDATE = 14;
+    TIME_KEEPING_UPDATE = 15;
+    CONTAINER_STOP = 16;
+
+    START_FL = 17;
+    RETURN_FL = 18;
+    CRL_WEIGHTS = 19;
+    BCEDGE_UPDATE = 20;
+
+    DEVICE_ADVERTISEMENT = 21;
+    CONNECT_DEVICE = 22;
+    START_TASK = 23;
+    STOP_TASK = 24;
+    STOP_EXPERIMENT = 25;
+};
+
+enum AdjustMode {
+  Overwrite = 0;
+  Add = 1;
+  Remove = 2;
+  Modify = 3;
+  Start = 4;
+  Stop = 5;
+};
+
+enum SystemDeviceType {
+  Virtual = 0;
+  Server = 1;
+  OnPremise = 2;
+
+  OrinAGX = 3;
+  OrinNX = 4;
+  OrinNano = 5;
+
+  AGXXavier = 6;
+  NXXavier = 7;
+  NanoXavier = 8;
+
+  SinkDevice = 9;
+};
+
+enum ModelType {
+    DataSource = 0;
+    Sink = 1;
+    Yolov5n = 2;
+    Yolov5n320 = 3;
+    Yolov5n512 = 4;
+    Yolov5s = 5;
+    Yolov5m = 6;
+    Yolov5nDsrc = 7;
+    Arcface = 8;
+    Retinaface = 9;
+    RetinaMtface = 10;
+    RetinaMtfaceDsrc = 11;
+    PlateDet = 12;
+    Movenet = 13;
+    Emotionnet = 14;
+    Gender = 15;
+    Age = 16;
+    CarBrand = 17;
+    CarColor = 18;
+    CarDamage = 19;
+    FireDetect = 20;
+    FashionColor = 21;
+    GearDetect = 22;
+    EquipDetect = 23;
+    End = 24;
+};
+
 message PipelineNeighbor {
   string name = 1;
   int32 classOfInterest = 2;

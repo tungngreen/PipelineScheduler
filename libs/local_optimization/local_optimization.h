@@ -5,13 +5,10 @@
 #include <random>
 #include <cmath>
 #include <chrono>
-#include "controlmessages.grpc.pb.h"
 
 #ifndef PIPEPLUSPLUS_MICRO_OPTIMIZATION_H
 #define PIPEPLUSPLUS_MICRO_OPTIMIZATION_H
 
-using controlmessages::FlData;
-using controlmessages::CrlUtilityWeights;
 using T = torch::Tensor;
 
 enum threadingAction {

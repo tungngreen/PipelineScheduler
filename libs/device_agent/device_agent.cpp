@@ -393,10 +393,10 @@ void DeviceAgent::collectRuntimeMetrics() {
                     }
                 }
                 if (target == 0) {
-                    UpdateContainerSender(AdjustUpstreamMode::Overwrite, "cont_people", dnstr->name, "localhost",
+                    UpdateContainerSender(AdjustMode::Overwrite, "cont_people", dnstr->name, "localhost",
                                           dnstr->port + 5000, 1.0, "", std::chrono::duration_cast<TimePrecisionType>(std::chrono::high_resolution_clock::now().time_since_epoch()).count(), 10);
                 } else {
-                    UpdateContainerSender(AdjustUpstreamMode::Overwrite, "cont_people", dnstr->name,
+                    UpdateContainerSender(AdjustMode::Overwrite, "cont_people", dnstr->name,
                           edgevision_dwnstrList[target - 1].offloading_ip, edgevision_dwnstrList[target - 1].offloading_port,
                           1.0, "", std::chrono::duration_cast<TimePrecisionType>(std::chrono::high_resolution_clock::now().time_since_epoch()).count(), 10);
                 }
@@ -571,7 +571,7 @@ void DeviceAgent::SyncDatasources(const std::string &msg) {
         spdlog::get("container_agent")->error("Failed sync datasources with msg: {}", msg);
         return;
     }
-    controlmessages::Int32 request;
+    Int32 request;
     request.set_value(containers[link.old_link()].port);
     //check if cont_name is in containers
     if (containers.find(link.name()) == containers.end()) {
