@@ -221,7 +221,7 @@ json msvcconfigs::loadJson() {
         if (absl::GetFlag(FLAGS_json_path).has_value()) {
             std::ifstream file(absl::GetFlag(FLAGS_json_path).value());
             auto json_file = json::parse(file);
-            file = std::ifstream("../jsons/container_lib.json");
+            file = std::ifstream("../jsons/cpp_containers/container_lib.json");
             auto containerLibs = json::parse(file);
             std::string d = json_file["container"]["cont_taskName"].get<std::string>() + "_" +
                             json_file["container"]["cont_hostDeviceType"].get<std::string>();

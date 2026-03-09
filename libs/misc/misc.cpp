@@ -1480,7 +1480,7 @@ ContainerLibType getContainerLib(std::string deviceType) {
         deviceType = "server";
     }
     ContainerLibType containerLib;
-    std::ifstream file("../jsons/container_lib.json");
+    std::ifstream file("../jsons/cpp_containers/container_lib.json");
     json j = json::parse(file);
     file.close();
     for (const auto &item : j.items()) {
