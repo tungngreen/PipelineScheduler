@@ -1,3 +1,5 @@
+#pragma once
+
 #include "controller.h"
 
 /*
@@ -21,11 +23,21 @@ struct ModelInfoJF {
     int height;
     std::string name;
     float accuracy;
-    PipelineModel *model;
+    std::weak_ptr<PipelineModel> model;
 
-    ModelInfoJF(int bs, float il, int w, int h, std::string n, float acc, PipelineModel *m);
+    ModelInfoJF(int bs, float il, int w, int h, const std::string& n, float acc, std::weak_ptr<PipelineModel> m);
+
     bool operator==(const ModelInfoJF& other) const {
-        return batch_size == other.batch_size && inference_latency == other.inference_latency && throughput == other.throughput && width == other.width && height == other.height && name == other.name && accuracy == other.accuracy;
+        auto this_model = model.lock();
+        auto other_model = other.model.lock();
+        return batch_size == other.batch_size && 
+               inference_latency == other.inference_latency && 
+               throughput == other.throughput && 
+               width == other.width && 
+               height == other.height && 
+               name == other.name && 
+               accuracy == other.accuracy &&
+               this_model == other_model;
     }
 };
 
@@ -34,7 +46,11 @@ struct ModelInfoJF {
  */
 struct ModelSetCompare {
     bool operator()(const std::tuple<std::string, float> &lhs, const std::tuple<std::string, float> &rhs) const {
-        return std::get<1>(lhs) > std::get<1>(rhs);
+        // Strict weak ordering: If accuracies are the same, tie-break by name to prevent map collisions.
+        if (std::get<1>(lhs) != std::get<1>(rhs)) {
+            return std::get<1>(lhs) > std::get<1>(rhs); // Descending accuracy
+        }
+        return std::get<0>(lhs) > std::get<0>(rhs); // Tie-breaker
     }
 };
 
@@ -43,12 +59,20 @@ struct ModelSetCompare {
  */
 class ModelProfilesJF {
 public:
-    // key: (model type, accuracy) value: (model_info)
-    std::map<std::tuple<std::string, float>, std::vector<ModelInfoJF>, ModelSetCompare> infos;
-
-    void add(std::string name, float accuracy, int batch_size, float inference_latency, int width, int height, PipelineModel *model);
+    void add(const std::string& name, float accuracy, int batch_size, float inference_latency, int width, int height, std::weak_ptr<PipelineModel> model);
     void add(const ModelInfoJF &model_info);
+    
+    // Thread-safe getter to replace direct public access
+    std::map<std::tuple<std::string, float>, std::vector<ModelInfoJF>, ModelSetCompare> getInfos() const {
+        std::lock_guard<std::mutex> lock(mtx);
+        return infos;
+    }
+    
     void debugging();
+
+private:
+    std::map<std::tuple<std::string, float>, std::vector<ModelInfoJF>, ModelSetCompare> infos;
+    mutable std::mutex mtx;
 };
 
 /**
@@ -59,14 +83,14 @@ struct ClientInfoJF
     std::string name;         // can be anything, just a unique identification for differenct clients(datasource)
     float budget;             // slo
     int req_rate;             // request rate (how many frame are sent to remote per second)
-    PipelineModel *model;     // pointer to that component
+    std::weak_ptr<PipelineModel> model;     // pointer to that component
     int transmission_latency; // networking time, useful for scheduling
     std::string task_name;
     std::string task_source;
     NetworkEntryType network_entry;
 
-    ClientInfoJF(std::string _name, float _budget, int _req_rate, PipelineModel *_model,
-                 std::string _task_name, std::string _task_source, NetworkEntryType _network_entry);
+    ClientInfoJF(const std::string& _name, float _budget, int _req_rate, std::weak_ptr<PipelineModel> _model,
+                 const std::string& _task_name, const std::string& _task_source, NetworkEntryType _network_entry);
 
     bool operator==(const ClientInfoJF &other) const {
         return name == other.name && budget == other.budget && req_rate == other.req_rate;
@@ -82,16 +106,26 @@ struct ClientInfoJF
  */
 class ClientProfilesJF {
 public:
-    std::vector<ClientInfoJF> infos;
-
     static void sortBudgetDescending(std::vector<ClientInfoJF> &clients);
-    void add(const std::string &name, float budget, int req_rate, PipelineModel *model,
-             std::string task_name, std::string task_source, NetworkEntryType network_entry);
+    
+    void add(const std::string &name, float budget, int req_rate, std::weak_ptr<PipelineModel> model,
+             const std::string& task_name, const std::string& task_source, NetworkEntryType network_entry);
+             
+    // Thread-safe getter
+    std::vector<ClientInfoJF> getInfos() const {
+        std::lock_guard<std::mutex> lock(mtx);
+        return infos;
+    }
+             
     void debugging();
+
+private:
+    std::vector<ClientInfoJF> infos;
+    mutable std::mutex mtx;
 };
 
 // the accuracy value here is dummy, just use for ranking models
-const std::map<std::string, float> ACC_LEVEL_MAP = {
+inline const std::map<std::string, float> ACC_LEVEL_MAP = {
         {"yolov5n320", 0.30},
         {"yolov5n512", 0.40},
         {"yolov5n640", 0.50},
@@ -103,8 +137,10 @@ const std::map<std::string, float> ACC_LEVEL_MAP = {
 //                                     start of jellyfish scheduling implementation
 // --------------------------------------------------------------------------------------------------------
 namespace Jlf {
+    // Note: Adjusted signature to take std::vector<ClientInfoJF>& directly so it can be mutated 
+    // safely in the .cpp file without modifying the locked class internals.
     std::vector<std::tuple<std::tuple<std::string, float>, std::vector<ClientInfoJF>, int>>
-    mapClient(ClientProfilesJF &client_profile, ModelProfilesJF &model_profiles);
+    mapClient(std::vector<ClientInfoJF> &clients, ModelProfilesJF &model_profiles);
 
     std::vector<ClientInfoJF>
     findOptimalClients(const std::vector<ModelInfoJF> &models, std::vector<ClientInfoJF> &clients);

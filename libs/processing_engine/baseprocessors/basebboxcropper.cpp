@@ -346,6 +346,8 @@ void BaseBBoxCropper::cropping() {
                 RELOADING = false;
                 READY = true;
                 spdlog::get("container_agent")->info("{0:s} is (RE)LOADED.", msvc_name);
+
+                // msvc_OutQueue.at(0)->setAllowedProducerList({"server", "orinano1", "xaviernx1"});
             }
             std::this_thread::sleep_for(std::chrono::milliseconds(1));
             continue;
@@ -548,6 +550,22 @@ void BaseBBoxCropper::cropping() {
                 cv::Mat encodedBox;
                 uint32_t boxEncodedMemSize = 0;
 
+                // Index of the image in the whole batch of multiple concatenated frames
+                // each frame has mscc_concat.numImgs images
+                uint16_t imageIndexInBatch = currReq.req_concatInfo[i].firstImageIndex + indexLists[j].first;
+
+                // There could be multiple timestamps in the request, but the first one always represent
+                // the moment this request was generated at the very beginning of the pipeline
+
+                // The travel path of the request is the path of the image
+                // We will concat more information to it
+                currReq_path = currReq.req_travelPath[imageIndexInBatch];
+
+                // The source stream is the name of the stream that generates this request
+                // Starting at index 1 to remove the "[" at the beginning of the path and find the first "|" which is the delimiter for the path"
+                std::string originStream = getOriginStream(currReq.req_travelPath[imageIndexInBatch]);
+
+
                 // Find the indices of the queues that need this class number
                 // And convert the bounding box to CPU if needed
                 for (size_t k = 0; k < this->classToDnstreamMap.size(); ++k) {
@@ -557,6 +575,11 @@ void BaseBBoxCropper::cropping() {
                     // `classToDntreamMap`.
                     if ((classToDnstreamMap.at(k).first == bboxClass) || (classToDnstreamMap.at(k).first == -1)) {
                         qIndex = classToDnstreamMap.at(k).second;
+
+                        std::list<std::string> allowedSourceStreams = GetOutQueue().at(qIndex)->getAllowedProducerList();
+                        if (!msvc_OutQueue.at(qIndex)->isProducerAllowed(originStream)) {
+                            continue;
+                        }
                         queueIndex.emplace_back(qIndex);
                         //if not outReqList at qIndex is empty then insert one
                         if (outReqList.at(qIndex).empty()) {
@@ -602,17 +625,6 @@ void BaseBBoxCropper::cropping() {
                 bboxShape = {bbox.channels(),
                              bbox.rows,
                              bbox.cols};
-
-                // Index of the image in the whole batch of multiple concatenated frames
-                // each frame has mscc_concat.numImgs images
-                uint16_t imageIndexInBatch = currReq.req_concatInfo[i].firstImageIndex + indexLists[j].first;
-
-                // There could be multiple timestamps in the request, but the first one always represent
-                // the moment this request was generated at the very beginning of the pipeline
-
-                // The travel path of the request is the path of the image
-                // We will concat more information to it
-                currReq_path = currReq.req_travelPath[imageIndexInBatch];
 
                 // Forwards the bounding box meant for appropriate queues meant for the downstream microservices
                 for (auto qIndex : queueIndex) {

@@ -282,7 +282,8 @@
                                 0
                             ]
                         ],
-                        "nb_portions": []
+                        "nb_portions": [],
+                        "nb_allowedProducerList": []
                     }
                 ],
                 "msvc_dataShape": [
@@ -371,14 +372,15 @@
                                 0
                             ]
                         ],
-                        "nb_portions": []
+                        "nb_portions": [],
+                        "nb_allowedProducerList": []
                     }
                 ],
                 "msvc_maxQueueSize": 100,
                 "=========================================Here ends the common part of the microservice configuration": "The following are the specific configurations for each microservice."
             }
         ],
-        "cont_metricServerConfigs": "../jsons/metricsserver.json",
+        "cont_metricServerConfigs": "../jsons/experiments/metricsserver.json",
         "cont_numWarmUpBatches": 15,
         "cont_allocationMode": 1,
         "cont_batchMode": 1,

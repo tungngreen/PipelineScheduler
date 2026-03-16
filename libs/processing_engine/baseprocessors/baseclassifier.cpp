@@ -146,41 +146,53 @@ void BaseClassifier::classify() {
             uint32_t totalInMem = currReq.upstreamReq_data[i].data.rows * currReq.upstreamReq_data[i].data.cols * currReq.upstreamReq_data[i].data.channels() * CV_ELEM_SIZE1(currReq.upstreamReq_data[i].data.type());
             uint32_t totalEncodedOutMem = 0;
 
-            if (msvc_activeOutQueueIndex.at(queueIndex) == 1) { //Local CPU
-                cv::Mat out;
-                currReq.upstreamReq_data[i].data.download(out, *postProcCVStream);
-                postProcCVStream->waitForCompletion();
-                if (msvc_OutQueue.at(queueIndex)->getEncoded()) {
-                    out = encodeResults(out);
-                    totalEncodedOutMem = out.channels() * out.rows * out.cols * CV_ELEM_SIZE1(out.type());
+            // Extract the origin stream information, which serves 2 critical purposes:
+            // 1. It allows the postprocessor to decide which downstream queue to send the request to based on the origin stream information.
+            // 2. It allows the postprocessor to record the latency breakdown based on different origin streams.
+            std::string originStream = getOriginStream(currReq.req_travelPath[i]);
+
+
+            for (uint8_t qIndex = 0; qIndex < msvc_OutQueue.size(); ++qIndex) {
+                if (!msvc_OutQueue.at(qIndex)->isProducerAllowed(originStream)) {
+                    continue;
                 }
-                currReq.req_travelPath[i] += "|1|1|" + std::to_string(totalEncodedOutMem) + "|" + std::to_string(totalInMem) + "]";
-                msvc_OutQueue.at(0)->emplace(
-                    Request<LocalCPUReqDataType>{
-                        {{currReq.req_origGenTime[i].front(), std::chrono::high_resolution_clock::now()}},
-                        {currReq.req_e2eSLOLatency[i]},
-                        {currReq.req_travelPath[i]},
-                        1,
-                        {
-                            {currReq.upstreamReq_data[i].shape, out}
-                        } //req_data
+
+                if (msvc_activeOutQueueIndex.at(queueIndex) == 1) { //Local CPU
+                    cv::Mat out;
+                    currReq.upstreamReq_data[i].data.download(out, *postProcCVStream);
+                    postProcCVStream->waitForCompletion();
+                    if (msvc_OutQueue.at(queueIndex)->getEncoded()) {
+                        out = encodeResults(out);
+                        totalEncodedOutMem = out.channels() * out.rows * out.cols * CV_ELEM_SIZE1(out.type());
                     }
-                );
-                spdlog::get("container_agent")->trace("{0:s} emplaced an image to CPU queue.", msvc_name);
-            } else {
-                currReq.req_travelPath[i] += "|1|1|0|" + std::to_string(totalInMem) + "]";
-                msvc_OutQueue.at(0)->emplace(
-                    Request<LocalGPUReqDataType>{
-                        {{currReq.req_origGenTime[i].front(), std::chrono::high_resolution_clock::now()}},
-                        {currReq.req_e2eSLOLatency[i]},
-                        {currReq.req_travelPath[i]},
-                        1,
-                        {
-                            currReq.upstreamReq_data[i]
+                    currReq.req_travelPath[i] += "|1|1|" + std::to_string(totalEncodedOutMem) + "|" + std::to_string(totalInMem) + "]";
+                    msvc_OutQueue.at(0)->emplace(
+                        Request<LocalCPUReqDataType>{
+                            {{currReq.req_origGenTime[i].front(), std::chrono::high_resolution_clock::now()}},
+                            {currReq.req_e2eSLOLatency[i]},
+                            {currReq.req_travelPath[i]},
+                            1,
+                            {
+                                {currReq.upstreamReq_data[i].shape, out}
+                            } //req_data
                         }
-                    }
-                );
-                spdlog::get("container_agent")->trace("{0:s} emplaced an image to GPU queue.", msvc_name);
+                    );
+                    spdlog::get("container_agent")->trace("{0:s} emplaced an image to CPU queue.", msvc_name);
+                } else {
+                    currReq.req_travelPath[i] += "|1|1|0|" + std::to_string(totalInMem) + "]";
+                    msvc_OutQueue.at(0)->emplace(
+                        Request<LocalGPUReqDataType>{
+                            {{currReq.req_origGenTime[i].front(), std::chrono::high_resolution_clock::now()}},
+                            {currReq.req_e2eSLOLatency[i]},
+                            {currReq.req_travelPath[i]},
+                            1,
+                            {
+                                currReq.upstreamReq_data[i]
+                            }
+                        }
+                    );
+                    spdlog::get("container_agent")->trace("{0:s} emplaced an image to GPU queue.", msvc_name);
+                }
             }
 
             uint32_t totalOutMem = totalInMem;
@@ -188,7 +200,6 @@ void BaseClassifier::classify() {
             if (warmupCompleted()) {
                 // 12. When the request was completed by the postprocessor (TWELFTH_TIMESTAMP)
                 currReq.req_origGenTime[i].emplace_back(std::chrono::high_resolution_clock::now());
-                std::string originStream = getOriginStream(currReq.req_travelPath[i]);
                 // TODO: Add the request number
                 msvc_processRecords.addRecord(currReq.req_origGenTime[i], currReq_batchSize, totalInMem, totalOutMem, totalEncodedOutMem, 0, originStream);
                 msvc_arrivalRecords.addRecord(

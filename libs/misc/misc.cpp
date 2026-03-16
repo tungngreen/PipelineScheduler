@@ -1301,6 +1301,10 @@ std::map<std::string, std::string> keywordAbbrs = {
     {"carcolor", "ccol"},
     {"cardamage", "cdmg"},
     {"firedetect", "fire"},
+    {"firedetectdsrc", "fired"},
+    {"geardetect", "gear"},
+    {"equipdetect", "equip"},
+    {"equipdetectdsrc", "equipd"},
     {"fashioncolor", "fcol"},
     {"gender", "gndr"},
     {"emotion", "emtn"},
@@ -1382,9 +1386,11 @@ std::map<ModelType, std::string> ModelTypeList = {
     {CarColor, "carcolor"},
     {CarDamage, "cardamage"},
     {FireDetect, "firedetect"},
+    {FireDetectDsrc, "firedetectdsrc"},
     {FashionColor, "fashioncolor"},
     {GearDetect, "geardetect"},
-    {EquipDetect, "equipdetect"}
+    {EquipDetect, "equipdetect"},
+    {EquipDetectDsrc, "equipdetectdsrc"}
 };
 
 std::map<std::string, ModelType> ModelTypeReverseList = {
@@ -1438,12 +1444,16 @@ std::map<std::string, ModelType> ModelTypeReverseList = {
     {"cdmg", CarDamage},
     {"firedetect", FireDetect},
     {"fire", FireDetect},
+    {"firedetectdsrc", FireDetectDsrc},
+    {"fired", FireDetectDsrc},
     {"fashioncolor", FashionColor},
     {"fcol", FashionColor},
     {"geardetect", GearDetect},
     {"gear", GearDetect},
     {"equipdetect", EquipDetect},
-    {"equi", EquipDetect}
+    {"equi", EquipDetect},
+    {"equipdetectdsrc", EquipDetectDsrc},
+    {"equipd", EquipDetectDsrc}
 };
 
 bool isFileEmpty(const std::string& filePath) {

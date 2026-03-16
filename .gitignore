@@ -20,7 +20,8 @@ __pycache__/
 .wget-hsts
 .gk
 .pip
-build
+.gemini/*
+build*
 build_host
 runs
 abseil-cpp/
@@ -43,6 +44,7 @@ curve
 ## compiled files
 *.a
 *.o
+compile_commands.json
 
 
 ## videos
@@ -65,3 +67,4 @@ curve
 analyze/*.png
 analyze/*.txt
 python_containers/controlmessages_pb2.py
+scripts/controlmessages_pb2.py

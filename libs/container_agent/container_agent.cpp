@@ -1,4 +1,5 @@
 #include "container_agent.h"
+#include "controlmessages.pb.h"
 
 ABSL_FLAG(std::optional<std::string>, json, std::nullopt, "configurations for microservices as json");
 ABSL_FLAG(std::optional<std::string>, json_path, std::nullopt, "json for configuration inside a file");
@@ -84,6 +85,10 @@ void manageJsonConfigs(json &configs) {
     containerConfigs->at("cont_logPath") = logPath;
 
     std::ifstream metricsServerCfgsFile = std::ifstream(containerConfigs->at("cont_metricServerConfigs"));
+    if (!metricsServerCfgsFile.is_open()) {
+        spdlog::get("container_agent")->error("Failed to open metrics server configs file: {0:s}", containerConfigs->at("cont_metricServerConfigs").get<std::string>());
+        throw std::runtime_error("Failed to open metrics server configs file");
+    }
     json metricsServerConfigs = json::parse(metricsServerCfgsFile);
 
     (*containerConfigs)["cont_metricsServerConfigs"] = metricsServerConfigs;
@@ -244,6 +249,66 @@ json msvcconfigs::loadJson() {
             return json_file;
         }
     }
+}
+
+std::vector<Connection> optimizeBatchedMessages(const BatchedConnections& batch) {
+    std::unordered_map<std::string, std::vector<Connection>> ops_by_name;
+
+    // 1. Group messages by target sender name to isolate state changes
+    for (const auto& conn : batch.connections()) {
+        ops_by_name[conn.name()].push_back(conn);
+    }
+
+    std::vector<Connection> optimized_batch;
+
+    // 2. Process each sender's queue in reverse to find the "net effective" state
+    for (auto& [name, ops] : ops_by_name) {
+        bool is_stopping = false;
+        bool is_full_overwritten = false;
+        std::vector<Connection> kept_ops;
+
+        // Iterate backwards: newest messages dictate what prior messages are obsolete
+        for (auto it = ops.rbegin(); it != ops.rend(); ++it) {
+            const auto& op = *it;
+
+            if (op.mode() == AdjustMode::Stop) {
+                if (!is_stopping) {
+                    kept_ops.push_back(op);
+                    is_stopping = true; // Flag to drop ALL prior operations for this sender
+                }
+            }
+            else if (is_stopping) {
+                // If the sender is doomed to stop, prior Starts or link tweaks are wasted CPU cycles
+                continue; 
+            }
+            else if (op.mode() == AdjustMode::Overwrite && op.old_link().empty()) {
+                if (!is_full_overwritten) {
+                    kept_ops.push_back(op);
+                    is_full_overwritten = true; // Flag to drop prior link modifications
+                }
+            }
+            else if (is_full_overwritten && 
+                    (op.mode() == AdjustMode::Add || 
+                     op.mode() == AdjustMode::Remove || 
+                     op.mode() == AdjustMode::Modify || 
+                     op.mode() == AdjustMode::Overwrite)) {
+                // These intermediate link changes get wiped out by the upcoming full Overwrite
+                continue; 
+            }
+            else {
+                // Keep operations that haven't been nullified (e.g., Start, or targeted Overwrites)
+                kept_ops.push_back(op);
+            }
+        }
+
+        // 3. Reverse the kept operations back to their original chronological order
+        std::reverse(kept_ops.begin(), kept_ops.end());
+        
+        // Append to the final consolidated batch
+        optimized_batch.insert(optimized_batch.end(), kept_ops.begin(), kept_ops.end());
+    }
+
+    return optimized_batch;
 }
 
 bool ContainerAgent::readModelProfile(const json &profile) {
@@ -555,6 +620,7 @@ ContainerAgent::ContainerAgent(const json& configs) {
 
     handlers = {
         {MSG_TYPE[CONTAINER_STOP], std::bind(&ContainerAgent::stopExecution, this, std::placeholders::_1)},
+        {MSG_TYPE[UPDATE_SENDER_IN_BATCH], std::bind(&ContainerAgent::updateSenderInBatch, this, std::placeholders::_1)},
         {MSG_TYPE[UPDATE_SENDER], std::bind(&ContainerAgent::updateSender, this, std::placeholders::_1)},
         {MSG_TYPE[BATCH_SIZE_UPDATE], std::bind(&ContainerAgent::updateBatchSize, this, std::placeholders::_1)},
         {MSG_TYPE[RESOLUTION_UPDATE], std::bind(&ContainerAgent::updateResolution, this, std::placeholders::_1)},
@@ -1461,6 +1527,327 @@ void ContainerAgent::stopExecution(const std::string &msg) {
     CONT_RUN = false;
 }
 
+void ContainerAgent::updateSenderInBatch(const std::string &msg) {
+    BatchedConnections batchedRequests;
+    if (!batchedRequests.ParseFromString(msg)) {
+        spdlog::get("container_agent")->error("Failed to parse updateSender requests: {0:s}", msg);
+        return;
+    }
+
+    /**
+     * @brief Optimize the batched messsages by de-duplicating the conflicting requests for each sender
+     * 
+     */
+    std::vector<Connection> requests = optimizeBatchedMessages(batchedRequests);
+    if (requests.empty()) {
+        return; // Nothing to do after optimization
+    }
+
+    /****************************************************************************************************************************************/
+
+    /**
+     * @brief Pausing everything except the senders whose downstreams are mentioned in the requests.
+     * 
+     */
+    std::unordered_set<std::string> target_names;
+    for (const auto& req : requests) {
+        target_names.insert(req.name());
+    }
+
+    // Acquire lock for the entire batch execution
+    std::lock_guard<std::mutex> lock(cont_pipeStructureMutex);
+
+    // Pause threads
+    for (auto& group : cont_msvcsGroups) {
+        for (auto* msvc : group.second.msvcList) {
+            // Safe check: Ensure list isn't empty before accessing index 0
+            // If the first downstream microservice is in the target names, skip pausing to let it clear its queue.
+            if (!msvc->dnstreamMicroserviceList.empty() && 
+                target_names.count(msvc->dnstreamMicroserviceList[0].name)) {
+                continue;
+            }
+            msvc->pauseThread();
+        }
+    }
+    /****************************************************************************************************************************************/
+
+    auto senders = &cont_msvcsGroups["sender"].msvcList;
+
+    for (const auto& request : requests) {
+        /**
+         * @brief Handle the offloading duration by sleeping until the start time of the offloading if the request is received early, 
+         * or skipping the request if it's received too late. This ensures that the adjustments are made within the specified time window 
+         * for offloading, preventing premature or delayed changes that could disrupt the system's performance.
+         * 
+         */
+        if (request.offloading_duration() != 0) {
+            auto now = std::chrono::high_resolution_clock::now();
+            auto start = ClockType(TimePrecisionType(request.timestamp()));
+            if (now < start) {
+                std::this_thread::sleep_for(start - now);
+            } else if (now > start + std::chrono::seconds(request.offloading_duration())) {
+                spdlog::get("container_agent")->error("Received Offloading Request for {0:s} too late", request.name());
+                continue; // Skip to next request instead of returning
+            }
+        }
+        /****************************************************************************************************************************************/
+
+        std::string link = absl::StrFormat("%s:%d", request.ip(), request.port());
+
+        /**
+         * @brief Start a new sender for the downstream if the mode is Start, ensuring that no duplicate sender exists for the same downstream.
+         *
+         */
+        if (request.mode() == AdjustMode::Start) {
+            bool already_exists = false;
+            for (auto* sender: *senders) {
+                if (sender->dnstreamMicroserviceList[0].name != request.name()) {
+                    continue;
+                }
+                spdlog::get("container_agent")->error("Sender for downstream {0:s} already existing as: {1:s}", request.name(), sender->msvc_name);
+                already_exists = true;
+                break;
+            }
+            if (already_exists) continue;
+
+            json config = (*senders)[0]->msvc_configs; // Assuming at least one sender exists to copy config from
+            config["msvc_name"] = absl::StrFormat("sender%s", request.name());
+            config["msvc_dnstreamMicroservices"][0]["nb_name"] = request.name();
+            config["msvc_dnstreamMicroservices"][0]["nb_classOfInterest"] = request.class_of_interest();
+            std::vector<std::string> allowedProducers(request.allowed_producers().begin(), request.allowed_producers().end());
+            // Strip everything before the last "/" in the producer names to avoid common file path not necessary to identify the producer
+            for (auto& producer : allowedProducers) {
+                size_t pos = producer.find_last_of("/");
+                if (pos != std::string::npos) {
+                    producer = producer.substr(pos + 1);
+                }
+            }
+            config["msvc_dnstreamMicroservices"][0]["nb_allowedProducerList"] = allowedProducers;
+            config["msvc_dnstreamMicroservices"][0]["nb_link"] = {link};
+            config["msvc_dnstreamMicroservices"][0]["nb_portions"] = {};
+            
+            Microservice* new_sender = new RemoteCPUSender(config);
+            cont_msvcsGroups["sender"].msvcList.push_back(new_sender);
+
+            json neighborconfig = cont_msvcsGroups["postprocessor"].msvcList[0]->msvc_configs["msvc_dnstreamMicroservices"][0];
+            neighborconfig["nb_name"] = new_sender->msvc_name;
+            neighborconfig["nb_classOfInterest"] = request.class_of_interest();
+            neighborconfig["nb_portions"] = {};
+            
+            for (auto *postprocessor : cont_msvcsGroups["postprocessor"].msvcList) {
+                postprocessor->msvc_configs["msvc_dnstreamMicroservices"].push_back(neighborconfig);
+                postprocessor->reloadDnstreams();
+            }
+            new_sender->SetInQueue({cont_msvcsGroups["postprocessor"].outQueue.back()});
+            static_cast<Sender*>(new_sender)->dispatchThread();
+            continue;
+        }
+        /****************************************************************************************************************************************/
+
+        /**
+         * @brief Stop and remove the sender for the downstream if the mode is Stop, ensuring that all references to the sender are removed from 
+         * the postprocessors to prevent dangling pointers or references to the stopped sender.
+         * 
+         */
+        if (request.mode() == AdjustMode::Stop) {
+            bool found = false;
+            // Safe iteration and removal of sender while ensuring postprocessors are updated accordingly
+            for (auto it = senders->begin(); it != senders->end(); ++it) {
+                auto* sender = *it;
+                if (sender->dnstreamMicroserviceList[0].name != request.name()) {
+                    continue;
+                }
+
+                // Once we have found the sender to stop, we need to remove its references from all postprocessors before stopping it
+                for (auto *postprocessor : cont_msvcsGroups["postprocessor"].msvcList) {
+                    std::vector<msvcconfigs::NeighborMicroservice *> old_dnstreams;
+                    // Collect pointers to the dnstreams that match the sender's downstream name for removal
+                    for (auto &dnstream : postprocessor->dnstreamMicroserviceList) {
+                        if (sender->msvc_name.find(dnstream.name) == std::string::npos) {
+                            continue;
+                        }
+                        old_dnstreams.push_back(&dnstream);
+                    }
+                    for (auto* dnstream : old_dnstreams) {
+                        auto &dnstreams_json = postprocessor->msvc_configs["msvc_dnstreamMicroservices"];
+                        dnstreams_json.erase(
+                            std::remove_if(dnstreams_json.begin(), dnstreams_json.end(),
+                                            [&](const json &n) { return n.value("nb_name", "") == dnstream->name; }),
+                            dnstreams_json.end()
+                        );
+                    }
+                    postprocessor->reloadDnstreams();
+                }
+                sender->stopThread();
+                senders->erase(it);
+                found = true;
+                break; 
+            }
+            if (!found) {
+                spdlog::get("container_agent")->error("Sender for downstream {0:s} not found for deletion.", request.name());
+            }
+            continue;
+        }
+
+        /**
+         * @brief If we only need to work with the existing senders without starting or stopping any sender
+         * 
+         */
+        bool sender_updated = false;
+        for (auto* sender: *senders) {
+            if (sender->dnstreamMicroserviceList[0].name != request.name()) {
+                continue;
+            }
+
+            sender_updated = true;
+            json* config = &sender->msvc_configs;
+            std::vector<msvcconfigs::NeighborMicroservice *> postprocessor_dnstreams;
+            
+            for (auto *postprocessor : cont_msvcsGroups["postprocessor"].msvcList) {
+                for (auto &dnstream : postprocessor->dnstreamMicroserviceList) {
+                    if (sender->msvc_name.find(dnstream.name) != std::string::npos) {
+                        postprocessor_dnstreams.push_back(&dnstream);
+                    }
+                }
+            }
+            
+            auto& nb_links = config->at("msvc_dnstreamMicroservices")[0]["nb_link"];
+            
+            /**
+             * @brief Overwrite mode
+             * 
+             */
+            if (request.mode() == AdjustMode::Overwrite) {
+                // If old_link is empty, it means we want to overwrite all existing links with the new link. 
+                // Otherwise, we only overwrite the specific link that matches old_link.
+                if (request.old_link().empty()) {
+                    config->at("msvc_dnstreamMicroservices")[0]["nb_link"] = {link};
+                    config->at("msvc_dnstreamMicroservices")[0]["nb_portions"] = {};
+                    for (auto* postprocessor : postprocessor_dnstreams) {
+                        postprocessor->portions.clear();
+                    }
+                    spdlog::get("container_agent")->trace("Overwrote all links in {0:s} to {1:s}", sender->msvc_name, link);
+                // If old_link is not empty
+                } else {
+                    auto it = std::find(nb_links.begin(), nb_links.end(), request.old_link());
+                    if (it == nb_links.end()) {
+                        spdlog::get("container_agent")->error("Link {0:s} not found in {1:s}", request.old_link(), sender->msvc_name);
+                        break; // break inner sender loop, continue to next request
+                    }
+                    int index = std::distance(nb_links.begin(), it);
+                    config->at("msvc_dnstreamMicroservices")[0]["nb_link"][index] = link;
+                    if (index != 0) {
+                        config->at("msvc_dnstreamMicroservices")[0]["nb_portions"][index-1] = request.data_portion();
+                        for (auto* postprocessor : postprocessor_dnstreams) {
+                            float portion_diff = postprocessor->portions[index] - request.data_portion();
+                            postprocessor->portions[0] += portion_diff;
+                            postprocessor->portions[index] = request.data_portion();
+                        }
+                    }
+                    spdlog::get("container_agent")->trace("Overwrote link {0:s} over {1:s}", link, request.old_link());
+                }
+                std::list<std::string> allowedProducers;
+                for (const auto& producer : request.allowed_producers()) {
+                    // Strip everything before the last "/" in the producer names to avoid common file path not necessary to identify the producer
+                    size_t pos = producer.find_last_of("/");
+                    if (pos != std::string::npos) {
+                        allowedProducers.push_back(producer.substr(pos + 1));
+                    } else {
+                        allowedProducers.push_back(producer);
+                    }
+                }
+                sender->GetInQueue().at(0)->setAllowedProducerList(allowedProducers);
+            /****************************************************************************************************************************************/
+
+            /**
+             * @brief Add mode
+             * 
+             */
+            } else if (request.mode() == AdjustMode::Add) {
+                if (std::find(nb_links.begin(), nb_links.end(), link) == nb_links.end()) {
+                    config->at("msvc_dnstreamMicroservices")[0]["nb_link"].push_back(link);
+                    config->at("msvc_dnstreamMicroservices")[0]["nb_portions"].push_back(request.data_portion());
+                    for (auto* postprocessor : postprocessor_dnstreams) {
+                        if (postprocessor->portions.empty()) {
+                            postprocessor->portions.push_back(1.0f - request.data_portion());
+                        } else {
+                            postprocessor->portions[0] -= request.data_portion();
+                        }
+                        postprocessor->portions.push_back(request.data_portion());
+                    }
+                    spdlog::get("container_agent")->trace("Added link {0:s} to {1:s}", link, sender->msvc_name);
+                } else {
+                    spdlog::get("container_agent")->error("Link {0:s} already exists in {1:s}", link, sender->msvc_name);
+                    break;
+                }
+
+            /****************************************************************************************************************************************/
+
+            /**
+             * @brief Routing mode:
+             * 
+             */
+            } else if (request.mode() == AdjustMode::Routing) {
+                // In routing mode, if the link already exists, we treat it as a modify request to update the portion. If the link doesn't exist, we treat it as an add request.
+                std::list<std::string> allowedProducers;
+                for (const auto& producer : request.allowed_producers()) {
+                    // Strip everything before the last "/" in the producer names to avoid common file path not necessary to identify the producer
+                    size_t pos = producer.find_last_of("/");
+                    if (pos != std::string::npos) {
+                        allowedProducers.push_back(producer.substr(pos + 1));
+                    } else {
+                        allowedProducers.push_back(producer);
+                    }
+                }
+                sender->GetInQueue().at(0)->setAllowedProducerList(allowedProducers);          
+            /****************************************************************************************************************************************/          
+            } else {
+                auto it = std::find(nb_links.begin(), nb_links.end(), link);
+                if (it == nb_links.end()) {
+                    spdlog::get("container_agent")->error("Link {0:s} not found in {1:s}", link, sender->msvc_name);
+                    break; 
+                }
+                int index = std::distance(nb_links.begin(), it);
+                
+                if (request.mode() == AdjustMode::Remove) {
+                    nb_links.erase(std::remove(nb_links.begin(), nb_links.end(), link), nb_links.end());
+                    // Important: assign the modified vector back to the json object
+                    config->at("msvc_dnstreamMicroservices")[0]["nb_link"] = nb_links;
+                    if (index != 0) {
+                        config->at("msvc_dnstreamMicroservices")[0]["nb_portions"].erase(
+                                config->at("msvc_dnstreamMicroservices")[0]["nb_portions"].begin() + index - 1);
+                        for (auto* postprocessor: postprocessor_dnstreams) {
+                            postprocessor->portions[0] += postprocessor->portions[index];
+                            postprocessor->portions.erase(postprocessor->portions.begin() + index - 1);
+                        }
+                    }
+                    spdlog::get("container_agent")->trace("Removed link {0:s} from {1:s}", link, sender->msvc_name);
+                } else if (request.mode() == AdjustMode::Modify) {
+                    sender->dnstreamMicroserviceList[0].portions[index - 1] = request.data_portion();
+                    for (auto* postprocessor : postprocessor_dnstreams) {
+                        float portion_diff = postprocessor->portions[index] - request.data_portion();
+                        postprocessor->portions[0] += portion_diff;
+                        postprocessor->portions[index] = request.data_portion();
+                    }
+                    spdlog::get("container_agent")->trace("Modified link {0:s} for {1:s} to portion {2:.2f}", link, sender->msvc_name, request.data_portion());
+                }
+            }
+            
+            static_cast<Sender*>(sender)->reloadDnstreams();
+            static_cast<Sender*>(sender)->dispatchThread();
+            break; // Target sender processed, move to next request
+        }
+        /****************************************************************************************************************************************/
+        
+        if (!sender_updated && request.mode() != AdjustMode::Start && request.mode() != AdjustMode::Stop) {
+             spdlog::get("container_agent")->error("Could not find sender to {0:s} in current configuration.", request.name());
+        }
+    }
+
+    // 5. Resume all threads ONCE
+    START();
+}
+
 void ContainerAgent::updateSender(const std::string &msg) {
     std::lock_guard<std::mutex> lock(cont_pipeStructureMutex);
     Connection request;
@@ -1502,6 +1889,7 @@ void ContainerAgent::updateSender(const std::string &msg) {
         config["msvc_name"] = absl::StrFormat("sender%s", request.name());
         config["msvc_dnstreamMicroservices"][0]["nb_name"] = request.name();
         config["msvc_dnstreamMicroservices"][0]["nb_classOfInterest"] = request.class_of_interest();
+        config["msvc_dnstreamMicroservices"][0]["nb_allowedProducerList"] = request.allowed_producers();
         config["msvc_dnstreamMicroservices"][0]["nb_link"] = {link};
         config["msvc_dnstreamMicroservices"][0]["nb_portions"] = {};
         Microservice* new_sender = new RemoteCPUSender(config);
@@ -1589,6 +1977,10 @@ void ContainerAgent::updateSender(const std::string &msg) {
                         postprocessor->portions[index] = request.data_portion();
                     }
                 }
+                // DUMMY setting for now as a placeholder
+                std::list<std::string> allowedProducers = sender->GetInQueue().at(0)->getAllowedProducerList();
+                sender->GetInQueue().at(0)->setAllowedProducerList(allowedProducers); // trigger update of allowed producer list in the queue
+                // DUMMY setting for now as a placeholder
                 spdlog::get("container_agent")->trace("Overwrote link {0:s} over {1:s}", link, request.old_link());
             } else if (request.mode() == AdjustMode::Add) {
                     if (std::find(nb_links.begin(),nb_links.end(), link) == nb_links.end()) {

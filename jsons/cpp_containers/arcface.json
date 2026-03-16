@@ -45,7 +45,7 @@
                         "nb_classOfInterest": -2,
                         "nb_commMethod": 2,
                         "nb_link": [
-                            "0.0.0.0:55015"
+                            "0.0.0.0:55013"
                         ],
                         "nb_maxQueueSize": 100,
                         "nb_name": "retinaface",
@@ -237,7 +237,7 @@
                 "cbs":1, 
                 "normalize": true,
                 "obs": 1,
-                "path": "../models/arcface_dynamic_3090_fp32_64_1.engine",
+                "path": "../models/arcface_dynamic_3090_126_fp32_64_1.engine",
                 "prec": 4,
                 "msvc_imgNormScale": "0.0078125/1",
                 "msvc_subVals": [
@@ -270,7 +270,8 @@
                                 -1
                             ]
                         ],
-                        "nb_portions": []
+                        "nb_portions": [],
+                        "nb_allowedProducerList": ["traffic_profiling.mp4"]
                     }
                 ],
                 "msvc_dataShape": [
@@ -346,14 +347,15 @@
                                 -1
                             ]
                         ],
-                        "nb_portions": []
+                        "nb_portions": [],
+                        "nb_allowedProducerList": ["traffic_profiling.mp4"]
                     }
                 ],
                 "msvc_maxQueueSize": 100,
                 "=========================================Here ends the common part of the microservice configuration": "The following are the specific configurations for each microservice."
             }
         ],
-        "cont_metricServerConfigs": "../jsons/metricsserver.json",
+        "cont_metricServerConfigs": "../jsons/experiments/metricsserver.json",
         "cont_numWarmUpBatches": 15,
         "cont_allocationMode": 1,
         "cont_batchMode": 1,

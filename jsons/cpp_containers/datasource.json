@@ -28,7 +28,8 @@
                                 0
                             ]
                         ],
-                        "nb_portions": []
+                        "nb_portions": [],
+                        "nb_allowedProducerList": []
                     }
                 ],
                 "msvc_dataShape": [
@@ -109,13 +110,14 @@
                                 0
                             ]
                         ],
-                        "nb_portions": []
+                        "nb_portions": [],
+                        "nb_allowedProducerList": []
                     }
                 ],
                 "msvc_maxQueueSize": 100
             }
         ],
-        "cont_metricServerConfigs": "../jsons/metricsserver.json",
+        "cont_metricServerConfigs": "../jsons/experiments/metricsserver.json",
         "cont_numWarmUpBatches": 15,
         "cont_allocationMode": 1,
         "cont_batchMode": 0,

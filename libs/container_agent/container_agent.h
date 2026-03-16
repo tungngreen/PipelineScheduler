@@ -70,6 +70,8 @@ struct MicroserviceGroup {
     std::vector<ThreadSafeFixSizedDoubleQueue *> outQueue;
 };
 
+std::vector<Connection> optimizeBatchedMessages(const BatchedConnections& batch);
+
 
 class ContainerAgent {
 public:
@@ -196,6 +198,7 @@ protected:
     void applyBatchingTimeout(int timeoutChoice);
     void applyMultiThreading(int multiThreadingConfig);
     void updateSender(const std::string &msg);
+    void updateSenderInBatch(const std::string &msg);
     void updateBatchSize(const std::string &msg);
     void updateResolution(const std::string &msg);
     void updateTimeKeeping(const std::string &msg);

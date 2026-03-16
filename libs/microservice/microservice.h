@@ -8,6 +8,7 @@
 #include <condition_variable>
 #include <iostream>
 #include <opencv2/opencv.hpp>
+#include <string>
 #include <utility>
 #include <spdlog/spdlog.h>
 #include <fstream>
@@ -167,6 +168,9 @@ private:
     std::int16_t class_of_interest;
     bool isEncoded = false;
     std::atomic<unsigned int> dropedCount = 0;
+    // List of producer IDs that are allowed to produce to this queue. They can be stream ID or microservice ID depending on the context.
+    // If empty, all producers are allowed.
+    std::list<std::string> allowedProducerList;
 
     // Fairness control variables
     std::atomic<uint32_t> producer_ticket{0}; // Ticket number for producers
@@ -178,7 +182,8 @@ private:
     static constexpr uint32_t MAX_TICKET_VALUE = UINT32_MAX - 1000; // Maximum ticket value before wraparound
 
 public:
-    ThreadSafeFixSizedDoubleQueue(QueueLengthType size, int16_t coi, std::string name) :  q_name(name), q_MaxSize(size), class_of_interest(coi) {}
+    ThreadSafeFixSizedDoubleQueue(QueueLengthType size, int16_t coi, std::string name, std::list<std::string> allowedProdList = {}) :  \
+        q_name(name), q_MaxSize(size), class_of_interest(coi), allowedProducerList(std::move(allowedProdList)) {}
 
     ~ThreadSafeFixSizedDoubleQueue() {
         std::queue<Request<LocalGPUReqDataType>>().swap(q_gpuQueue);
@@ -450,6 +455,27 @@ public:
         return isEncoded;
     }
 
+
+    void setAllowedProducerList(std::list<std::string> producerList) {
+        std::unique_lock<std::mutex> lock(q_mutex);
+        allowedProducerList = producerList;
+    }
+
+    void addAllowedProducer(const std::string& producerID) {
+        std::unique_lock<std::mutex> lock(q_mutex);
+        allowedProducerList.push_back(producerID);
+    }
+
+    std::list<std::string> getAllowedProducerList() {
+        std::unique_lock<std::mutex> lock(q_mutex);
+        return allowedProducerList;
+    }
+
+    bool isProducerAllowed(const std::string& producerID) {
+        std::unique_lock<std::mutex> lock(q_mutex);
+        return allowedProducerList.empty() || std::find(allowedProducerList.begin(), allowedProducerList.end(), producerID) != allowedProducerList.end();
+    }
+
 private:
     /**
      * @brief Handle ticket overflow by resetting tickets when they reach a high value.
@@ -520,6 +546,9 @@ namespace msvcconfigs {
         std::vector<RequestDataShapeType> expectedShape;
         // portion of the output being sent to the second specified link if available
         std::vector<float> portions;
+        // List of allowed producer IDs whose data can be sent via this link. They can be stream ID or microservice ID depending on the context. 
+        // If empty, all producers are allowed.
+        std::list<std::string> allowedProducerList = {};
     };
 
     /**

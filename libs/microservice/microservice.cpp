@@ -10,6 +10,19 @@ void msvcconfigs::from_json(const json &j, msvcconfigs::NeighborMicroservice &va
     j.at("nb_classOfInterest").get_to(val.classOfInterest);
     j.at("nb_expectedShape").get_to(val.expectedShape);
     j.at("nb_portions").get_to(val.portions);
+    if (j.contains("nb_allowedProducerList")) {
+        // Strip everything before the last "/" in the producer names to avoid common file path not necessary to identify the producer
+        for (const auto& producer : j.at("nb_allowedProducerList").get<std::vector<std::string>>()) {
+            size_t pos = producer.find_last_of("/");
+            if (pos != std::string::npos) {
+                val.allowedProducerList.push_back(producer.substr(pos + 1));
+            } else {
+                val.allowedProducerList.push_back(producer);
+            }
+        }
+    } else {
+        val.allowedProducerList = {};
+    }
 }
 
 void msvcconfigs::from_json(const json &j, msvcconfigs::BaseMicroserviceConfigs &val) {
@@ -36,6 +49,7 @@ void msvcconfigs::to_json(json &j, const msvcconfigs::NeighborMicroservice &val)
     j["nb_classOfInterest"] = val.classOfInterest;
     j["nb_expectedShape"] = val.expectedShape;
     j["nb_portions"] = val.portions;
+    j["nb_allowedProducerList"] = val.allowedProducerList;
 }
 
 void msvcconfigs::to_json(json &j, const msvcconfigs::BaseMicroserviceConfigs &val) {
@@ -108,7 +122,10 @@ void Microservice::loadConfigs(const json &jsonConfigs, bool isConstructing) {
         msvc_outReqShape = {};
 
         for (auto it = configs.msvc_dnstreamMicroservices.begin(); it != configs.msvc_dnstreamMicroservices.end(); ++it) {
-            msvc_OutQueue.emplace_back(new ThreadSafeFixSizedDoubleQueue(configs.msvc_maxQueueSize, it->classOfInterest, it->name));
+            msvc_OutQueue.emplace_back(new ThreadSafeFixSizedDoubleQueue(configs.msvc_maxQueueSize, 
+                                                                       it->classOfInterest, 
+                                                                       it->name,
+                                                                       it->allowedProducerList));
             // Create downstream neigbor config and push that into a list for information later
             // Local microservice supposedly has only 1 downstream but `receiver` microservices could have multiple senders.
             NeighborMicroservice dnStreamMsvc = NeighborMicroservice(*it);
@@ -146,6 +163,8 @@ void Microservice::reloadDnstreams() {
         NeighborMicroservice dnStreamMsvc = NeighborMicroservice(*it);
         auto existing = std::find_if(dnstreamMicroserviceList.begin(), dnstreamMicroserviceList.end(),
                                        [&](const NeighborMicroservice &msvc) { return msvc.name == dnStreamMsvc.name; });
+        // If this downstream microservice already exists, we only update the necessary information and keep the same queue. 
+        // Otherwise, we create a new queue for it.
         if (existing != dnstreamMicroserviceList.end()) {
             size_t index = std::distance(dnstreamMicroserviceList.begin(), existing);
             indicesToKeep.insert(index);
@@ -157,6 +176,7 @@ void Microservice::reloadDnstreams() {
                 }
                 msvc_OutQueue[index]->setClassOfInterest(dnStreamMsvc.classOfInterest);
             }
+            msvc_OutQueue[index]->setAllowedProducerList(dnStreamMsvc.allowedProducerList);
             if (it->commMethod == CommMethod::localGPU) {
                 msvc_activeOutQueueIndex[index] = 2;
             } else {
@@ -167,7 +187,10 @@ void Microservice::reloadDnstreams() {
             continue;
         }
 
-        msvc_OutQueue.emplace_back(new ThreadSafeFixSizedDoubleQueue(configs.msvc_maxQueueSize, it->classOfInterest, it->name));
+        msvc_OutQueue.emplace_back(new ThreadSafeFixSizedDoubleQueue(configs.msvc_maxQueueSize, 
+                                                                     it->classOfInterest, 
+                                                                     it->name,
+                                                                     it->allowedProducerList));
         dnstreamMicroserviceList.emplace_back(dnStreamMsvc);
         indicesToKeep.insert(msvc_OutQueue.size() - 1);
         std::pair<int16_t, uint16_t> map = {dnStreamMsvc.classOfInterest, (uint16_t)(msvc_OutQueue.size() - 1)};

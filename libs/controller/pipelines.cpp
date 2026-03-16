@@ -18,10 +18,11 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
     }
     switch (type) {
         case PipelineType::Traffic: {
-            auto *datasource = new PipelineModel{startDevice, "datasource", ModelType::DataSource, {}, 0, true};
+            // FIX: Use std::make_shared and PipelineModel constructor directly
+            auto datasource = std::make_shared<PipelineModel>(PipelineModel{startDevice, "datasource", ModelType::DataSource, {}, 0, true});
             datasource->possibleDevices = {startDevice};
 
-            auto *yolov5n = new PipelineModel{
+            auto yolov5n = std::make_shared<PipelineModel>(PipelineModel{
                     edgeNode,
                     "yolov5n",
                     ModelType::Yolov5n,
@@ -32,37 +33,38 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
                     {},
                     {},
                     {},
-                    {{datasource, -1}}
-            };
+                    // FIX: Replaced std::pair syntax with PipelineEdge struct, injecting streamName for routing
+                    {PipelineEdge{datasource, -1, {streamName}}}
+            });
             yolov5n->possibleDevices = {startDevice, edgeNode};
             if (ctrl_systemName == "tuti") {
                 yolov5n->possibleDevices = {edgeNode};
             }
-            datasource->downstreams.push_back({yolov5n, -1});
+            // FIX: Replaced std::pair syntax with PipelineEdge
+            datasource->downstreams.push_back(PipelineEdge{yolov5n, -1, {streamName}});
 
-            PipelineModel *yolov5n320 = nullptr;
-            PipelineModel *yolov5n512 = nullptr;
-            PipelineModel *yolov5s = nullptr;
+            // std::shared_ptr<PipelineModel> yolov5n320 = nullptr;
+            std::shared_ptr<PipelineModel> yolov5n512 = nullptr;
+            // std::shared_ptr<PipelineModel> yolov5s = nullptr;
             if (ctrl_systemName == "jlf") {
                 yolov5n->possibleDevices = {edgeNode};
 
-                yolov5n320 = new PipelineModel{
-                        edgeNode,
-                        "yolov5n320",
-                        ModelType::Yolov5n320,
-                        {},
-                        1,
-                        true,
-                        false,
-                        {},
-                        {},
-                        {},
-                        {{datasource, -1}}
-                };
-                yolov5n320->possibleDevices = {edgeNode};
-
-
-                yolov5n512 = new PipelineModel{
+                // yolov5n320 = std::make_shared<PipelineModel>(PipelineModel{
+                //         edgeNode,
+                //         "yolov5n320",
+                //         ModelType::Yolov5n320,
+                //         {},
+                //         1,
+                //         true,
+                //         false,
+                //         {},
+                //         {},
+                //         {},
+                //         {PipelineEdge{datasource, -1, {streamName}}}
+                // });
+                // yolov5n320->possibleDevices = {edgeNode};
+                
+                yolov5n512 = std::make_shared<PipelineModel>(PipelineModel{
                         edgeNode,
                         "yolov5n512",
                         ModelType::Yolov5n512,
@@ -73,30 +75,35 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
                         {},
                         {},
                         {},
-                        {{datasource, -1}}
-                };
+                        {PipelineEdge{datasource, -1, {streamName}}}
+                });
                 yolov5n512->possibleDevices = {edgeNode};
 
-                yolov5s= new PipelineModel{
-                        edgeNode,
-                        "yolov5s",
-                        ModelType::Yolov5s,
-                        {},
-                        1,
-                        true,
-                        false,
-                        {},
-                        {},
-                        {},
-                        {{datasource, -1}}
-                };
-                yolov5s->possibleDevices = {edgeNode};
+                // yolov5s = std::make_shared<PipelineModel>(PipelineModel{
+                //         edgeNode,
+                //         "yolov5s",
+                //         ModelType::Yolov5s,
+                //         {},
+                //         1,
+                //         true,
+                //         false,
+                //         {},
+                //         {},
+                //         {},
+                //         {PipelineEdge{datasource, -1, {streamName}}}
+                // });
+                // yolov5s->possibleDevices = {edgeNode};
+
+                // // Add downstream connections for the additional YOLO variants in the JLF pipeline
+                // datasource->downstreams.push_back(PipelineEdge{yolov5n320, -1, {streamName}});
+                datasource->downstreams.push_back(PipelineEdge{yolov5n512, -1, {streamName}});
+                // datasource->downstreams.push_back(PipelineEdge{yolov5s, -1, {streamName}});
             }
 
-            auto *retina1face = new PipelineModel{
+            auto fashioncolor = std::make_shared<PipelineModel>(PipelineModel{
                     edgeNode,
-                    "retina1face",
-                    ModelType::Retinaface,
+                    "fashioncolor",
+                    ModelType::FashionColor,
                     {},
                     2,
                     false,
@@ -104,36 +111,54 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
                     {},
                     {},
                     {},
-                    {{yolov5n, 0}}
-            };
-            retina1face->possibleDevices = {edgeNode};
-            yolov5n->downstreams.push_back({retina1face, 0});
+                    {PipelineEdge{yolov5n, 0, {streamName}}}
+            });
+            fashioncolor->possibleDevices = { edgeNode};
+            yolov5n->downstreams.push_back(PipelineEdge{fashioncolor, 0, {streamName}});
 
             if (ctrl_systemName == "jlf") {
-                retina1face->possibleDevices = {edgeNode};
-                retina1face->upstreams = {{yolov5n, 0}, {yolov5n320, 0}, {yolov5n512, 0}, {yolov5s, 0}};
-                yolov5n320->downstreams.push_back({retina1face, 0});
-                yolov5n512->downstreams.push_back({retina1face, 0});
-                yolov5s->downstreams.push_back({retina1face, 0});
+                fashioncolor->possibleDevices = {edgeNode};
+                fashioncolor->upstreams = {
+                    PipelineEdge{yolov5n, 0, {streamName}}, 
+                    // PipelineEdge{yolov5n320, 0, {streamName}}, 
+                    PipelineEdge{yolov5n512, 0, {streamName}}, 
+                    // PipelineEdge{yolov5s, 0, {streamName}}
+                };
+                // yolov5n320->downstreams.push_back(PipelineEdge{fashioncolor, 0, {streamName}});
+                yolov5n512->downstreams.push_back(PipelineEdge{fashioncolor, 0, {streamName}});
+                // yolov5s->downstreams.push_back(PipelineEdge{fashioncolor, 0, {streamName}});
             }
 
-            auto *arcface = new PipelineModel{
+            auto carcolor = std::make_shared<PipelineModel>(PipelineModel{
                     edgeNode,
-                    "arcface",
-                    ModelType::Arcface,
+                    "carcolor",
+                    ModelType::CarColor,
                     {},
-                    5,
+                    2,
                     false,
                     false,
                     {},
                     {},
                     {},
-                    {{retina1face, -1}}
-            };
-            arcface->possibleDevices = {edgeNode};
-            retina1face->downstreams.push_back({arcface, -1});
+                    {PipelineEdge{yolov5n, -1, {streamName}}}
+            });
+            carcolor->possibleDevices = {edgeNode};
+            yolov5n->downstreams.push_back(PipelineEdge{carcolor, -1, {streamName}});
 
-            auto *carbrand = new PipelineModel{
+            if (ctrl_systemName == "jlf") {
+                carcolor->possibleDevices = {edgeNode};
+                carcolor->upstreams = {
+                    PipelineEdge{yolov5n, 2, {streamName}}, 
+                    // PipelineEdge{yolov5n320, 2, {streamName}}, 
+                    PipelineEdge{yolov5n512, 2, {streamName}}, 
+                    // PipelineEdge{yolov5s, 2, {streamName}}
+                };
+                // yolov5n320->downstreams.push_back(PipelineEdge{carcolor, 2, {streamName}});
+                yolov5n512->downstreams.push_back(PipelineEdge{carcolor, 2, {streamName}});
+                // yolov5s->downstreams.push_back(PipelineEdge{carcolor, 2, {streamName}});
+            }
+
+            auto carbrand = std::make_shared<PipelineModel>(PipelineModel{
                     edgeNode,
                     "carbrand",
                     ModelType::CarBrand,
@@ -144,44 +169,12 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
                     {},
                     {},
                     {},
-                    {{yolov5n, 2}}
-            };
-            carbrand->possibleDevices = {startDevice, edgeNode};
-            yolov5n->downstreams.push_back({carbrand, 2});
+                    {PipelineEdge{carcolor, -1, {streamName}}}
+            });
+            carbrand->possibleDevices = {edgeNode};
+            carcolor->downstreams.push_back(PipelineEdge{carbrand, -1, {streamName}});
 
-            if (ctrl_systemName == "jlf") {
-                carbrand->possibleDevices = {edgeNode};
-                carbrand->upstreams = {{yolov5n, 2}, {yolov5n320, 2}, {yolov5n512, 2}, {yolov5s, 2}};
-                yolov5n320->downstreams.push_back({carbrand, 2});
-                yolov5n512->downstreams.push_back({carbrand, 2});
-                yolov5s->downstreams.push_back({carbrand, 2});
-            }
-
-            auto *platedet = new PipelineModel{
-                    edgeNode,
-                    "platedet",
-                    ModelType::PlateDet,
-                    {},
-                    4,
-                    false,
-                    false,
-                    {},
-                    {},
-                    {},
-                    {{yolov5n, 2}}
-            };
-            platedet->possibleDevices = {startDevice, edgeNode};
-            yolov5n->downstreams.push_back({platedet, 2});
-
-            if (ctrl_systemName == "jlf") {
-                platedet->possibleDevices = {edgeNode};
-                platedet->upstreams = {{yolov5n, 2}, {yolov5n320, 2}, {yolov5n512, 2}, {yolov5s, 2}};
-                yolov5n320->downstreams.push_back({platedet, 2});
-                yolov5n512->downstreams.push_back({platedet, 2});
-                yolov5s->downstreams.push_back({platedet, 2});
-            }
-
-            auto *sink = new PipelineModel{
+            auto sink = std::make_shared<PipelineModel>(PipelineModel{
                     "sink",
                     "sink",
                     ModelType::Sink,
@@ -192,31 +185,62 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
                     {},
                     {},
                     {},
-                    {{arcface, -1}, {carbrand, -1}, {platedet, -1}}
-            };
+                    {PipelineEdge{fashioncolor, -1, {streamName}}, PipelineEdge{carbrand, -1, {streamName}}}
+            });
             sink->possibleDevices = {"sink"};
-            arcface->downstreams.push_back({sink, -1});
-            carbrand->downstreams.push_back({sink, -1});
-            platedet->downstreams.push_back({sink, -1});
+            fashioncolor->downstreams.push_back(PipelineEdge{sink, -1, {streamName}});
+            carbrand->downstreams.push_back(PipelineEdge{sink, -1, {streamName}});
+
+            // if (sourceName.find("traffic1") != std::string::npos) {
+            //     auto retina1face = std::make_shared<PipelineModel>(PipelineModel{
+            //         edgeNode,
+            //         "retina1face",
+            //         ModelType::Retinaface,
+            //         {},
+            //         2,
+            //         false,
+            //         false,
+            //         {},
+            //         {},
+            //         {},
+            //         {PipelineEdge{fashioncolor, -1, {streamName}}}
+            //     });
+            //     retina1face->possibleDevices = {edgeNode};
+            //     fashioncolor->downstreams.push_back(PipelineEdge{retina1face, -1, {streamName}});
+            //     retina1face->downstreams.push_back(PipelineEdge{sink, -1, {streamName}});
+            //     sink->upstreams.push_back(PipelineEdge{retina1face, -1, {streamName}});
+
+            //     if (!sourceName.empty()) {
+            //         yolov5n->arrivalProfiles.arrivalRates = ctrl_initialRequestRates[sourceName][yolov5n->name];
+            //         fashioncolor->arrivalProfiles.arrivalRates = ctrl_initialRequestRates[sourceName][fashioncolor->name];
+            //         carbrand->arrivalProfiles.arrivalRates = ctrl_initialRequestRates[sourceName][carbrand->name];
+            //         carcolor->arrivalProfiles.arrivalRates = ctrl_initialRequestRates[sourceName][carcolor->name];
+            //         retina1face->arrivalProfiles.arrivalRates = ctrl_initialRequestRates[sourceName][retina1face->name];
+            //     }
+            //     return {datasource, yolov5n, fashioncolor, retina1face, carcolor, carbrand, sink};
+            // }
 
             if (!sourceName.empty()) {
                 yolov5n->arrivalProfiles.arrivalRates = ctrl_initialRequestRates[sourceName][yolov5n->name];
-                retina1face->arrivalProfiles.arrivalRates = ctrl_initialRequestRates[sourceName][retina1face->name];
-                arcface->arrivalProfiles.arrivalRates = ctrl_initialRequestRates[sourceName][arcface->name];
+                fashioncolor->arrivalProfiles.arrivalRates = ctrl_initialRequestRates[sourceName][fashioncolor->name];
                 carbrand->arrivalProfiles.arrivalRates = ctrl_initialRequestRates[sourceName][carbrand->name];
-                platedet->arrivalProfiles.arrivalRates = ctrl_initialRequestRates[sourceName][platedet->name];
+                carcolor->arrivalProfiles.arrivalRates = ctrl_initialRequestRates[sourceName][carcolor->name];
             }
 
             if (ctrl_systemName == "jlf") {
-                arcface->possibleDevices = {edgeNode};
-                return {datasource, yolov5n, yolov5n320, yolov5n512, yolov5s, retina1face, arcface, carbrand, platedet, sink};
+                fashioncolor->possibleDevices = {edgeNode};
+                carcolor->possibleDevices = {edgeNode};
+                carbrand->possibleDevices = {edgeNode};
+                // return {datasource, yolov5n, yolov5n320, yolov5n512, yolov5s, fashioncolor, carcolor, carbrand, sink};
+                return {datasource, yolov5n, yolov5n512, fashioncolor, carcolor, carbrand, sink};
             }
-            return {datasource, yolov5n, retina1face, arcface, carbrand, platedet, sink};
+            return {datasource, yolov5n, fashioncolor, carcolor, carbrand, sink};
         }
         case PipelineType::Indoor: {
-            auto *datasource = new PipelineModel{startDevice, "datasource", ModelType::DataSource, {}, 0, true};
+            auto datasource = std::make_shared<PipelineModel>(PipelineModel{startDevice, "datasource", ModelType::DataSource, {}, 0, true});
             datasource->possibleDevices = {startDevice};
-            auto *retinamtface = new PipelineModel{
+            
+            auto retinamtface = std::make_shared<PipelineModel>(PipelineModel{
                     startDevice,
                     "retinamtface",
                     ModelType::RetinaMtface,
@@ -227,12 +251,12 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
                     {},
                     {},
                     {},
-                    {{datasource, -1}}
-            };
+                    {PipelineEdge{datasource, -1, {streamName}}}
+            });
             retinamtface->possibleDevices = {startDevice};
-            datasource->downstreams.push_back({retinamtface, -1});
+            datasource->downstreams.push_back(PipelineEdge{retinamtface, -1, {streamName}});
 
-            auto *emotionnet = new PipelineModel{
+            auto emotionnet = std::make_shared<PipelineModel>(PipelineModel{
                     edgeNode,
                     "emotionnet",
                     ModelType::Emotionnet,
@@ -243,12 +267,12 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
                     {},
                     {},
                     {},
-                    {{retinamtface, -1}}
-            };
+                    {PipelineEdge{retinamtface, -1, {streamName}}}
+            });
             emotionnet->possibleDevices = {edgeNode};
-            retinamtface->downstreams.push_back({emotionnet, -1});
+            retinamtface->downstreams.push_back(PipelineEdge{emotionnet, -1, {streamName}});
 
-            auto *age = new PipelineModel{
+            auto age = std::make_shared<PipelineModel>(PipelineModel{
                     edgeNode,
                     "age",
                     ModelType::Age,
@@ -259,12 +283,12 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
                     {},
                     {},
                     {},
-                    {{retinamtface, -1}}
-            };
+                    {PipelineEdge{retinamtface, -1, {streamName}}}
+            });
             age->possibleDevices = {edgeNode};
-            retinamtface->downstreams.push_back({age, -1});
+            retinamtface->downstreams.push_back(PipelineEdge{age, -1, {streamName}});
 
-            auto *gender = new PipelineModel{
+            auto gender = std::make_shared<PipelineModel>(PipelineModel{
                     edgeNode,
                     "gender",
                     ModelType::Gender,
@@ -275,12 +299,12 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
                     {},
                     {},
                     {},
-                    {{retinamtface, -1}}
-            };
+                    {PipelineEdge{retinamtface, -1, {streamName}}}
+            });
             gender->possibleDevices = {edgeNode};
-            retinamtface->downstreams.push_back({gender, -1});
+            retinamtface->downstreams.push_back(PipelineEdge{gender, -1, {streamName}});
 
-            auto *arcface = new PipelineModel{
+            auto arcface = std::make_shared<PipelineModel>(PipelineModel{
                     edgeNode,
                     "arcface",
                     ModelType::Arcface,
@@ -291,12 +315,12 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
                     {},
                     {},
                     {},
-                    {{retinamtface, -1}}
-            };
+                    {PipelineEdge{retinamtface, -1, {streamName}}}
+            });
             arcface->possibleDevices = {edgeNode};
-            retinamtface->downstreams.push_back({arcface, -1});
+            retinamtface->downstreams.push_back(PipelineEdge{arcface, -1, {streamName}});
 
-            auto *sink = new PipelineModel{
+            auto sink = std::make_shared<PipelineModel>(PipelineModel{
                     "sink",
                     "sink",
                     ModelType::Sink,
@@ -307,13 +331,18 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
                     {},
                     {},
                     {},
-                    {{emotionnet, -1}, {age, -1}, {gender, -1}, {arcface, -1}}
-            };
+                    {
+                        PipelineEdge{emotionnet, -1, {streamName}}, 
+                        PipelineEdge{age, -1, {streamName}}, 
+                        PipelineEdge{gender, -1, {streamName}}, 
+                        PipelineEdge{arcface, -1, {streamName}}
+                    }
+            });
             sink->possibleDevices = {"sink"};
-            emotionnet->downstreams.push_back({sink, -1});
-            age->downstreams.push_back({sink, -1});
-            gender->downstreams.push_back({sink, -1});
-            arcface->downstreams.push_back({sink, -1});
+            emotionnet->downstreams.push_back(PipelineEdge{sink, -1, {streamName}});
+            age->downstreams.push_back(PipelineEdge{sink, -1, {streamName}});
+            gender->downstreams.push_back(PipelineEdge{sink, -1, {streamName}});
+            arcface->downstreams.push_back(PipelineEdge{sink, -1, {streamName}});
 
             if (!sourceName.empty()) {
                 retinamtface->arrivalProfiles.arrivalRates = ctrl_initialRequestRates[sourceName][retinamtface->name];
@@ -326,10 +355,10 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
             return {datasource, retinamtface, emotionnet, age, gender, arcface, sink};
         }
         case PipelineType::Building_Security: {
-            auto *datasource = new PipelineModel{startDevice, "datasource", ModelType::DataSource, {}, 0, true};
+            auto datasource = std::make_shared<PipelineModel>(PipelineModel{startDevice, "datasource", ModelType::DataSource, {}, 0, true});
             datasource->possibleDevices = {startDevice};
 
-            auto *yolov5n = new PipelineModel{
+            auto yolov5n = std::make_shared<PipelineModel>(PipelineModel{
                     edgeNode,
                     "yolov5n",
                     ModelType::Yolov5n,
@@ -340,37 +369,38 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
                     {},
                     {},
                     {},
-                    {{datasource, -1}}
-            };
+                    {PipelineEdge{datasource, -1, {streamName}}}
+            });
             yolov5n->possibleDevices = {startDevice, edgeNode};
             if (ctrl_systemName == "tuti") {
                 yolov5n->possibleDevices = {edgeNode};
             }
-            datasource->downstreams.push_back({yolov5n, -1});
+            datasource->downstreams.push_back(PipelineEdge{yolov5n, -1, {streamName}});
 
-            PipelineModel *yolov5n320 = nullptr;
-            PipelineModel *yolov5n512 = nullptr;
-            PipelineModel *yolov5s = nullptr;
+            // std::shared_ptr<PipelineModel> yolov5n320 = nullptr;
+            std::shared_ptr<PipelineModel> yolov5n512 = nullptr;
+            // std::shared_ptr<PipelineModel> yolov5s = nullptr;
+            
             if (ctrl_systemName == "jlf") {
                 yolov5n->possibleDevices = {edgeNode};
 
-                yolov5n320 = new PipelineModel{
-                        edgeNode,
-                        "yolov5n320",
-                        ModelType::Yolov5n320,
-                        {},
-                        1,
-                        true,
-                        false,
-                        {},
-                        {},
-                        {},
-                        {{datasource, -1}}
-                };
-                yolov5n320->possibleDevices = {edgeNode};
+                // yolov5n320 = std::make_shared<PipelineModel>(PipelineModel{
+                //         edgeNode,
+                //         "yolov5n320",
+                //         ModelType::Yolov5n320,
+                //         {},
+                //         1,
+                //         true,
+                //         false,
+                //         {},
+                //         {},
+                //         {},
+                //         {PipelineEdge{datasource, -1, {streamName}}}
+                // });
+                // yolov5n320->possibleDevices = {edgeNode};
 
 
-                yolov5n512 = new PipelineModel{
+                yolov5n512 = std::make_shared<PipelineModel>(PipelineModel{
                         edgeNode,
                         "yolov5n512",
                         ModelType::Yolov5n512,
@@ -381,54 +411,35 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
                         {},
                         {},
                         {},
-                        {{datasource, -1}}
-                };
+                        {PipelineEdge{datasource, -1, {streamName}}}
+                });
                 yolov5n512->possibleDevices = {edgeNode};
 
-                yolov5s = new PipelineModel{
-                        edgeNode,
-                        "yolov5s",
-                        ModelType::Yolov5s,
-                        {},
-                        1,
-                        true,
-                        false,
-                        {},
-                        {},
-                        {},
-                        {{datasource, -1}}
-                };
-                yolov5s->possibleDevices = {edgeNode};
+                // yolov5s = std::make_shared<PipelineModel>(PipelineModel{
+                //         edgeNode,
+                //         "yolov5s",
+                //         ModelType::Yolov5s,
+                //         {},
+                //         1,
+                //         true,
+                //         false,
+                //         {},
+                //         {},
+                //         {},
+                //         {PipelineEdge{datasource, -1, {streamName}}}
+                // });
+                // yolov5s->possibleDevices = {edgeNode};
+
+                // Add downstream connections for the additional YOLO variants in the JLF pipeline
+                // datasource->downstreams.push_back(PipelineEdge{yolov5n320, -1, {streamName}});
+                datasource->downstreams.push_back(PipelineEdge{yolov5n512, -1, {streamName}});
+                // datasource->downstreams.push_back(PipelineEdge{yolov5s, -1, {streamName}});
             }
 
-            auto *retina1face = new PipelineModel{
+            auto retina1face = std::make_shared<PipelineModel>(PipelineModel{
                     edgeNode,
                     "retina1face",
                     ModelType::Retinaface,
-                    {},
-                    1,
-                    false,
-                    false,
-                    {},
-                    {},
-                    {},
-                    {{yolov5n, 0}}
-            };
-            retina1face->possibleDevices = {edgeNode};
-            yolov5n->downstreams.push_back({retina1face, 0});
-
-            if (ctrl_systemName == "jlf") {
-                retina1face->possibleDevices = {edgeNode};
-                retina1face->upstreams = {{yolov5n,    0}, {yolov5n320, 0}, {yolov5n512, 0}, {yolov5s,    0}};
-                yolov5n320->downstreams.push_back({retina1face, 0});
-                yolov5n512->downstreams.push_back({retina1face, 0});
-                yolov5s->downstreams.push_back({retina1face, 0});
-            }
-
-            auto *movenet = new PipelineModel{
-                    edgeNode,
-                    "movenet",
-                    ModelType::Movenet,
                     {},
                     2,
                     false,
@@ -436,20 +447,25 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
                     {},
                     {},
                     {},
-                    {{yolov5n, 0}}
-            };
-            movenet->possibleDevices = {startDevice, edgeNode};
-            yolov5n->downstreams.push_back({movenet, 0});
+                    {PipelineEdge{yolov5n, 0, {streamName}}}
+            });
+            retina1face->possibleDevices = {edgeNode};
+            yolov5n->downstreams.push_back(PipelineEdge{retina1face, 0, {streamName}});
 
             if (ctrl_systemName == "jlf") {
-                movenet->possibleDevices = {edgeNode};
-                movenet->upstreams = {{yolov5n,    0}, {yolov5n320, 0}, {yolov5n512, 0}, {yolov5s,    0}};
-                yolov5n320->downstreams.push_back({movenet, 0});
-                yolov5n512->downstreams.push_back({movenet, 0});
-                yolov5s->downstreams.push_back({movenet, 0});
+                retina1face->possibleDevices = {edgeNode};
+                retina1face->upstreams = {
+                    PipelineEdge{yolov5n, 0, {streamName}}, 
+                    // PipelineEdge{yolov5n320, 0, {streamName}}, 
+                    PipelineEdge{yolov5n512, 0, {streamName}}, 
+                    // PipelineEdge{yolov5s, 0, {streamName}}
+                };
+                // yolov5n320->downstreams.push_back(PipelineEdge{retina1face, 0, {streamName}});
+                yolov5n512->downstreams.push_back(PipelineEdge{retina1face, 0, {streamName}});
+                // yolov5s->downstreams.push_back(PipelineEdge{retina1face, 0, {streamName}});
             }
 
-            auto *gender = new PipelineModel{
+            auto gender = std::make_shared<PipelineModel>(PipelineModel{
                     edgeNode,
                     "gender",
                     ModelType::Gender,
@@ -460,28 +476,73 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
                     {},
                     {},
                     {},
-                    {{retina1face, -1}}
-            };
+                    {PipelineEdge{retina1face, -1, {streamName}}}
+            });
             gender->possibleDevices = {startDevice, edgeNode};
-            retina1face->downstreams.push_back({gender, -1});
+            retina1face->downstreams.push_back(PipelineEdge{gender, -1, {streamName}});
 
-            auto *age = new PipelineModel{
+            auto emotionnet = std::make_shared<PipelineModel>(PipelineModel{
                     edgeNode,
-                    "age",
-                    ModelType::Age,
+                    "emotionnet",
+                    ModelType::Emotionnet,
                     {},
-                    4,
+                    3,
                     false,
                     false,
                     {},
                     {},
                     {},
-                    {{retina1face, -1}}
-            };
-            age->possibleDevices = {startDevice, edgeNode};
-            retina1face->downstreams.push_back({age, -1});
+                    {PipelineEdge{retina1face, -1, {streamName}}}
+            });
+            emotionnet->possibleDevices = {edgeNode};
+            retina1face->downstreams.push_back(PipelineEdge{emotionnet, -1, {streamName}});
 
-            auto *sink = new PipelineModel{
+            auto arcface = std::make_shared<PipelineModel>(PipelineModel{
+                    edgeNode,
+                    "arcface",
+                    ModelType::Arcface,
+                    {},
+                    3,
+                    false,
+                    false,
+                    {},
+                    {},
+                    {},
+                    {PipelineEdge{retina1face, -1, {streamName}}}
+            });
+            arcface->possibleDevices = {edgeNode};
+            retina1face->downstreams.push_back(PipelineEdge{arcface, -1, {streamName}});
+
+            auto fashioncolor = std::make_shared<PipelineModel>(PipelineModel{
+                    edgeNode,
+                    "fashioncolor",
+                    ModelType::FashionColor,
+                    {},
+                    2,
+                    false,
+                    false,
+                    {},
+                    {},
+                    {},
+                    {PipelineEdge{yolov5n, 0, {streamName}}}
+            });
+            fashioncolor->possibleDevices = { edgeNode};
+            yolov5n->downstreams.push_back(PipelineEdge{fashioncolor, 0, {streamName}});
+
+            if (ctrl_systemName == "jlf") {
+                fashioncolor->possibleDevices = {edgeNode};
+                fashioncolor->upstreams = {
+                    PipelineEdge{yolov5n, 0, {streamName}}, 
+                    // PipelineEdge{yolov5n320, 0, {streamName}}, 
+                    PipelineEdge{yolov5n512, 0, {streamName}}, 
+                    // PipelineEdge{yolov5s, 0, {streamName}}
+                };
+                // yolov5n320->downstreams.push_back(PipelineEdge{fashioncolor, 0, {streamName}});
+                yolov5n512->downstreams.push_back(PipelineEdge{fashioncolor, 0, {streamName}});
+                // yolov5s->downstreams.push_back(PipelineEdge{fashioncolor, 0, {streamName}});
+            }
+
+            auto sink = std::make_shared<PipelineModel>(PipelineModel{
                     "sink",
                     "sink",
                     ModelType::Sink,
@@ -492,33 +553,44 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
                     {},
                     {},
                     {},
-                    {{gender, -1}, {age, -1}, {movenet, -1}}
-            };
+                    {
+                        PipelineEdge{gender, -1, {streamName}}, 
+                        PipelineEdge{emotionnet, -1, {streamName}}, 
+                        PipelineEdge{arcface, -1, {streamName}}, 
+                        PipelineEdge{fashioncolor, -1, {streamName}}
+                    }
+            });
             sink->possibleDevices = {"sink"};
-            gender->downstreams.push_back({sink, -1});
-            age->downstreams.push_back({sink, -1});
-            movenet->downstreams.push_back({sink, -1});
+            gender->downstreams.push_back(PipelineEdge{sink, -1, {streamName}});
+            emotionnet->downstreams.push_back(PipelineEdge{sink, -1, {streamName}});
+            arcface->downstreams.push_back(PipelineEdge{sink, -1, {streamName}});
+            fashioncolor->downstreams.push_back(PipelineEdge{sink, -1, {streamName}});
 
             if (!sourceName.empty()) {
                 yolov5n->arrivalProfiles.arrivalRates = ctrl_initialRequestRates[sourceName][yolov5n->name];
                 retina1face->arrivalProfiles.arrivalRates = ctrl_initialRequestRates[sourceName][retina1face->name];
-                movenet->arrivalProfiles.arrivalRates = ctrl_initialRequestRates[sourceName][movenet->name];
-                gender->arrivalProfiles.arrivalRates = ctrl_initialRequestRates[sourceName][movenet->name];
-                age->arrivalProfiles.arrivalRates = ctrl_initialRequestRates[sourceName][age->name];
+                gender->arrivalProfiles.arrivalRates = ctrl_initialRequestRates[sourceName][gender->name];
+                emotionnet->arrivalProfiles.arrivalRates = ctrl_initialRequestRates[sourceName][emotionnet->name];
+                arcface->arrivalProfiles.arrivalRates = ctrl_initialRequestRates[sourceName][arcface->name];
+                fashioncolor->arrivalProfiles.arrivalRates = ctrl_initialRequestRates[sourceName][fashioncolor->name];
             }
 
             if (ctrl_systemName == "jlf") {
+                retina1face->possibleDevices = {edgeNode};
                 gender->possibleDevices = {edgeNode};
-                age->possibleDevices = {edgeNode};
-                return {datasource, yolov5n, yolov5n320, yolov5n512, yolov5s, retina1face, movenet, gender, age, sink};
+                emotionnet->possibleDevices = {edgeNode};
+                arcface->possibleDevices = {edgeNode};
+                fashioncolor->possibleDevices = {edgeNode};
+                // return {datasource, yolov5n, yolov5n320, yolov5n512, yolov5s, retina1face, emotionnet, gender, arcface, fashioncolor, sink};
+                return {datasource, yolov5n, yolov5n512, retina1face, emotionnet, gender, arcface, fashioncolor, sink};
             }
-            return {datasource, yolov5n, retina1face, movenet, gender, age, sink};
+            return {datasource, yolov5n, retina1face, emotionnet, gender, arcface, fashioncolor, sink};
         }
         case PipelineType::Surveillance_Robot: {
-            auto *datasource = new PipelineModel{startDevice, "datasource", ModelType::DataSource, {}, 0, true};
+            auto datasource = std::make_shared<PipelineModel>(PipelineModel{startDevice, "datasource", ModelType::DataSource, {}, 0, true});
             datasource->possibleDevices = {startDevice};
 
-            auto *yolov5n = new PipelineModel{
+            auto yolov5n = std::make_shared<PipelineModel>(PipelineModel{
                     edgeNode,
                     "yolov5n",
                     ModelType::Yolov5n,
@@ -529,37 +601,38 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
                     {},
                     {},
                     {},
-                    {{datasource, -1}}
-            };
+                    {PipelineEdge{datasource, -1, {streamName}}}
+            });
             yolov5n->possibleDevices = {startDevice, edgeNode};
             if (ctrl_systemName == "tuti") {
                 yolov5n->possibleDevices = {edgeNode};
             }
-            datasource->downstreams.push_back({yolov5n, -1});
+            datasource->downstreams.push_back(PipelineEdge{yolov5n, -1, {streamName}});
 
-            PipelineModel *yolov5n320 = nullptr;
-            PipelineModel *yolov5n512 = nullptr;
-            PipelineModel *yolov5s = nullptr;
+            // std::shared_ptr<PipelineModel> yolov5n320 = nullptr;
+            std::shared_ptr<PipelineModel> yolov5n512 = nullptr;
+            // std::shared_ptr<PipelineModel> yolov5s = nullptr;
+            
             if (ctrl_systemName == "jlf") {
                 yolov5n->possibleDevices = {edgeNode};
 
-                yolov5n320 = new PipelineModel{
-                        edgeNode,
-                        "yolov5n320",
-                        ModelType::Yolov5n320,
-                        {},
-                        1,
-                        true,
-                        false,
-                        {},
-                        {},
-                        {},
-                        {{datasource, -1}}
-                };
-                yolov5n320->possibleDevices = {edgeNode};
+                // yolov5n320 = std::make_shared<PipelineModel>(PipelineModel{
+                //         edgeNode,
+                //         "yolov5n320",
+                //         ModelType::Yolov5n320,
+                //         {},
+                //         1,
+                //         true,
+                //         false,
+                //         {},
+                //         {},
+                //         {},
+                //         {PipelineEdge{datasource, -1, {streamName}}}
+                // });
+                // yolov5n320->possibleDevices = {edgeNode};
 
 
-                yolov5n512 = new PipelineModel{
+                yolov5n512 = std::make_shared<PipelineModel>(PipelineModel{
                         edgeNode,
                         "yolov5n512",
                         ModelType::Yolov5n512,
@@ -570,52 +643,35 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
                         {},
                         {},
                         {},
-                        {{datasource, -1}}
-                };
+                        {PipelineEdge{datasource, -1, {streamName}}}
+                });
                 yolov5n512->possibleDevices = {edgeNode};
 
-                yolov5s= new PipelineModel{
-                        edgeNode,
-                        "yolov5s",
-                        ModelType::Yolov5s,
-                        {},
-                        1,
-                        true,
-                        false,
-                        {},
-                        {},
-                        {},
-                        {{datasource, -1}}
-                };
-                yolov5s->possibleDevices = {edgeNode};
+                // yolov5s = std::make_shared<PipelineModel>(PipelineModel{
+                //         edgeNode,
+                //         "yolov5s",
+                //         ModelType::Yolov5s,
+                //         {},
+                //         1,
+                //         true,
+                //         false,
+                //         {},
+                //         {},
+                //         {},
+                //         {PipelineEdge{datasource, -1, {streamName}}}
+                // });
+                // yolov5s->possibleDevices = {edgeNode};
+
+                // Add downstream connections for the additional YOLO variants in the JLF pipeline
+                // datasource->downstreams.push_back(PipelineEdge{yolov5n320, -1, {streamName}});
+                datasource->downstreams.push_back(PipelineEdge{yolov5n512, -1, {streamName}});
+                // datasource->downstreams.push_back(PipelineEdge{yolov5s, -1, {streamName}});
             }
 
-            auto *arcface = new PipelineModel{
+            auto fashioncolor = std::make_shared<PipelineModel>(PipelineModel{
                     edgeNode,
-                    "arcface",
-                    ModelType::Arcface,
-                    {},
-                    1,
-                    false,
-                    false,
-                    {},
-                    {},
-                    {},
-                    {{yolov5n, 0}}
-            };
-            arcface->possibleDevices = {edgeNode};
-            yolov5n->downstreams.push_back({arcface, -1});
-            if (ctrl_systemName == "jlf") {
-                arcface->upstreams = {{yolov5n, 0}, {yolov5n320, 0}, {yolov5n512, 0}, {yolov5s, 0}};
-                yolov5n320->downstreams.push_back({arcface, 0});
-                yolov5n512->downstreams.push_back({arcface, 0});
-                yolov5s->downstreams.push_back({arcface, 0});
-            }
-
-            auto *age = new PipelineModel{
-                    edgeNode,
-                    "age",
-                    ModelType::Age,
+                    "fashioncolor",
+                    ModelType::FashionColor,
                     {},
                     2,
                     false,
@@ -623,21 +679,57 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
                     {},
                     {},
                     {},
-                    {{yolov5n, 0}}
-            };
-            age->possibleDevices = {edgeNode};
-            yolov5n->downstreams.push_back({age, -1});
+                    {PipelineEdge{yolov5n, 0, {streamName}}}
+            });
+            fashioncolor->possibleDevices = { edgeNode};
+            yolov5n->downstreams.push_back(PipelineEdge{fashioncolor, 0, {streamName}});
+
             if (ctrl_systemName == "jlf") {
-                age->upstreams = {{yolov5n, 0}, {yolov5n320, 0}, {yolov5n512, 0}, {yolov5s, 0}};
-                yolov5n320->downstreams.push_back({age, 0});
-                yolov5n512->downstreams.push_back({age, 0});
-                yolov5s->downstreams.push_back({age, 0});
+                fashioncolor->possibleDevices = {edgeNode};
+                fashioncolor->upstreams = {
+                    PipelineEdge{yolov5n, 0, {streamName}}, 
+                    // PipelineEdge{yolov5n320, 0, {streamName}}, 
+                    PipelineEdge{yolov5n512, 0, {streamName}}, 
+                    // PipelineEdge{yolov5s, 0, {streamName}}
+                };
+                // yolov5n320->downstreams.push_back(PipelineEdge{fashioncolor, 0, {streamName}});
+                yolov5n512->downstreams.push_back(PipelineEdge{fashioncolor, 0, {streamName}});
+                // yolov5s->downstreams.push_back(PipelineEdge{fashioncolor, 0, {streamName}});
             }
 
-            auto *gender = new PipelineModel{
+            auto carcolor = std::make_shared<PipelineModel>(PipelineModel{
                     edgeNode,
-                    "gender",
-                    ModelType::Gender,
+                    "carcolor",
+                    ModelType::CarColor,
+                    {},
+                    2,
+                    false,
+                    false,
+                    {},
+                    {},
+                    {},
+                    {PipelineEdge{yolov5n, -1, {streamName}}}
+            });
+            carcolor->possibleDevices = {edgeNode};
+            yolov5n->downstreams.push_back(PipelineEdge{carcolor, -1, {streamName}});
+
+            if (ctrl_systemName == "jlf") {
+                carcolor->possibleDevices = {edgeNode};
+                carcolor->upstreams = {
+                    PipelineEdge{yolov5n, 2, {streamName}}, 
+                    // PipelineEdge{yolov5n320, 2, {streamName}}, 
+                    PipelineEdge{yolov5n512, 2, {streamName}}, 
+                    // PipelineEdge{yolov5s, 2, {streamName}}
+                };
+                // yolov5n320->downstreams.push_back(PipelineEdge{carcolor, 2, {streamName}});
+                yolov5n512->downstreams.push_back(PipelineEdge{carcolor, 2, {streamName}});
+                // yolov5s->downstreams.push_back(PipelineEdge{carcolor, 2, {streamName}});
+            }
+
+            auto carbrand = std::make_shared<PipelineModel>(PipelineModel{
+                    edgeNode,
+                    "carbrand",
+                    ModelType::CarBrand,
                     {},
                     3,
                     false,
@@ -645,18 +737,12 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
                     {},
                     {},
                     {},
-                    {{yolov5n, 0}}
-            };
-            gender->possibleDevices = {edgeNode};
-            yolov5n->downstreams.push_back({gender, -1});
-            if (ctrl_systemName == "jlf") {
-                gender->upstreams = {{yolov5n, 0}, {yolov5n320, 0}, {yolov5n512, 0}, {yolov5s, 0}};
-                yolov5n320->downstreams.push_back({gender, 0});
-                yolov5n512->downstreams.push_back({gender, 0});
-                yolov5s->downstreams.push_back({gender, 0});
-            }
+                    {PipelineEdge{carcolor, -1, {streamName}}}
+            });
+            carbrand->possibleDevices = {edgeNode};
+            carcolor->downstreams.push_back(PipelineEdge{carbrand, -1, {streamName}});
 
-            auto *sink = new PipelineModel{
+            auto sink = std::make_shared<PipelineModel>(PipelineModel{
                     "sink",
                     "sink",
                     ModelType::Sink,
@@ -667,31 +753,33 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
                     {},
                     {},
                     {},
-                    {{arcface, -1}, {age, -1}, {gender, -1}}
-            };
+                    {PipelineEdge{fashioncolor, -1, {streamName}}, PipelineEdge{carbrand, -1, {streamName}}}
+            });
             sink->possibleDevices = {"sink"};
-            arcface->downstreams.push_back({sink, -1});
-            age->downstreams.push_back({sink, -1});
-            gender->downstreams.push_back({sink, -1});
+            fashioncolor->downstreams.push_back(PipelineEdge{sink, -1, {streamName}});
+            carbrand->downstreams.push_back(PipelineEdge{sink, -1, {streamName}});
 
             if (!sourceName.empty()) {
                 yolov5n->arrivalProfiles.arrivalRates = ctrl_initialRequestRates[sourceName][yolov5n->name];
-                arcface->arrivalProfiles.arrivalRates = ctrl_initialRequestRates[sourceName][arcface->name];
-                age->arrivalProfiles.arrivalRates = ctrl_initialRequestRates[sourceName][age->name];
-                gender->arrivalProfiles.arrivalRates = ctrl_initialRequestRates[sourceName][gender->name];
+                fashioncolor->arrivalProfiles.arrivalRates = ctrl_initialRequestRates[sourceName][fashioncolor->name];
+                carbrand->arrivalProfiles.arrivalRates = ctrl_initialRequestRates[sourceName][carbrand->name];
+                carcolor->arrivalProfiles.arrivalRates = ctrl_initialRequestRates[sourceName][carcolor->name];
             }
 
             if (ctrl_systemName == "jlf") {
-                arcface->possibleDevices = {edgeNode};
-                return {datasource, yolov5n, yolov5n320, yolov5n512, yolov5s, arcface, gender, age, sink};
+                fashioncolor->possibleDevices = {edgeNode};
+                carcolor->possibleDevices = {edgeNode};
+                carbrand->possibleDevices = {edgeNode};
+                // return {datasource, yolov5n, yolov5n320, yolov5n512, yolov5s, fashioncolor, carcolor, carbrand, sink};
+                    return {datasource, yolov5n, yolov5n512, fashioncolor, carcolor, carbrand, sink};
             }
-            return {datasource, yolov5n, arcface, gender, age, sink};
+            return {datasource, yolov5n, fashioncolor, carcolor, carbrand, sink};
         }
         case PipelineType::Surveillance_Campus: {
-            auto *datasource = new PipelineModel{startDevice, "datasource", ModelType::DataSource, {}, 0, true};
+            auto datasource = std::make_shared<PipelineModel>(PipelineModel{startDevice, "datasource", ModelType::DataSource, {}, 0, true});
             datasource->possibleDevices = {startDevice};
 
-            auto *yolov5n = new PipelineModel{
+            auto yolov5n = std::make_shared<PipelineModel>(PipelineModel{
                     edgeNode,
                     "yolov5n",
                     ModelType::Yolov5n,
@@ -702,37 +790,38 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
                     {},
                     {},
                     {},
-                    {{datasource, -1}}
-            };
+                    {PipelineEdge{datasource, -1, {streamName}}}
+            });
             yolov5n->possibleDevices = {startDevice, edgeNode};
             if (ctrl_systemName == "tuti") {
                 yolov5n->possibleDevices = {edgeNode};
             }
-            datasource->downstreams.push_back({yolov5n, -1});
+            datasource->downstreams.push_back(PipelineEdge{yolov5n, -1, {streamName}});
 
-            PipelineModel *yolov5n320 = nullptr;
-            PipelineModel *yolov5n512 = nullptr;
-            PipelineModel *yolov5s = nullptr;
+            // std::shared_ptr<PipelineModel> yolov5n320 = nullptr;
+            std::shared_ptr<PipelineModel> yolov5n512 = nullptr;
+            // std::shared_ptr<PipelineModel> yolov5s = nullptr;
+            
             if (ctrl_systemName == "jlf") {
                 yolov5n->possibleDevices = {edgeNode};
 
-                yolov5n320 = new PipelineModel{
-                        edgeNode,
-                        "yolov5n320",
-                        ModelType::Yolov5n320,
-                        {},
-                        1,
-                        true,
-                        false,
-                        {},
-                        {},
-                        {},
-                        {{datasource, -1}}
-                };
-                yolov5n320->possibleDevices = {edgeNode};
+                // yolov5n320 = std::make_shared<PipelineModel>(PipelineModel{
+                //         edgeNode,
+                //         "yolov5n320",
+                //         ModelType::Yolov5n320,
+                //         {},
+                //         1,
+                //         true,
+                //         false,
+                //         {},
+                //         {},
+                //         {},
+                //         {PipelineEdge{datasource, -1, {streamName}}}
+                // });
+                // yolov5n320->possibleDevices = {edgeNode};
 
 
-                yolov5n512 = new PipelineModel{
+                yolov5n512 = std::make_shared<PipelineModel>(PipelineModel{
                         edgeNode,
                         "yolov5n512",
                         ModelType::Yolov5n512,
@@ -743,53 +832,35 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
                         {},
                         {},
                         {},
-                        {{datasource, -1}}
-                };
+                        {PipelineEdge{datasource, -1, {streamName}}}
+                });
                 yolov5n512->possibleDevices = {edgeNode};
 
-                yolov5s= new PipelineModel{
-                        edgeNode,
-                        "yolov5s",
-                        ModelType::Yolov5s,
-                        {},
-                        1,
-                        true,
-                        false,
-                        {},
-                        {},
-                        {},
-                        {{datasource, -1}}
-                };
-                yolov5s->possibleDevices = {edgeNode};
+                // yolov5s = std::make_shared<PipelineModel>(PipelineModel{
+                //         edgeNode,
+                //         "yolov5s",
+                //         ModelType::Yolov5s,
+                //         {},
+                //         1,
+                //         true,
+                //         false,
+                //         {},
+                //         {},
+                //         {},
+                //         {PipelineEdge{datasource, -1, {streamName}}}
+                // });
+                // yolov5s->possibleDevices = {edgeNode};
+
+                // Add downstream connections for the additional YOLO variants in the JLF pipeline
+                // datasource->downstreams.push_back(PipelineEdge{yolov5n320, -1, {streamName}});
+                datasource->downstreams.push_back(PipelineEdge{yolov5n512, -1, {streamName}});
+                // datasource->downstreams.push_back(PipelineEdge{yolov5s, -1, {streamName}});
             }
 
-            auto *platedet = new PipelineModel{
+            auto fashioncolor = std::make_shared<PipelineModel>(PipelineModel{
                     edgeNode,
-                    "platedet",
-                    ModelType::PlateDet,
-                    {},
-                    1,
-                    false,
-                    false,
-                    {},
-                    {},
-                    {},
-                    {{yolov5n, 2}}
-            };
-            platedet->possibleDevices = {startDevice, edgeNode};
-            yolov5n->downstreams.push_back({platedet, 2});
-            if (ctrl_systemName == "jlf") {
-                platedet->possibleDevices = {edgeNode};
-                platedet->upstreams = {{yolov5n, 2},{yolov5n320, 2},{yolov5n512, 2},{yolov5s, 2}};
-                yolov5n320->downstreams.push_back({platedet, 2});
-                yolov5n512->downstreams.push_back({platedet, 2});
-                yolov5s->downstreams.push_back({platedet, 2});
-            }
-
-            auto *movenet = new PipelineModel{
-                    edgeNode,
-                    "movenet",
-                    ModelType::Movenet,
+                    "fashioncolor",
+                    ModelType::FashionColor,
                     {},
                     2,
                     false,
@@ -797,169 +868,70 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
                     {},
                     {},
                     {},
-                    {{yolov5n, 0}}
-            };
-            movenet->possibleDevices = {startDevice, edgeNode};
-            yolov5n->downstreams.push_back({movenet, 0});
+                    {PipelineEdge{yolov5n, 0, {streamName}}}
+            });
+            fashioncolor->possibleDevices = { edgeNode};
+            yolov5n->downstreams.push_back(PipelineEdge{fashioncolor, 0, {streamName}});
 
             if (ctrl_systemName == "jlf") {
-                movenet->possibleDevices = {edgeNode};
-                movenet->upstreams = {{yolov5n,    0}, {yolov5n320, 0}, {yolov5n512, 0}, {yolov5s,    0}};
-                yolov5n320->downstreams.push_back({movenet, 0});
-                yolov5n512->downstreams.push_back({movenet, 0});
-                yolov5s->downstreams.push_back({movenet, 0});
+                fashioncolor->possibleDevices = {edgeNode};
+                fashioncolor->upstreams = {
+                    PipelineEdge{yolov5n, 0, {streamName}}, 
+                    // PipelineEdge{yolov5n320, 0, {streamName}}, 
+                    PipelineEdge{yolov5n512, 0, {streamName}}, 
+                    // PipelineEdge{yolov5s, 0, {streamName}}
+                };
+                // yolov5n320->downstreams.push_back(PipelineEdge{fashioncolor, 0, {streamName}});
+                yolov5n512->downstreams.push_back(PipelineEdge{fashioncolor, 0, {streamName}});
+                // yolov5s->downstreams.push_back(PipelineEdge{fashioncolor, 0, {streamName}});
             }
 
-            auto *sink = new PipelineModel{
-                    "sink",
-                    "sink",
-                    ModelType::Sink,
-                    {},
-                    0,
-                    false,
-                    false,
-                    {},
-                    {},
-                    {},
-                    {{platedet, -1}, {movenet, -1}}
-            };
-            sink->possibleDevices = {"sink"};
-            platedet->downstreams.push_back({sink, -1});
-            movenet->downstreams.push_back({sink, -1});
-
-            if (!sourceName.empty()) {
-                yolov5n->arrivalProfiles.arrivalRates = ctrl_initialRequestRates[sourceName][yolov5n->name];
-                platedet->arrivalProfiles.arrivalRates = ctrl_initialRequestRates[sourceName][platedet->name];
-                movenet->arrivalProfiles.arrivalRates = ctrl_initialRequestRates[sourceName][movenet->name];
-            }
-
-            if (ctrl_systemName == "jlf") {
-                return {datasource, yolov5n, yolov5n320, yolov5n512, yolov5s, platedet, movenet, sink};
-            }
-            return {datasource, yolov5n, platedet, movenet, sink};
-        }
-        case PipelineType::Factory_Robot: {
-            auto *datasource = new PipelineModel{startDevice, "datasource", ModelType::DataSource, {}, 0, true};
-            datasource->possibleDevices = {startDevice};
-
-            auto *yolov5n = new PipelineModel{
+            auto carcolor = std::make_shared<PipelineModel>(PipelineModel{
                     edgeNode,
-                    "yolov5n",
-                    ModelType::Yolov5n,
+                    "carcolor",
+                    ModelType::CarColor,
                     {},
-                    1,
-                    true,
+                    2,
+                    false,
                     false,
                     {},
                     {},
                     {},
-                    {{datasource, -1}}
-            };
-            yolov5n->possibleDevices = {startDevice, edgeNode};
-            if (ctrl_systemName == "tuti") {
-                yolov5n->possibleDevices = {edgeNode};
-            }
-            datasource->downstreams.push_back({yolov5n, -1});
+                    {PipelineEdge{yolov5n, -1, {streamName}}}
+            });
+            carcolor->possibleDevices = {edgeNode};
+            yolov5n->downstreams.push_back(PipelineEdge{carcolor, -1, {streamName}});
 
-            PipelineModel *yolov5n320 = nullptr;
-            PipelineModel *yolov5n512 = nullptr;
-            PipelineModel *yolov5s = nullptr;
             if (ctrl_systemName == "jlf") {
-                yolov5n->possibleDevices = {edgeNode};
-
-                yolov5n320 = new PipelineModel{
-                        edgeNode,
-                        "yolov5n320",
-                        ModelType::Yolov5n320,
-                        {},
-                        1,
-                        true,
-                        false,
-                        {},
-                        {},
-                        {},
-                        {{datasource, -1}}
+                carcolor->possibleDevices = {edgeNode};
+                carcolor->upstreams = {
+                    PipelineEdge{yolov5n, 2, {streamName}}, 
+                    // PipelineEdge{yolov5n320, 2, {streamName}}, 
+                    PipelineEdge{yolov5n512, 2, {streamName}}, 
+                    // PipelineEdge{yolov5s, 2, {streamName}}
                 };
-                yolov5n320->possibleDevices = {edgeNode};
-
-
-                yolov5n512 = new PipelineModel{
-                        edgeNode,
-                        "yolov5n512",
-                        ModelType::Yolov5n512,
-                        {},
-                        1,
-                        true,
-                        false,
-                        {},
-                        {},
-                        {},
-                        {{datasource, -1}}
-                };
-                yolov5n512->possibleDevices = {edgeNode};
-
-                yolov5s= new PipelineModel{
-                        edgeNode,
-                        "yolov5s",
-                        ModelType::Yolov5s,
-                        {},
-                        1,
-                        true,
-                        false,
-                        {},
-                        {},
-                        {},
-                        {{datasource, -1}}
-                };
-                yolov5s->possibleDevices = {edgeNode};
+                // yolov5n320->downstreams.push_back(PipelineEdge{carcolor, 2, {streamName}});
+                yolov5n512->downstreams.push_back(PipelineEdge{carcolor, 2, {streamName}});
+                // yolov5s->downstreams.push_back(PipelineEdge{carcolor, 2, {streamName}});
             }
 
-            auto *labeldet = new PipelineModel{
-                    edgeNode,
-                    "platedet",
-                    ModelType::PlateDet,
-                    {},
-                    1,
-                    false,
-                    false,
-                    {},
-                    {},
-                    {},
-                    {{yolov5n, 2}}
-            };
-            labeldet->possibleDevices = {startDevice, edgeNode};
-            yolov5n->downstreams.push_back({labeldet, 2});
-            if (ctrl_systemName == "jlf") {
-                labeldet->possibleDevices = {edgeNode};
-                labeldet->upstreams = {{yolov5n, 2},{yolov5n320, 2},{yolov5n512, 2},{yolov5s, 2}};
-                yolov5n320->downstreams.push_back({labeldet, 2});
-                yolov5n512->downstreams.push_back({labeldet, 2});
-                yolov5s->downstreams.push_back({labeldet, 2});
-            }
-
-            auto *obstacle = new PipelineModel{
+            auto carbrand = std::make_shared<PipelineModel>(PipelineModel{
                     edgeNode,
                     "carbrand",
                     ModelType::CarBrand,
                     {},
-                    2,
+                    3,
                     false,
                     false,
                     {},
                     {},
                     {},
-                    {{yolov5n, -1}}
-            };
-            obstacle->possibleDevices = {edgeNode};
-            yolov5n->downstreams.push_back({obstacle, -1});
-            if (ctrl_systemName == "jlf") {
-                obstacle->upstreams = {{yolov5n, -1}, {yolov5n320, -1}, {yolov5n512, -1}, {yolov5s, -1}};
-                yolov5n320->downstreams.push_back({obstacle, -1});
-                yolov5n512->downstreams.push_back({obstacle, -1});
-                yolov5s->downstreams.push_back({obstacle, -1});
-            }
+                    {PipelineEdge{carcolor, -1, {streamName}}}
+            });
+            carbrand->possibleDevices = {edgeNode};
+            carcolor->downstreams.push_back(PipelineEdge{carbrand, -1, {streamName}});
 
-            auto *sink = new PipelineModel{
+            auto sink = std::make_shared<PipelineModel>(PipelineModel{
                     "sink",
                     "sink",
                     ModelType::Sink,
@@ -970,28 +942,49 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
                     {},
                     {},
                     {},
-                    {{labeldet, -1}, {obstacle, -1}}
-            };
+                    {PipelineEdge{fashioncolor, -1, {streamName}}, PipelineEdge{carbrand, -1, {streamName}}}
+            });
             sink->possibleDevices = {"sink"};
-            labeldet->downstreams.push_back({sink, -1});
-            obstacle->downstreams.push_back({sink, -1});
+            fashioncolor->downstreams.push_back(PipelineEdge{sink, -1, {streamName}});
+            carbrand->downstreams.push_back(PipelineEdge{sink, -1, {streamName}});
 
             if (!sourceName.empty()) {
                 yolov5n->arrivalProfiles.arrivalRates = ctrl_initialRequestRates[sourceName][yolov5n->name];
-                labeldet->arrivalProfiles.arrivalRates = ctrl_initialRequestRates[sourceName][labeldet->name];
-                obstacle->arrivalProfiles.arrivalRates = ctrl_initialRequestRates[sourceName][obstacle->name];
+                fashioncolor->arrivalProfiles.arrivalRates = ctrl_initialRequestRates[sourceName][fashioncolor->name];
+                carbrand->arrivalProfiles.arrivalRates = ctrl_initialRequestRates[sourceName][carbrand->name];
+                carcolor->arrivalProfiles.arrivalRates = ctrl_initialRequestRates[sourceName][carcolor->name];
             }
 
             if (ctrl_systemName == "jlf") {
-                return {datasource, yolov5n, yolov5n320, yolov5n512, yolov5s, labeldet, obstacle, sink};
+                fashioncolor->possibleDevices = {edgeNode};
+                carcolor->possibleDevices = {edgeNode};
+                carbrand->possibleDevices = {edgeNode};
+                // return {datasource, yolov5n, yolov5n320, yolov5n512, yolov5s, fashioncolor, carcolor, carbrand, sink};
+                return {datasource, yolov5n, yolov5n512, fashioncolor, carcolor, carbrand, sink};
             }
-            return {datasource, yolov5n, labeldet, obstacle, sink};
+            return {datasource, yolov5n, fashioncolor, carcolor, carbrand, sink};
         }
-        case PipelineType::Factory_CCTV: {
-            auto *datasource = new PipelineModel{startDevice, "datasource", ModelType::DataSource, {}, 0, true};
+        case PipelineType::Factory_Robot: {
+            auto datasource = std::make_shared<PipelineModel>(PipelineModel{startDevice, "datasource", ModelType::DataSource, {}, 0, true});
             datasource->possibleDevices = {startDevice};
 
-            auto *yolov5n = new PipelineModel{
+            auto equipmentdet = std::make_shared<PipelineModel>(PipelineModel{
+                    edgeNode,
+                    "equipmentdet",
+                    ModelType::EquipDetect,
+                    {},
+                    1,
+                    true,
+                    false,
+                    {},
+                    {},
+                    {},
+                    {PipelineEdge{datasource, -1, {streamName}}}
+            });
+            equipmentdet->possibleDevices = {startDevice, edgeNode};
+            datasource->downstreams.push_back(PipelineEdge{equipmentdet, -1, {streamName}});
+
+            auto yolov5n = std::make_shared<PipelineModel>(PipelineModel{
                     edgeNode,
                     "yolov5n",
                     ModelType::Yolov5n,
@@ -1002,37 +995,38 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
                     {},
                     {},
                     {},
-                    {{datasource, -1}}
-            };
+                    {PipelineEdge{datasource, -1, {streamName}}}
+            });
             yolov5n->possibleDevices = {startDevice, edgeNode};
             if (ctrl_systemName == "tuti") {
                 yolov5n->possibleDevices = {edgeNode};
             }
-            datasource->downstreams.push_back({yolov5n, -1});
+            datasource->downstreams.push_back(PipelineEdge{yolov5n, -1, {streamName}});
 
-            PipelineModel *yolov5n320 = nullptr;
-            PipelineModel *yolov5n512 = nullptr;
-            PipelineModel *yolov5s = nullptr;
+            // std::shared_ptr<PipelineModel> yolov5n320 = nullptr;
+            std::shared_ptr<PipelineModel> yolov5n512 = nullptr;
+            // std::shared_ptr<PipelineModel> yolov5s = nullptr;
+            
             if (ctrl_systemName == "jlf") {
                 yolov5n->possibleDevices = {edgeNode};
 
-                yolov5n320 = new PipelineModel{
-                        edgeNode,
-                        "yolov5n320",
-                        ModelType::Yolov5n320,
-                        {},
-                        1,
-                        true,
-                        false,
-                        {},
-                        {},
-                        {},
-                        {{datasource, -1}}
-                };
-                yolov5n320->possibleDevices = {edgeNode};
+                // yolov5n320 = std::make_shared<PipelineModel>(PipelineModel{
+                //         edgeNode,
+                //         "yolov5n320",
+                //         ModelType::Yolov5n320,
+                //         {},
+                //         1,
+                //         true,
+                //         false,
+                //         {},
+                //         {},
+                //         {},
+                //         {PipelineEdge{datasource, -1, {streamName}}}
+                // });
+                // yolov5n320->possibleDevices = {edgeNode};
 
 
-                yolov5n512 = new PipelineModel{
+                yolov5n512 = std::make_shared<PipelineModel>(PipelineModel{
                         edgeNode,
                         "yolov5n512",
                         ModelType::Yolov5n512,
@@ -1043,53 +1037,35 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
                         {},
                         {},
                         {},
-                        {{datasource, -1}}
-                };
+                        {PipelineEdge{datasource, -1, {streamName}}}
+                });
                 yolov5n512->possibleDevices = {edgeNode};
 
-                yolov5s= new PipelineModel{
-                        edgeNode,
-                        "yolov5s",
-                        ModelType::Yolov5s,
-                        {},
-                        1,
-                        true,
-                        false,
-                        {},
-                        {},
-                        {},
-                        {{datasource, -1}}
-                };
-                yolov5s->possibleDevices = {edgeNode};
+                // yolov5s = std::make_shared<PipelineModel>(PipelineModel{
+                //         edgeNode,
+                //         "yolov5s",
+                //         ModelType::Yolov5s,
+                //         {},
+                //         1,
+                //         true,
+                //         false,
+                //         {},
+                //         {},
+                //         {},
+                //         {PipelineEdge{datasource, -1, {streamName}}}
+                // });
+                // yolov5s->possibleDevices = {edgeNode};
+
+                // Add downstream connections for the additional YOLO variants in the JLF pipeline
+                // datasource->downstreams.push_back(PipelineEdge{yolov5n320, -1, {streamName}});
+                datasource->downstreams.push_back(PipelineEdge{yolov5n512, -1, {streamName}});
+                // datasource->downstreams.push_back(PipelineEdge{yolov5s, -1, {streamName}});
             }
 
-            auto *retina1face = new PipelineModel{
+            auto geardet = std::make_shared<PipelineModel>(PipelineModel{
                     edgeNode,
-                    "retina1face",
-                    ModelType::Retinaface,
-                    {},
-                    false,
-                    false,
-                    {},
-                    {},
-                    {},
-                    {{yolov5n, 0}}
-            };
-            retina1face->possibleDevices = {edgeNode};
-            yolov5n->downstreams.push_back({retina1face, 0});
-
-            if (ctrl_systemName == "jlf") {
-                retina1face->possibleDevices = {edgeNode};
-                retina1face->upstreams = {{yolov5n, 0}, {yolov5n320, 0}, {yolov5n512, 0}, {yolov5s, 0}};
-                yolov5n320->downstreams.push_back({retina1face, 0});
-                yolov5n512->downstreams.push_back({retina1face, 0});
-                yolov5s->downstreams.push_back({retina1face, 0});
-            }
-
-            auto *arcface = new PipelineModel{
-                    edgeNode,
-                    "arcface",
-                    ModelType::Arcface,
+                    "geardet",
+                    ModelType::GearDetect,
                     {},
                     1,
                     false,
@@ -1097,15 +1073,28 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
                     {},
                     {},
                     {},
-                    {{retina1face, -1}}
-            };
-            arcface->possibleDevices = {edgeNode};
-            retina1face->downstreams.push_back({arcface, -1});
+                    {PipelineEdge{yolov5n, 0, {streamName}}}
+            });
+            geardet->possibleDevices = {startDevice, edgeNode};
+            yolov5n->downstreams.push_back(PipelineEdge{geardet, 0, {streamName}});
+            
+            if (ctrl_systemName == "jlf") {
+                geardet->possibleDevices = {edgeNode};
+                geardet->upstreams = {
+                    PipelineEdge{yolov5n, 0, {streamName}},
+                    // PipelineEdge{yolov5n320, 0, {streamName}},
+                    PipelineEdge{yolov5n512, 0, {streamName}},
+                    // PipelineEdge{yolov5s, 0, {streamName}}
+                };
+                // yolov5n320->downstreams.push_back(PipelineEdge{geardet, 0, {streamName}});
+                yolov5n512->downstreams.push_back(PipelineEdge{geardet, 0, {streamName}});
+                // yolov5s->downstreams.push_back(PipelineEdge{geardet, 0, {streamName}});
+            }
 
-            auto *activity = new PipelineModel{
+            auto fashioncolor = std::make_shared<PipelineModel>(PipelineModel{
                     edgeNode,
-                    "movenet",
-                    ModelType::Movenet,
+                    "fashioncolor",
+                    ModelType::FashionColor,
                     {},
                     2,
                     false,
@@ -1113,20 +1102,24 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
                     {},
                     {},
                     {},
-                    {{yolov5n, 0}}
-            };
-            activity->possibleDevices = {startDevice, edgeNode};
-            yolov5n->downstreams.push_back({activity, 0});
-
+                    {PipelineEdge{yolov5n, 0, {streamName}}}
+            });
+            fashioncolor->possibleDevices = {edgeNode};
+            yolov5n->downstreams.push_back(PipelineEdge{fashioncolor, -1, {streamName}});
+            
             if (ctrl_systemName == "jlf") {
-                activity->possibleDevices = {edgeNode};
-                activity->upstreams = {{yolov5n,    0}, {yolov5n320, 0}, {yolov5n512, 0}, {yolov5s,    0}};
-                yolov5n320->downstreams.push_back({activity, 0});
-                yolov5n512->downstreams.push_back({activity, 0});
-                yolov5s->downstreams.push_back({activity, 0});
+                fashioncolor->upstreams = {
+                    PipelineEdge{yolov5n, 0, {streamName}}, 
+                    // PipelineEdge{yolov5n320, 0, {streamName}}, 
+                    PipelineEdge{yolov5n512, 0, {streamName}}, 
+                    // PipelineEdge{yolov5s, 0, {streamName}}
+                };
+                // yolov5n320->downstreams.push_back(PipelineEdge{fashioncolor, 0, {streamName}});
+                yolov5n512->downstreams.push_back(PipelineEdge{fashioncolor, 0, {streamName}});
+                // yolov5s->downstreams.push_back(PipelineEdge{fashioncolor, 0, {streamName}});
             }
 
-            auto *sink = new PipelineModel{
+            auto sink = std::make_shared<PipelineModel>(PipelineModel{
                     "sink",
                     "sink",
                     ModelType::Sink,
@@ -1137,23 +1130,225 @@ PipelineModelListType Controller::getModelsByPipelineType(PipelineType type, con
                     {},
                     {},
                     {},
-                    {{arcface, -1}, {activity, -1}}
-            };
+                    {
+                        PipelineEdge{equipmentdet, -1, {streamName}}, 
+                        PipelineEdge{geardet, -1, {streamName}}, 
+                        PipelineEdge{fashioncolor, -1, {streamName}}
+                    }
+            });
             sink->possibleDevices = {"sink"};
-            arcface->downstreams.push_back({sink, -1});
-            activity->downstreams.push_back({sink, -1});
-
+            equipmentdet->downstreams.push_back(PipelineEdge{sink, -1, {streamName}});
+            geardet->downstreams.push_back(PipelineEdge{sink, -1, {streamName}});
+            fashioncolor->downstreams.push_back(PipelineEdge{sink, -1, {streamName}});
+            
             if (!sourceName.empty()) {
                 yolov5n->arrivalProfiles.arrivalRates = ctrl_initialRequestRates[sourceName][yolov5n->name];
-                arcface->arrivalProfiles.arrivalRates = ctrl_initialRequestRates[sourceName][arcface->name];
-                activity->arrivalProfiles.arrivalRates = ctrl_initialRequestRates[sourceName][activity->name];
+                equipmentdet->arrivalProfiles.arrivalRates = ctrl_initialRequestRates[sourceName][equipmentdet->name];
+                geardet->arrivalProfiles.arrivalRates = ctrl_initialRequestRates[sourceName][geardet->name];
+                fashioncolor->arrivalProfiles.arrivalRates = ctrl_initialRequestRates[sourceName][fashioncolor->name];
             }
 
             if (ctrl_systemName == "jlf") {
-                arcface->possibleDevices = {edgeNode};
-                return {datasource, yolov5n, yolov5n320, yolov5n512, yolov5s, retina1face, arcface, activity, sink};
+                equipmentdet->possibleDevices = {edgeNode};
+                geardet->possibleDevices = {edgeNode};
+                fashioncolor->possibleDevices = {edgeNode};
+                // return {datasource, yolov5n, yolov5n320, yolov5n512, yolov5s, equipmentdet, geardet, fashioncolor, sink};
+                return {datasource, yolov5n, yolov5n512, equipmentdet, geardet, fashioncolor, sink};
             }
-            return {datasource, yolov5n, retina1face, arcface, activity, sink};
+            return {datasource, yolov5n, equipmentdet, geardet, fashioncolor, sink};
+        }
+        case PipelineType::Factory_CCTV: {
+            auto datasource = std::make_shared<PipelineModel>(PipelineModel{startDevice, "datasource", ModelType::DataSource, {}, 0, true});
+            datasource->possibleDevices = {startDevice};
+
+            auto equipmentdet = std::make_shared<PipelineModel>(PipelineModel{
+                    edgeNode,
+                    "equipmentdet",
+                    ModelType::EquipDetect,
+                    {},
+                    1,
+                    true,
+                    false,
+                    {},
+                    {},
+                    {},
+                    {PipelineEdge{datasource, -1, {streamName}}}
+            });
+            equipmentdet->possibleDevices = {startDevice, edgeNode};
+            datasource->downstreams.push_back(PipelineEdge{equipmentdet, -1, {streamName}});
+
+            auto yolov5n = std::make_shared<PipelineModel>(PipelineModel{
+                    edgeNode,
+                    "yolov5n",
+                    ModelType::Yolov5n,
+                    {},
+                    1,
+                    true,
+                    false,
+                    {},
+                    {},
+                    {},
+                    {PipelineEdge{datasource, -1, {streamName}}}
+            });
+            yolov5n->possibleDevices = {startDevice, edgeNode};
+            if (ctrl_systemName == "tuti") {
+                yolov5n->possibleDevices = {edgeNode};
+            }
+            datasource->downstreams.push_back(PipelineEdge{yolov5n, -1, {streamName}});
+
+            // std::shared_ptr<PipelineModel> yolov5n320 = nullptr;
+            std::shared_ptr<PipelineModel> yolov5n512 = nullptr;
+            // std::shared_ptr<PipelineModel> yolov5s = nullptr;
+            
+            if (ctrl_systemName == "jlf") {
+                yolov5n->possibleDevices = {edgeNode};
+
+                // yolov5n320 = std::make_shared<PipelineModel>(PipelineModel{
+                //         edgeNode,
+                //         "yolov5n320",
+                //         ModelType::Yolov5n320,
+                //         {},
+                //         1,
+                //         true,
+                //         false,
+                //         {},
+                //         {},
+                //         {},
+                //         {PipelineEdge{datasource, -1, {streamName}}}
+                // });
+                // yolov5n320->possibleDevices = {edgeNode};
+
+
+                yolov5n512 = std::make_shared<PipelineModel>(PipelineModel{
+                        edgeNode,
+                        "yolov5n512",
+                        ModelType::Yolov5n512,
+                        {},
+                        1,
+                        true,
+                        false,
+                        {},
+                        {},
+                        {},
+                        {PipelineEdge{datasource, -1, {streamName}}}
+                });
+                yolov5n512->possibleDevices = {edgeNode};
+
+                // yolov5s = std::make_shared<PipelineModel>(PipelineModel{
+                //         edgeNode,
+                //         "yolov5s",
+                //         ModelType::Yolov5s,
+                //         {},
+                //         1,
+                //         true,
+                //         false,
+                //         {},
+                //         {},
+                //         {},
+                //         {PipelineEdge{datasource, -1, {streamName}}}
+                // });
+                // yolov5s->possibleDevices = {edgeNode};
+
+                // Add downstream connections for the additional YOLO variants in the JLF pipeline
+                // datasource->downstreams.push_back(PipelineEdge{yolov5n320, -1, {streamName}});
+                datasource->downstreams.push_back(PipelineEdge{yolov5n512, -1, {streamName}});
+                // datasource->downstreams.push_back(PipelineEdge{yolov5s, -1, {streamName}});
+            }
+
+            auto geardet = std::make_shared<PipelineModel>(PipelineModel{
+                    edgeNode,
+                    "geardet",
+                    ModelType::GearDetect,
+                    {},
+                    1,
+                    false,
+                    false,
+                    {},
+                    {},
+                    {},
+                    {PipelineEdge{yolov5n, 2, {streamName}}}
+            });
+            geardet->possibleDevices = {startDevice, edgeNode};
+            yolov5n->downstreams.push_back(PipelineEdge{geardet, 0, {streamName}});
+            
+            if (ctrl_systemName == "jlf") {
+                geardet->possibleDevices = {edgeNode};
+                geardet->upstreams = {
+                    PipelineEdge{yolov5n, 0, {streamName}},
+                    // PipelineEdge{yolov5n320, 0, {streamName}},
+                    PipelineEdge{yolov5n512, 0, {streamName}},
+                    // PipelineEdge{yolov5s, 0, {streamName}}
+                };
+                // yolov5n320->downstreams.push_back(PipelineEdge{geardet, 0, {streamName}});
+                yolov5n512->downstreams.push_back(PipelineEdge{geardet, 0, {streamName}});
+                // yolov5s->downstreams.push_back(PipelineEdge{geardet, 0, {streamName}});
+            }
+
+            auto fashioncolor = std::make_shared<PipelineModel>(PipelineModel{
+                    edgeNode,
+                    "fashioncolor",
+                    ModelType::FashionColor,
+                    {},
+                    2,
+                    false,
+                    false,
+                    {},
+                    {},
+                    {},
+                    {PipelineEdge{yolov5n, 0, {streamName}}}
+            });
+            fashioncolor->possibleDevices = {edgeNode};
+            yolov5n->downstreams.push_back(PipelineEdge{fashioncolor, 0, {streamName}});
+            
+            if (ctrl_systemName == "jlf") {
+                fashioncolor->upstreams = {
+                    PipelineEdge{yolov5n, 0, {streamName}}, 
+                    // PipelineEdge{yolov5n320, 0, {streamName}}, 
+                    PipelineEdge{yolov5n512, 0, {streamName}}, 
+                    // PipelineEdge{yolov5s, 0, {streamName}}
+                };
+                // yolov5n320->downstreams.push_back(PipelineEdge{fashioncolor, 0, {streamName}});
+                yolov5n512->downstreams.push_back(PipelineEdge{fashioncolor, 0, {streamName}});
+                // yolov5s->downstreams.push_back(PipelineEdge{fashioncolor, 0, {streamName}});
+            }
+
+            auto sink = std::make_shared<PipelineModel>(PipelineModel{
+                    "sink",
+                    "sink",
+                    ModelType::Sink,
+                    {},
+                    0,
+                    false,
+                    false,
+                    {},
+                    {},
+                    {},
+                    {
+                        PipelineEdge{equipmentdet, -1, {streamName}}, 
+                        PipelineEdge{geardet, -1, {streamName}}, 
+                        PipelineEdge{fashioncolor, -1, {streamName}}
+                    }
+            });
+            sink->possibleDevices = {"sink"};
+            equipmentdet->downstreams.push_back(PipelineEdge{sink, -1, {streamName}});
+            geardet->downstreams.push_back(PipelineEdge{sink, -1, {streamName}});
+            fashioncolor->downstreams.push_back(PipelineEdge{sink, -1, {streamName}});
+            
+            if (!sourceName.empty()) {
+                yolov5n->arrivalProfiles.arrivalRates = ctrl_initialRequestRates[sourceName][yolov5n->name];
+                equipmentdet->arrivalProfiles.arrivalRates = ctrl_initialRequestRates[sourceName][equipmentdet->name];
+                geardet->arrivalProfiles.arrivalRates = ctrl_initialRequestRates[sourceName][geardet->name];
+                fashioncolor->arrivalProfiles.arrivalRates = ctrl_initialRequestRates[sourceName][fashioncolor->name];
+            }
+
+            if (ctrl_systemName == "jlf") {
+                equipmentdet->possibleDevices = {edgeNode};
+                geardet->possibleDevices = {edgeNode};
+                fashioncolor->possibleDevices = {edgeNode};
+                // return {datasource, yolov5n, yolov5n320, yolov5n512, yolov5s, equipmentdet, geardet, fashioncolor, sink};
+                return {datasource, yolov5n, yolov5n512, equipmentdet, geardet, fashioncolor, sink};
+            }
+            return {datasource, yolov5n, equipmentdet, geardet, fashioncolor, sink};
         }
         default:
             return {};
@@ -1217,16 +1412,24 @@ void Controller::readInitialObjectCount(const std::string &path) {
 PipelineModelListType deepCopyPipelineModelList(const PipelineModelListType& original) {
     PipelineModelListType newList;
     newList.reserve(original.size());
-    for (const auto* model : original) {
-        newList.push_back(new PipelineModel(*model));
+    for (const auto& modelSp : original) {
+        if (modelSp) {
+            newList.push_back(std::make_shared<PipelineModel>(*modelSp));
+        }
     }
     return newList;
 }
 
-TaskHandle *Controller::CreatePipelineFromMessage(TaskDesc msg) {
-    TaskHandle *task = new TaskHandle{msg.name(), PipelineTypeReverseList[msg.type()], msg.stream(), msg.srcdevice(), msg.slo(), {}, msg.edgenode()};
+std::shared_ptr<TaskHandle> Controller::CreatePipelineFromMessage(TaskDesc msg) {
+    auto task = std::make_shared<TaskHandle>(msg.name(),
+                                             PipelineTypeReverseList[msg.type()],
+                                             msg.stream(),
+                                             msg.srcdevice(),
+                                             msg.slo(),
+                                             std::chrono::system_clock::now(),
+                                             msg.edgenode());
 
-    std::map<std::string, NodeHandle*> deviceList = devices.getMap();
+    std::map<std::string, std::shared_ptr<NodeHandle>> deviceList = devices.getMap();
 
     if (deviceList.find(msg.srcdevice()) == deviceList.end()) {
         spdlog::error("Device {0:s} is not connected", msg.srcdevice());
@@ -1244,22 +1447,32 @@ TaskHandle *Controller::CreatePipelineFromMessage(TaskDesc msg) {
         task->tk_pipelineModels = getModelsByPipelineType(task->tk_type, msg.srcdevice(), msg.name(), msg.stream(), msg.edgenode());
     else {
         task->tk_pipelineModels = PipelineModelListType();
-        auto *datasource = new PipelineModel{msg.srcdevice(), "datasource", ModelType::DataSource, {}, 0, true};
+        auto datasource = std::shared_ptr<PipelineModel>(new PipelineModel{msg.srcdevice(), 
+                                                                                                               "datasource",
+                                                                                                               ModelType::DataSource, 
+                                                                                                               std::weak_ptr<TaskHandle>(), 
+                                                                                                               0, 
+                                                                                                               true});
         datasource->possibleDevices = {msg.srcdevice()};
         datasource->canBeCombined = false;
-        std::map<std::string, std::vector<PipelineNeighbor>> downstreams, upstreams;
-        std::map<std::string, PipelineModel*> models;
+
+        task->tk_pipelineModels.push_back(datasource);
+        
+        std::map<std::string, std::vector<controlmessages::PipelineNeighbor>> downstreams, upstreams;
+        
+        std::map<std::string, std::shared_ptr<PipelineModel>> models;
         models["datasource"] = datasource;
+        
         for (auto &m: msg.models()){
-            auto *model = new PipelineModel{
+            auto model = std::shared_ptr<PipelineModel>(new PipelineModel{
                     m.device(),
                     m.type(),
                     ModelTypeReverseList[m.type()],
-                    {},
+                    std::weak_ptr<TaskHandle>(),
                     m.position(),
                     m.issplitpoint(),
                     m.forwardinput()
-            };
+            });
             task->tk_pipelineModels.push_back(model);
             models[m.type()] = model;
             downstreams[m.type()] = {};
@@ -1272,55 +1485,63 @@ TaskHandle *Controller::CreatePipelineFromMessage(TaskDesc msg) {
             for (std::string d: m.possibledevices())
                 model->possibleDevices.push_back(d);
         }
-        auto *sink = new PipelineModel{
+        
+        auto sink = std::shared_ptr<PipelineModel>(new PipelineModel{
                 "sink",
                 "sink",
                 ModelType::Sink,
-                {},
+                std::weak_ptr<TaskHandle>(),
                 0,
                 false
-        };
+        });
         sink->possibleDevices = {"sink"};
+        
         for (auto &m: task->tk_pipelineModels){
-            for (auto &d: downstreams[m->name])
-                m->downstreams.push_back({models[d.name()], d.classofinterest()});
+            for (auto &d: downstreams[m->name]) {
+                // FIX: Initialize the PipelineEdge struct with the target, class, and the initial stream name
+                m->downstreams.push_back(PipelineEdge{models[d.name()], d.classofinterest(), {msg.stream()}});
+            }
             for (auto &u: upstreams[m->name]) {
-                m->upstreams.push_back({models[u.name()], u.classofinterest()});
+                m->upstreams.push_back(PipelineEdge{models[u.name()], u.classofinterest(), {msg.stream()}});
                 if (u.name() == "datasource")
-                    datasource->downstreams.push_back({m, -1});
+                    datasource->downstreams.push_back(PipelineEdge{m, -1, {msg.stream()}});
             }
             if (m->downstreams.empty()) {
-                m->downstreams.push_back({sink, -1});
-                sink->upstreams.push_back({m, -1});
+                m->downstreams.push_back(PipelineEdge{sink, -1, {msg.stream()}});
+                sink->upstreams.push_back(PipelineEdge{m, -1, {msg.stream()}});
             }
         }
-        task->tk_pipelineModels.push_back(datasource);
         task->tk_pipelineModels.push_back(sink);
     }
 
     for (auto &model: task->tk_pipelineModels) {
         model->datasourceName = {msg.stream()};
-        model->task = task;
+        
+        // implicitly casts the shared_ptr 'task' to a weak_ptr!
+        model->task = task; 
+        
         if (model->possibleDevices.empty())
             model->possibleDevices = {msg.srcdevice(), msg.edgenode()};
     }
     return task;
 }
 
-void Controller::UpdatePipelineFromMessage(TaskHandle* task, TaskDesc msg) {
+void Controller::UpdatePipelineFromMessage(std::shared_ptr<TaskHandle> task, TaskDesc msg) {
+    if (!task) return;
+
     // Ensure to reset the naming for existing models
     for (auto &model: task->tk_pipelineModels) {
         if (model->name.find(task->tk_name) != std::string::npos)
             model->name = model->name.substr(model->name.find('_') + 1);
     }
 
-    std::map<std::string, std::vector<PipelineNeighbor>> downstreams, upstreams;
-    std::map<std::string, PipelineModel*> models;
-    PipelineModel *datasource = nullptr, *sink = nullptr;
+    std::map<std::string, std::vector<controlmessages::PipelineNeighbor>> downstreams, upstreams;
+    std::map<std::string, std::shared_ptr<PipelineModel>> models;
+    std::shared_ptr<PipelineModel> datasource = nullptr, sink = nullptr;
 
     // Add new models if necessary
     for (auto &m: msg.models()){
-        PipelineModel *found = nullptr;
+        std::shared_ptr<PipelineModel> found = nullptr;
         for (auto &model: task->tk_pipelineModels) {
             if (datasource == nullptr && model->name.find("datasource") != std::string::npos)
                 datasource = model;
@@ -1335,15 +1556,15 @@ void Controller::UpdatePipelineFromMessage(TaskHandle* task, TaskDesc msg) {
         if (found != nullptr){
             models[m.type()] = found;
         } else {
-            auto *model = new PipelineModel{
+            auto model = std::shared_ptr<PipelineModel>(new PipelineModel{
                     m.device(),
                     m.type(),
                     ModelTypeReverseList[m.type()],
-                    {},
+                    std::weak_ptr<TaskHandle>(),
                     m.position(),
                     m.issplitpoint(),
                     m.forwardinput()
-            };
+            });
             task->tk_pipelineModels.push_back(model);
             models[m.type()] = model;
             model->datasourceName = {msg.stream()};
@@ -1364,35 +1585,63 @@ void Controller::UpdatePipelineFromMessage(TaskHandle* task, TaskDesc msg) {
 
     // Restructure pipeline to include the new models and updated connections
     for (auto &m: models){
-        m.second->downstreams = {};
-        m.second->upstreams = {};
-        auto contains_pair = [](const std::vector<std::pair<PipelineModel*, int>> &vec, PipelineModel *p, int cls) {for (const auto &e : vec) {if (e.first == p && e.second == cls) return true;}return false;};
+        
+        // FIX: Replaced contains_pair lambda with get_existing_edge to return a pointer to the edge
+        // so we can dynamically inject the new streamName into the unordered_set if the edge exists.
+        auto get_existing_edge = [](std::vector<PipelineEdge> &vec, std::shared_ptr<PipelineModel> p, int cls) -> PipelineEdge* {
+            for (auto &e : vec) {
+                if (e.targetNode.lock() == p && e.classOfInterest == cls) return &e;
+            }
+            return nullptr;
+        };
 
         for (auto &d: downstreams[m.second->name]) {
-            PipelineModel *dst = models[d.name()];
+            auto dst = models[d.name()];
             int cls = d.classofinterest();
-            if (!contains_pair(m.second->downstreams, dst, cls))
-                m.second->downstreams.push_back({dst, cls});
-            if (!contains_pair(dst->upstreams, m.second, cls))
-                dst->upstreams.push_back({m.second, cls});
+            
+            auto* existing_down = get_existing_edge(m.second->downstreams, dst, cls);
+            if (!existing_down) {
+                m.second->downstreams.push_back(PipelineEdge{dst, cls, {msg.stream()}});
+            } else {
+                existing_down->streamNames.insert(msg.stream()); // Upsert the stream!
+            }
+
+            auto* existing_up = get_existing_edge(dst->upstreams, m.second, cls);
+            if (!existing_up) {
+                dst->upstreams.push_back(PipelineEdge{m.second, cls, {msg.stream()}});
+            } else {
+                existing_up->streamNames.insert(msg.stream()); // Upsert the stream!
+            }
         }
+        
         for (auto &u: upstreams[m.second->name]) {
-            PipelineModel *src = (u.name() == "datasource") ? datasource : models[u.name()];
+            auto src = (u.name() == "datasource") ? datasource : models[u.name()];
             if (src == nullptr) continue;
             int cls = u.classofinterest();
-            if (!contains_pair(m.second->upstreams, src, cls))
-                m.second->upstreams.push_back({src, cls});
-            if (!contains_pair(src->downstreams, m.second, cls))
-                src->downstreams.push_back({m.second, cls});
+            
+            auto* existing_up = get_existing_edge(m.second->upstreams, src, cls);
+            if (!existing_up) {
+                m.second->upstreams.push_back(PipelineEdge{src, cls, {msg.stream()}});
+            } else {
+                existing_up->streamNames.insert(msg.stream()); // Upsert the stream!
+            }
+
+            auto* existing_down = get_existing_edge(src->downstreams, m.second, cls);
+            if (!existing_down) {
+                src->downstreams.push_back(PipelineEdge{m.second, cls, {msg.stream()}});
+            } else {
+                existing_down->streamNames.insert(msg.stream()); // Upsert the stream!
+            }
         }
+        
         if (sink != nullptr && m.second->downstreams.empty()) {
-            m.second->downstreams.push_back({sink, -1});
-            sink->upstreams.push_back({m.second, -1});
+            m.second->downstreams.push_back(PipelineEdge{sink, -1, {msg.stream()}});
+            sink->upstreams.push_back(PipelineEdge{m.second, -1, {msg.stream()}});
         }
     }
 
     // Remove models that are no longer present
-    std::vector<PipelineModel *> to_delete = {};
+    std::vector<std::shared_ptr<PipelineModel>> to_delete = {};
     for (auto &model: task->tk_pipelineModels) {
         bool found = false;
         if (model != datasource && model != sink) {
@@ -1405,26 +1654,29 @@ void Controller::UpdatePipelineFromMessage(TaskHandle* task, TaskDesc msg) {
                 to_delete.push_back(model);
         }
     }
-    for (auto *model: to_delete) {
+    for (auto &model: to_delete) {
         task->tk_pipelineModels.erase(std::remove(task->tk_pipelineModels.begin(), task->tk_pipelineModels.end(), model), task->tk_pipelineModels.end());
-        for (auto &d: model->downstreams) {
-            d.first->upstreams.erase(std::remove_if(
-                    d.first->upstreams.begin(),
-                    d.first->upstreams.end(),
-                    [&model](const std::pair<PipelineModel *, int> &p) {
-                        return p.first == model;
-                    }
-            ), d.first->upstreams.end());
+        for (auto &dWk: model->downstreams) {
+            if (auto d = dWk.targetNode.lock()) {
+                d->upstreams.erase(std::remove_if(
+                        d->upstreams.begin(),
+                        d->upstreams.end(),
+                        [&model](const PipelineEdge &p) {
+                            return p.targetNode.lock() == model;
+                        }
+                ), d->upstreams.end());
+            }
         }
-        for (auto &u: model->upstreams) {
-            u.first->downstreams.erase(std::remove_if(
-                    u.first->downstreams.begin(),
-                    u.first->downstreams.end(),
-                    [&model](const std::pair<PipelineModel *, int> &p) {
-                        return p.first == model;
-                    }
-            ), u.first->downstreams.end());
+        for (auto &uWk: model->upstreams) {
+            if (auto u = uWk.targetNode.lock()) {
+                u->downstreams.erase(std::remove_if(
+                        u->downstreams.begin(),
+                        u->downstreams.end(),
+                        [&model](const PipelineEdge &p) {
+                            return p.targetNode.lock() == model;
+                        }
+                ), u->downstreams.end());
+            }
         }
-        delete model;
     }
 }

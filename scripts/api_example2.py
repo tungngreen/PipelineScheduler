@@ -2,24 +2,22 @@ import zmq
 import sys
 import controlmessages_pb2  # Generated from controlmessages.proto
 
-downstream_map = {"yolov5n": ["carcolor", "fashioncolor"],
+downstream_map = {"firedetect": [],
+                  "yolov5n": ["carcolor", "fashioncolor"],
                   "carcolor": ["carbrand"],
                   "carbrand": ["platedet", "cardamage"],
                   "platedet": [],
                   "cardamage": [],
-                  "fashioncolor": ["retina1face", "movenet"],
-                  "retina1face": ["gender"],
-                  "gender": [],
-                  "movenet": []}
-upstream_map = {"yolov5n": ["datasource"],
+                  "fashioncolor": ["retina1face"],
+                  "retina1face": []}
+upstream_map = {"firedetect": ["datasource"],
+                "yolov5n": ["datasource"],
                 "carcolor": ["yolov5n"],
                 "carbrand": ["carcolor"],
                 "platedet": ["carbrand"],
                 "cardamage": ["carbrand"],
                 "fashioncolor": ["yolov5n"],
-                "retina1face": ["fashioncolor"],
-                "gender": ["retina1face"],
-                "movenet": ["fashioncolor"]}
+                "retina1face": ["fashioncolor"]}
 
 def start_task():
     # Create the protobuf message

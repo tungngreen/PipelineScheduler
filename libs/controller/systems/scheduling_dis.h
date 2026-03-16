@@ -12,7 +12,7 @@ struct Partitioner
 namespace Dis {
     double calculateTotalprocessedRate(Devices &nodes, Tasks &pipelines, bool is_edge);
     int calculateTotalQueue(Devices &nodes, Tasks &pipelines, bool is_edge);
-    void scheduleBaseParPointLoop(Partitioner *partitioner, Devices &nodes, Tasks &pipelines);
-    void scheduleFineGrainedParPointLoop(Partitioner *partitioner, Devices &nodes, Tasks &pipelines);
-    void DecideAndMoveContainer(Devices &nodes, Tasks &pipelines, Partitioner *partitioner, int cuda_device);
+    void scheduleBaseParPointLoop(std::shared_ptr<Partitioner> partitioner, Devices &nodes, Tasks &pipelines);
+    void scheduleFineGrainedParPointLoop(std::shared_ptr<Partitioner> partitioner, Devices &nodes, Tasks &pipelines);
+    void DecideAndMoveContainer(Devices &nodes, Tasks &pipelines, std::shared_ptr<Partitioner> partitioner, int cuda_device);
 }

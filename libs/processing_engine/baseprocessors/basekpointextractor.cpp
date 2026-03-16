@@ -170,54 +170,65 @@ void BaseKPointExtractor::extractor() {
                                  CV_ELEM_SIZE1(imageList[imageIndexInBatch].data.type()));
                 totalOutMem[j] = totalInMem.back();
 
-                currReq_path = currReq.req_travelPath[imageIndexInBatch] + "|1|1";
+                currReq_path = currReq.req_travelPath[imageIndexInBatch];
+                // Extract the origin stream information, which serves 2 critical purposes:
+                // 1. It allows the postprocessor to decide which downstream queue to send the request to based on the origin stream information.
+                // 2. It allows the postprocessor to record the latency breakdown based on different origin streams.
+                std::string originStream = getOriginStream(currReq_path);
 
-                if (msvc_activeOutQueueIndex.at(0) == 1) { //Local CPU
-                    cv::Mat out;
-                    cv::cuda::Stream postProcCVStream = cv::cuda::Stream();
-                    currReq.upstreamReq_data[imageIndexInBatch].data.download(out, postProcCVStream);
-                    postProcCVStream.waitForCompletion();
-                    if (msvc_OutQueue.at(0)->getEncoded()) {
-                        out = encodeResults(out);
-                        totalEncodedOutMem[j] = out.channels() * out.rows * out.cols * CV_ELEM_SIZE1(out.type());
+                for (uint8_t qIndex = 0; qIndex < msvc_OutQueue.size(); ++qIndex) {
+                    if (!msvc_OutQueue.at(qIndex)->isProducerAllowed(originStream)) {
+                        continue;
                     }
 
-                    currReq_path += "|" + std::to_string(totalEncodedOutMem[j]) + "|" + std::to_string(totalInMem[j]) + "]";
+                    currReq_path = currReq.req_travelPath[imageIndexInBatch] + "|1|1";
 
-                    msvc_OutQueue.at(0)->emplace(
-                        Request<LocalCPUReqDataType>{
-                            {{currReq.req_origGenTime[imageIndexInBatch].front(), std::chrono::high_resolution_clock::now()}},
-                            {currReq.req_e2eSLOLatency[imageIndexInBatch]},
-                            {currReq_path},
-                            1,
-                            {
-                                {currReq.upstreamReq_data[imageIndexInBatch].shape, out}
-                            } //req_data
+                    if (msvc_activeOutQueueIndex.at(qIndex) == 1) { //Local CPU
+                        cv::Mat out;
+                        cv::cuda::Stream postProcCVStream = cv::cuda::Stream();
+                        currReq.upstreamReq_data[imageIndexInBatch].data.download(out, postProcCVStream);
+                        postProcCVStream.waitForCompletion();
+                        if (msvc_OutQueue.at(qIndex)->getEncoded()) {
+                            out = encodeResults(out);
+                            totalEncodedOutMem[j] = out.channels() * out.rows * out.cols * CV_ELEM_SIZE1(out.type());
                         }
-                    );
-                    spdlog::get("container_agent")->trace("{0:s} emplaced an image to CPU queue {1:d}.", msvc_name, 0);
-                } else {
-                    currReq_path += "|0|" + std::to_string(totalInMem[j]) + "]";
-                    msvc_OutQueue.at(0)->emplace(
-                        Request<LocalGPUReqDataType>{
-                            {{currReq.req_origGenTime[imageIndexInBatch].front(), std::chrono::high_resolution_clock::now()}},
-                            {currReq.req_e2eSLOLatency[imageIndexInBatch]},
-                            {currReq_path},
-                            1,
-                            {currReq.upstreamReq_data[imageIndexInBatch]}, //req_data
-                        }
-                    );
-                    spdlog::get("container_agent")->trace("{0:s} emplaced an image to GPU queue {1:d}.", msvc_name, 0);
+
+                        currReq_path += "|" + std::to_string(totalEncodedOutMem[j]) + "|" + std::to_string(totalInMem[j]) + "]";
+
+                        msvc_OutQueue.at(qIndex)->emplace(
+                            Request<LocalCPUReqDataType>{
+                                {{currReq.req_origGenTime[imageIndexInBatch].front(), std::chrono::high_resolution_clock::now()}},
+                                {currReq.req_e2eSLOLatency[imageIndexInBatch]},
+                                {currReq_path},
+                                1,
+                                {
+                                    {currReq.upstreamReq_data[imageIndexInBatch].shape, out}
+                                } //req_data
+                            }
+                        );
+                        spdlog::get("container_agent")->trace("{0:s} emplaced an image to CPU queue {1:d}.", msvc_name, 0);
+                    } else {
+                        currReq_path += "|0|" + std::to_string(totalInMem[j]) + "]";
+                        msvc_OutQueue.at(qIndex)->emplace(
+                            Request<LocalGPUReqDataType>{
+                                {{currReq.req_origGenTime[imageIndexInBatch].front(), std::chrono::high_resolution_clock::now()}},
+                                {currReq.req_e2eSLOLatency[imageIndexInBatch]},
+                                {currReq_path},
+                                1,
+                                {currReq.upstreamReq_data[imageIndexInBatch]}, //req_data
+                            }
+                        );
+                        spdlog::get("container_agent")->trace("{0:s} emplaced an image to GPU queue {1:d}.", msvc_name, 0);
+                    }
                 }
 
                 if (warmupCompleted()) {
                     // 12. The moment the request is done being processed by the postprocessor (TWELFTH_TIMESTAMP)
                     currReq.req_origGenTime[imageIndexInBatch].emplace_back(std::chrono::high_resolution_clock::now());
-                    std::string originStream = getOriginStream(currReq.req_travelPath[imageIndexInBatch]);
                     // TODO: Add the request number
                     msvc_processRecords.addRecord(currReq.req_origGenTime[imageIndexInBatch],
-                                                  currReq_batchSize,
-                                                  totalInMem[j], totalOutMem[j], totalEncodedOutMem[j], 0, originStream);
+                                                currReq_batchSize,
+                                                totalInMem[j], totalOutMem[j], totalEncodedOutMem[j], 0, originStream);
                     msvc_arrivalRecords.addRecord(
                             currReq.req_origGenTime[i],
                             10,

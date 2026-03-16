@@ -2,12 +2,14 @@
 #define PIPEPLUSPLUS_CONTROLLER_H
 
 #include "microservice.h"
+#include <memory>
 #include <thread>
 #include <pqxx/pqxx>
 #include "absl/strings/str_format.h"
 #include "absl/flags/parse.h"
 #include "absl/flags/flag.h"
 #include <random>
+#include <vector>
 #include "fcpo_learning.h"
 #include "bandwidth_predictor/bandwidth_predictor.h"
 
@@ -22,29 +24,66 @@ struct GPUPortion;
 struct GPUHandle;
 struct NodeHandle;
 
+/**
+ * @brief GPUPortion is a structure that represents a portion of the GPU's memory that can be allocated to a container.
+ * It contains all the free portions in the system.
+ * 
+ */
 struct GPUPortionList {
     GPUPortion *head = nullptr;
-    std::vector<GPUPortion *> list;
+    std::list<GPUPortion *> list;
 };
 
+/**
+ * @brief LanePortionList represents the portion that belongs to a lane, all of which are present in the GPUPortionList
+ * 
+ */
+struct LanePortionList {
+    std::list<std::unique_ptr<GPUPortion>> list;
+    // head is just an observation pointer, the unique_ptr in the list owns the memory
+    GPUPortion *head = nullptr;
+};
+
+/**
+ * @brief GPULane represents a stream of execution on a GPU. Containers in a lane are executed sequentially.
+ * 
+ */
 struct GPULane {
-    GPUHandle *gpuHandle;
-    NodeHandle *node;
+    // Non-owning "Observer" pointers
+    // These are safe to use as long as we ensure that the GPUHandle and NodeHandle outlive the GPULane, 
+    // which is guaranteed by our current design where GPULanes are only created within NodeHandles and reference the GPUHandles within the same NodeHandle.
+    GPUHandle *gpuHandle = nullptr;
+    NodeHandle *node = nullptr;
     std::uint16_t laneNum;
     std::uint64_t dutyCycle = 0;
 
-    GPUPortionList portionList;
+    // Lane strictly owns its portions, so we use unique_ptr to manage their memory.
+    LanePortionList portionList;
 
     GPULane() = default;
-    GPULane(GPUHandle *gpuHandle, NodeHandle *node, std::uint16_t laneNum);
+    GPULane(GPUHandle *gpuHandle, NodeHandle *node, std::uint16_t laneNum) 
+        : gpuHandle(gpuHandle), node(node), laneNum(laneNum), dutyCycle(0) {}
+
+    // Delete copy semantics to prevent unique_ptr compiler errors and linked-list corruption
+    GPULane(const GPULane&) = delete;
+    GPULane& operator=(const GPULane&) = delete;
 
     bool removePortion(GPUPortion *portion);
 };
 
+/**
+ * @brief GPUPortion represents a portion of the GPU's memory that can be allocated to a container.
+ * It is owned by a lane and is part of the lane's portion list.
+ * 
+ */
 struct GPUPortion {
     std::uint64_t start = 0;
     std::uint64_t end = MAX_PORTION_SIZE;
-    ContainerHandle *container = nullptr;
+
+    // If the controller kills the container, 
+    // the GPU logic won't crash when trying to access it.
+    std::weak_ptr<ContainerHandle> container;
+
     GPULane *lane = nullptr;
     // The next portion in the device's global sorted list
     GPUPortion *next = nullptr;
@@ -61,12 +100,17 @@ struct GPUPortion {
     GPUPortion() = default;
     // ~GPUPortion();
     GPUPortion(GPULane *lane) : lane(lane) {}
-    GPUPortion(std::uint64_t start, std::uint64_t end, ContainerHandle *container, GPULane *lane)
+    GPUPortion(std::uint64_t start, std::uint64_t end, std::weak_ptr<ContainerHandle> container, GPULane *lane)
         : start(start), end(end), container(container), lane(lane) {}
 
-    bool assignContainer(ContainerHandle *cont);
+    bool assignContainer(std::shared_ptr<ContainerHandle> cont);
 };
 
+/**
+ * @brief GPUHandle represents a GPU device in the system. It contains all the information about the GPU,
+ * including its type, its memory usage, its assigned containers, its lanes, etc.
+ * 
+ */
 struct GPUHandle {
     std::string type;
     std::string hostName;
@@ -75,7 +119,9 @@ struct GPUHandle {
     MemUsageType memLimit = 9999999; // MB
     std::uint16_t numLanes;
 
-    std::map<std::string, ContainerHandle *> containers = {};
+    // The GPU observes which containers are assigned to it,
+    // but it doesn't prevent them from being deleted by the Controller.
+    std::map<std::string, std::weak_ptr<ContainerHandle>> containers = {};
     // TODO: HANDLE FREE PORTIONS WITHIN THE GPU
     // std::vector<GPUPortion *> freeGPUPortions;
     NodeHandle *node;
@@ -85,37 +131,52 @@ struct GPUHandle {
     GPUHandle(const std::string &type, const std::string &hostName, std::uint16_t number, MemUsageType memLimit, std::uint16_t numLanes, NodeHandle *node)
         : type(type), hostName(hostName), number(number), memLimit(memLimit), numLanes(numLanes), node(node) {}
 
-    bool addContainer(ContainerHandle *container);
-    bool removeContainer(ContainerHandle *container);
+    // Delete copy semantics to prevent Node parent-pointer corruption
+    GPUHandle(const GPUHandle&) = delete;
+    GPUHandle& operator=(const GPUHandle&) = delete;
+
+    bool addContainer(std::shared_ptr<ContainerHandle> container);
+    bool removeContainer(std::shared_ptr<ContainerHandle> container);
 };
 
-// Structure that whole information about the pipeline used for scheduling
-typedef std::vector<PipelineModel *> PipelineModelListType;
+// Structure that holds information about the pipeline used for scheduling
+typedef std::vector<std::shared_ptr<PipelineModel>> PipelineModelListType;
 
 struct TaskHandle;
+
+/**
+ * @brief NodeHandle is the main data structure that the Controller uses to track the state of each device in the system.
+ * It contains all the information about the device, including its name, its IP address, its type (server, edge, on-premise), its assigned containers,
+ * its GPUs and lanes, its network conditions with other devices, etc.
+ * 
+ */
 struct NodeHandle {
     std::string name;
     std::string ip;
     SystemDeviceType type;
     int next_free_port;
-    std::map<std::string, ContainerHandle *> containers;
+    // Use weak_ptr for containers as node tracks them, but the Controller owns them.
+    std::map<std::string, std::weak_ptr<ContainerHandle>> containers;
     // The latest network entries to determine the network conditions and latencies of transferring data
     std::map<std::string, NetworkEntryType> latestNetworkEntries = {};
     // Transmission Latency History is used for bandwidth prediction to forcast network conditions
     std::vector<float> transmissionLatencyHistory;
     float transmissionLatencyPrediction;
-    // GPU Handle;
-    std::vector<GPUHandle*> gpuHandles;
-    //
+
+    // NodeHandle strictly owns its GPUs and Lanes.
     uint8_t numGPULanes;
-    //
-    std::vector<GPULane *> gpuLanes;
+    std::vector<std::unique_ptr<GPUHandle>> gpuHandles;    
+    std::vector<std::unique_ptr<GPULane>> gpuLanes;
+
+    // freeGPUPortions is just an observation of pointers.
+    // It does NOT own the memory, the lanes do.
     GPUPortionList freeGPUPortions;
+
+    // Safely track models as observers
+    std::map<std::string, std::weak_ptr<PipelineModel>> modelList;
 
     bool initialNetworkCheck = false;
     ClockType lastNetworkCheckTime;
-
-    std::map<std::string, PipelineModel *> modelList;
 
     mutable std::mutex nodeHandleMutex;
     mutable std::mutex networkCheckMutex;
@@ -126,41 +187,52 @@ struct NodeHandle {
                const std::string& ip,
                SystemDeviceType type,
                int next_free_port,
-               std::map<std::string, ContainerHandle*> containers)
+               const std::map<std::string, std::shared_ptr<ContainerHandle>>& containers_initial)
         : name(name),
           ip(ip),
           type(type),
-          next_free_port(next_free_port),
-          containers(std::move(containers)) {}
-
-    NodeHandle(const NodeHandle &other) {
-        std::lock(nodeHandleMutex, other.nodeHandleMutex);
-        std::lock_guard<std::mutex> lock1(nodeHandleMutex, std::adopt_lock);
-        std::lock_guard<std::mutex> lock2(other.nodeHandleMutex, std::adopt_lock);
-        name = other.name;
-        ip = other.ip;
-        type = other.type;
-        next_free_port = other.next_free_port;
-        containers = other.containers;
-        latestNetworkEntries = other.latestNetworkEntries;
-    }
-
-    NodeHandle& operator=(const NodeHandle &other) {
-        if (this != &other) {
-            std::lock(nodeHandleMutex, other.nodeHandleMutex);
-            std::lock_guard<std::mutex> lock1(nodeHandleMutex, std::adopt_lock);
-            std::lock_guard<std::mutex> lock2(other.nodeHandleMutex, std::adopt_lock);
-            name = other.name;
-            ip = other.ip;
-            type = other.type;
-            next_free_port = other.next_free_port;
-            containers = other.containers;
-            latestNetworkEntries = other.latestNetworkEntries;
+          next_free_port(next_free_port) {
+        
+        for (const auto& [name_key, container_ptr] : containers_initial) {
+            containers[name_key] = container_ptr; 
         }
-        return *this;
     }
+
+    // EXPLICITLY DELETE COPY SEMANTICS
+    // Copying a Node deep-copies lanes, which breaks the intrusive linked lists
+    // and causes std::unique_ptr compiler errors.
+    NodeHandle(const NodeHandle &other) = delete;
+    NodeHandle& operator=(const NodeHandle &other) = delete;
 };
 
+struct DownstreamAdjustment {
+    std::shared_ptr<ContainerHandle> downstreamContainer;
+    AdjustMode mode;
+    std::string old_link = "";
+};
+
+using SingleContainerDownstreamAdjustmentList = std::vector<DownstreamAdjustment>;
+
+using ContainersDnstreamAdjustmentMap = std::map<std::shared_ptr<ContainerHandle>, SingleContainerDownstreamAdjustmentList>;
+
+struct ContainerEdge {
+    std::weak_ptr<ContainerHandle> targetContainer;
+    // The class of interest
+    int classOfInterest;
+    // Name of streams allowed to be transferred through this edge.
+    std::unordered_set<std::string> streamNames;
+};
+
+using ContainerEdgeMap = std::map<std::string, ContainerEdge>;
+
+void cleanUpContainerDownstreamsAdjustmentBatch(SingleContainerDownstreamAdjustmentList &downstreamAdjustmentList);
+
+/**
+ * @brief ContainerHandle is the main data structure that the Controller uses to track the state of each container in the system
+ * It contains all the information about the container, including its model, its position in the pipeline, its assigned device and GPU, 
+ * its neighbors in the pipeline, its expected latencies and throughput, etc.
+ *
+ * */
 struct ContainerHandle {
     std::string name;
     int position_in_pipeline;
@@ -178,12 +250,32 @@ struct ContainerHandle {
     int recv_port;
     std::string model_file;
 
-    NodeHandle *device_agent;
-    TaskHandle *task;
-    std::vector<ContainerHandle *> downstreams;
-    std::vector<ContainerHandle *> upstreams;
+    // Observer pointers, without any ownership semantics. 
+
+    // The device/node that the container is assigned to is responsible 
+    // for ensuring these pointers remain valid as long as the container exists.
+    std::weak_ptr<NodeHandle> device_agent;    
+    // GPU that the container is assigned to, nullptr if the container is not assigned to any GPU. Used for scheduling and accessing GPU-level information
+    GPUHandle *gpuHandle = nullptr;
+    // The portion of the GPU assigned to this container, nullptr if the container is not assigned to any GPU. Used for scheduling and accessing GPU-level information
+    GPUPortion *executionPortion = nullptr;
+    // The pipeline task that the container is part of, used for scheduling and accessing pipeline-level information
+    std::weak_ptr<TaskHandle> task;
+    // This container is a manifestation of the PipelineModel, so it observes the PipelineModel for scheduling and accessing pipeline-level information.
+    std::weak_ptr<PipelineModel> pipelineModel;    
+    // The downstream and upstream containers that this container directly communicates with, 
+    // used for scheduling and accessing their information
+    // Use weak_ptr for neighbors to prevent circular reference memory leaks
+    ContainerEdgeMap downstreams;
+    ContainerEdgeMap upstreams;
+
     // Queue sizes of the model
     std::vector<QueueLengthType> queueSizes;
+
+    // Whether the container is currently running.
+    // At the end of each scheduling round, the Controller will check if the container is running and update this flag accordingly.
+    // If the container is not running, the Controller will remove it from the system and free up its resources. 
+    bool isRunning = false;
 
     // Number of microservices packed inside this container. A regular container has 5 namely
     // receiver, preprocessor, inferencer, postprocessor, sender
@@ -214,19 +306,12 @@ struct ContainerHandle {
     uint64_t localDutyCycle = 0;
     // 
     ClockType cycleStartTime;
-    // GPU Handle
-    GPUHandle *gpuHandle = nullptr;
-    //
-    GPUPortion *executionPortion = nullptr;
-    // points to the pipeline model that this container is part of
-    PipelineModel *pipelineModel = nullptr;
 
     uint64_t timeBudgetLeft = 9999999999;
     mutable std::mutex containerHandleMutex;
 
     ContainerHandle() = default;
 
-    // Constructor
     ContainerHandle(const std::string& name,
                 int position_in_pipeline,
                 unsigned int replica_id,
@@ -239,11 +324,11 @@ struct ContainerHandle {
                 const BatchSizeType batch_size = 0,
                 const int recv_port = 0,
                 const std::string model_file = "",
-                NodeHandle* device_agent = nullptr,
-                TaskHandle* task = nullptr,
-                PipelineModel* pipelineModel = nullptr,
-                const std::vector<ContainerHandle*>& upstreams = {},
-                const std::vector<ContainerHandle*>& downstreams = {},
+                std::weak_ptr<NodeHandle> device_agent = std::weak_ptr<NodeHandle>(),
+                std::weak_ptr<TaskHandle> task = std::weak_ptr<TaskHandle>(),
+                std::weak_ptr<PipelineModel> pipelineModel = std::weak_ptr<PipelineModel>(),
+                const ContainerEdgeMap& upstreams = {},
+                const ContainerEdgeMap& downstreams = {},
                 const std::vector<QueueLengthType>& queueSizes = {},
                 uint64_t timeBudgetLeft = 9999999999)
     : name(name),
@@ -260,16 +345,15 @@ struct ContainerHandle {
       model_file(model_file),
       device_agent(device_agent),
       task(task),
+      pipelineModel(pipelineModel),
       downstreams(downstreams),
       upstreams(upstreams),
       queueSizes(queueSizes),
-      pipelineModel(pipelineModel),
       timeBudgetLeft(timeBudgetLeft) {}
     
     // Copy constructor
     ContainerHandle(const ContainerHandle& other) {
         std::lock(containerHandleMutex, other.containerHandleMutex);
-        std::lock_guard<std::mutex> lock1(containerHandleMutex, std::adopt_lock);
         std::lock_guard<std::mutex> lock2(other.containerHandleMutex, std::adopt_lock);
 
         name = other.name;
@@ -288,6 +372,7 @@ struct ContainerHandle {
         task = other.task;
         upstreams = other.upstreams;
         downstreams = other.downstreams;
+        isRunning = other.isRunning;
         queueSizes = other.queueSizes;
         numMicroservices = other.numMicroservices;
         expectedTransferLatency = other.expectedTransferLatency;
@@ -330,6 +415,7 @@ struct ContainerHandle {
             task = other.task;
             upstreams = other.upstreams;
             downstreams = other.downstreams;
+            isRunning = other.isRunning;
             queueSizes = other.queueSizes;
             numMicroservices = other.numMicroservices;
             expectedTransferLatency = other.expectedTransferLatency;
@@ -355,10 +441,24 @@ struct ContainerHandle {
     MemUsageType getExpectedTotalMemUsage() const;
 };
 
+
+struct PipelineEdge {
+    std::weak_ptr<PipelineModel> targetNode;
+    // The class of interest for the edge. -1 for everything
+    int classOfInterest;
+    // Name of streams allowed to be transferred through this edge.
+    std::unordered_set<std::string> streamNames;
+};
+
+
+/**
+ * @brief PipelineModel is the logical representation of a model in the pipeline graphm,
+ * which may have multiple manifestations (containers) running in the system.
+ * */
 struct PipelineModel {
     std::string name;
     ModelType type;
-    TaskHandle *task;
+    std::weak_ptr<TaskHandle> task;
     int position_in_pipeline;
     // Whether the upstream is on another device
     bool isSplitPoint;
@@ -368,9 +468,8 @@ struct PipelineModel {
     ModelArrivalProfile arrivalProfiles;
     // Latency profile of preprocessor, batch inferencer and postprocessor
     PerDeviceModelProfileType processProfiles;
-    // The downstream models and their classes of interest
-    std::vector<std::pair<PipelineModel *, int>> downstreams;
-    std::vector<std::pair<PipelineModel *, int>> upstreams;
+    std::vector<PipelineEdge> downstreams;
+    std::vector<PipelineEdge> upstreams;
     // The batch size of the model
     BatchSizeType batchSize;
     // The number of replicas of the model
@@ -405,7 +504,7 @@ struct PipelineModel {
 
     std::string device;
     std::string deviceTypeName;
-    NodeHandle *deviceAgent;
+    std::weak_ptr<NodeHandle> deviceAgent;
 
     bool merged = false;
     bool toBeRun = true;
@@ -413,8 +512,9 @@ struct PipelineModel {
     bool canBeCombined = true;
 
     std::vector<std::string> possibleDevices;
-    // Manifestations are the list of containers that will be created for this model
-    std::vector<ContainerHandle *> manifestations;
+    
+    // Manifestations safely managed by shared_ptr
+    std::vector<std::weak_ptr<ContainerHandle>> manifestations;
 
     // Source
     std::vector<std::string> datasourceName;
@@ -428,18 +528,18 @@ struct PipelineModel {
 
     mutable std::mutex pipelineModelMutex;
 
-        // Constructor with default parameters
+    // Constructor 
     PipelineModel(const std::string& device = "",
                   const std::string& name = "",
                   ModelType type = ModelType::DataSource,
-                  TaskHandle *task = nullptr,
+                  std::weak_ptr<TaskHandle> task = std::weak_ptr<TaskHandle>(),
                   int position_in_pipeline = 0,
                   bool isSplitPoint = false,
                   bool forwardInput = false,
                   const ModelArrivalProfile& arrivalProfiles = ModelArrivalProfile(),
                   const PerDeviceModelProfileType& processProfiles = PerDeviceModelProfileType(),
-                  const std::vector<std::pair<PipelineModel*, int>>& downstreams = {},
-                  const std::vector<std::pair<PipelineModel*, int>>& upstreams = {},
+                  const std::vector<PipelineEdge>& downstreams = {},
+                  const std::vector<PipelineEdge>& upstreams = {},
                   const BatchSizeType& batchSize = BatchSizeType(),
                   uint8_t numReplicas = -1,
                   std::vector<uint8_t> cudaDevices = {},
@@ -477,11 +577,11 @@ struct PipelineModel {
           possibleDevices(possibleDevices),
           timeBudgetLeft(timeBudgetLeft) {}
 
+    // Destructor removed! std::vector<std::shared_ptr> cleans itself up.
+
     // Copy constructor
     PipelineModel(const PipelineModel& other) {
-        std::lock(pipelineModelMutex, other.pipelineModelMutex);
         std::lock_guard<std::mutex> lock1(other.pipelineModelMutex, std::adopt_lock);
-        std::lock_guard<std::mutex> lock2(pipelineModelMutex, std::adopt_lock);
         device = other.device;
         name = other.name;
         type = other.type;
@@ -515,10 +615,16 @@ struct PipelineModel {
         timeBudgetLeft = other.timeBudgetLeft;
         possibleDevices = other.possibleDevices;
         dimensions = other.dimensions;
-        manifestations = {};
-        for (auto& container : other.manifestations) {
-            manifestations.push_back(new ContainerHandle(*container));
-        }
+        
+        manifestations.clear();
+        // for (const auto& container : other.manifestations) {
+        //     // Check for valid pointer before dereferencing to prevent segfaults
+        //     if (container) {
+        //         // Allocate a new ContainerHandle managed by a shared_ptr
+        //         manifestations.push_back(std::make_shared<ContainerHandle>(*container));
+        //     }
+        // }
+        
         deviceAgent = other.deviceAgent;
         datasourceName = other.datasourceName;
     }
@@ -562,10 +668,18 @@ struct PipelineModel {
             timeBudgetLeft = other.timeBudgetLeft;
             possibleDevices = other.possibleDevices;
             dimensions = other.dimensions;
-            manifestations = {};
-            for (auto& container : other.manifestations) {
-                manifestations.push_back(new ContainerHandle(*container));
-            }
+            
+            // manifestations.clear() safely drops the reference counts of the old shared_ptrs!
+            manifestations.clear();
+            
+            // for (const auto& container : other.manifestations) {
+            //     // Check for valid pointer before dereferencing to prevent segfaults
+            //     if (container) {
+            //         // Allocate a new ContainerHandle managed by a shared_ptr
+            //         manifestations.push_back(std::make_shared<ContainerHandle>(*container));
+            //     }
+            // }
+            
             deviceAgent = other.deviceAgent;
             datasourceName = other.datasourceName;
         }
@@ -575,6 +689,10 @@ struct PipelineModel {
 
 PipelineModelListType deepCopyPipelineModelList(const PipelineModelListType& original);
 
+/**
+ * @brief TaskHandle is the logical representation of a pipeline which is a DAG of PipelineModels.
+ * 
+ */
 struct TaskHandle {
     std::string tk_name;
     std::string tk_fullName;
@@ -587,21 +705,16 @@ struct TaskHandle {
     ClockType tk_startTime;
     float tk_lastLatency;
     float tk_lastThroughput;
-    std::map<std::string, std::vector<ContainerHandle*>> tk_subTasks;
+    
+    // weak_ptr to prevent dangling pointers if containers are destroyed
+    std::map<std::string, std::vector<std::weak_ptr<ContainerHandle>>> tk_subTasks;
+    
     PipelineModelListType tk_pipelineModels;
     mutable std::mutex tk_mutex;
 
     bool tk_newlyAdded = true;
 
     TaskHandle() = default;
-
-    ~TaskHandle() {
-        // Ensure no other threads are using this object
-        std::lock_guard<std::mutex> lock(tk_mutex);
-        for (auto& model : tk_pipelineModels) {
-            delete model;
-        }
-    }
 
     TaskHandle(const std::string& tk_name,
                PipelineType tk_type,
@@ -622,9 +735,7 @@ struct TaskHandle {
       tk_lastThroughput(0.0) {}
 
     TaskHandle(const TaskHandle& other) {
-        std::lock(tk_mutex, other.tk_mutex);
         std::lock_guard<std::mutex> lock1(other.tk_mutex, std::adopt_lock);
-        std::lock_guard<std::mutex> lock2(tk_mutex, std::adopt_lock);
         tk_name = other.tk_name;
         tk_fullName = other.tk_fullName;
         tk_type = other.tk_type;
@@ -636,30 +747,83 @@ struct TaskHandle {
         tk_startTime = other.tk_startTime;
         tk_lastLatency = other.tk_lastLatency;
         tk_lastThroughput = other.tk_lastThroughput;
-        tk_subTasks = other.tk_subTasks;
+        
         tk_pipelineModels = {};
-        for (auto& model : other.tk_pipelineModels) {
-            tk_pipelineModels.push_back(new PipelineModel(*model));
-            tk_pipelineModels.back()->task = this;
+        for (const auto& model : other.tk_pipelineModels) {
+            // Safely allocate new PipelineModel managed by shared_ptr
+            auto newModel = std::make_shared<PipelineModel>(*model);
+            tk_pipelineModels.push_back(newModel);
+            
+            // FIXME: Cannot assign raw 'this' to weak_ptr here. 
+            // The Controller (Tasks) will assign the 'task' pointer after wrapping this TaskHandle in a shared_ptr.
         }
+
+        // Relink the DAG edges safely using weak_ptr locks and the new PipelineEdge struct
         for (auto& model : this->tk_pipelineModels) {
             for (auto& downstream : model->downstreams) {
+                auto old_downstream = downstream.targetNode.lock();
+                if (!old_downstream) {
+                    downstream.targetNode.reset(); // Reset to prevent dangling pointer
+                    continue;
+                }
+                
+                bool found = false;
                 for (auto& model2 : tk_pipelineModels) {
-                    if (model2->name != downstream.first->name || model2->device != downstream.first->device) {
+                    if (model2->name != old_downstream->name || model2->device != old_downstream->device) {
                         continue;
                     }
-                    downstream.first = model2;
+                    downstream.targetNode = model2; // Assigns the new shared_ptr safely to the weak_ptr
+                    found = true;
+                    break;
+                }
+                if (!found) {
+                    downstream.targetNode.reset(); // Reset to prevent dangling pointer if we can't find the downstream model 
+                    // in the new list (which shouldn't really happen)
                 }
             }
             for (auto& upstream : model->upstreams) {
+                auto old_upstream = upstream.targetNode.lock();
+                if (!old_upstream) {
+                    upstream.targetNode.reset(); // Reset to prevent dangling pointer
+                    continue;
+                }
+
+                bool found = false;
                 for (auto& model2 : tk_pipelineModels) {
-                    if (model2->name != upstream.first->name || model2->device != upstream.first->device) {
+                    if (model2->name != old_upstream->name || model2->device != old_upstream->device) {
                         continue;
                     }
-                    upstream.first = model2;
+                    upstream.targetNode = model2;
+                    found = true;
+                    break;
+                }
+
+                if (!found) {
+                    upstream.targetNode.reset(); // Reset to prevent dangling pointer if we can't find the upstream model in the new list
                 }
             }
         }
+
+        // Deep-copy tk_subTasks to map to the NEW containers, preventing dangling pointers
+        tk_subTasks.clear();
+        // for (const auto& kv : other.tk_subTasks) {
+        //     std::vector<std::weak_ptr<ContainerHandle>> new_container_list;
+        //     for (const auto& old_cont_weak : kv.second) {
+        //         auto old_cont = old_cont_weak.lock();
+        //         if (!old_cont) continue;
+
+        //         // Find the matching newly created container in the new pipeline models
+        //         for (auto& pm : tk_pipelineModels) {
+        //             for (auto& new_cont : pm->manifestations) {
+        //                 if (new_cont->name == old_cont->name) {
+        //                     new_container_list.push_back(new_cont);
+        //                 }
+        //             }
+        //         }
+        //     }
+        //     tk_subTasks[kv.first] = new_container_list;
+        // }
+
         tk_newlyAdded = other.tk_newlyAdded;
     }
 
@@ -679,33 +843,121 @@ struct TaskHandle {
             tk_startTime = other.tk_startTime;
             tk_lastLatency = other.tk_lastLatency;
             tk_lastThroughput = other.tk_lastThroughput;
-            tk_subTasks = other.tk_subTasks;
-            tk_pipelineModels = {};
-            for (auto& model : other.tk_pipelineModels) {
-                tk_pipelineModels.push_back(new PipelineModel(*model));
-                tk_pipelineModels.back()->task = this;
+            
+            // clear() safely drops reference counts of old shared_ptrs!
+            tk_pipelineModels.clear();
+            for (const auto& model : other.tk_pipelineModels) {
+                auto newModel = std::make_shared<PipelineModel>(*model);
+                tk_pipelineModels.push_back(newModel);
             }
+
+            // Relink the DAG edges safely using weak_ptr locks and the new PipelineEdge struct
             for (auto& model : this->tk_pipelineModels) {
                 for (auto& downstream : model->downstreams) {
+                    auto old_downstream = downstream.targetNode.lock();
+                    if (!old_downstream) {
+                        downstream.targetNode.reset(); // Reset to prevent dangling pointer
+                        continue;
+                    }
+
+                    bool found = false;
                     for (auto& model2 : tk_pipelineModels) {
-                        if (model2->name != downstream.first->name || model2->device != downstream.first->device) {
+                        if (model2->name != old_downstream->name || model2->device != old_downstream->device) {
                             continue;
                         }
-                        downstream.first = model2;
+                        downstream.targetNode = model2;
+                        found = true;
+                        break;
+                    }
+                    // If we cannot find the downstream model in the new list (which shouldn't happen), reset the weak_ptr to prevent dangling pointers
+                    if (!found) {
+                        downstream.targetNode.reset();
                     }
                 }
                 for (auto& upstream : model->upstreams) {
+                    auto old_upstream = upstream.targetNode.lock();
+                    if (!old_upstream)  {
+                        upstream.targetNode.reset(); // Reset to prevent dangling pointer
+                        continue;
+                    }
+
+                    bool found = false;
                     for (auto& model2 : tk_pipelineModels) {
-                        if (model2->name != upstream.first->name || model2->device != upstream.first->device) {
+                        if (model2->name != old_upstream->name || model2->device != old_upstream->device) {
                             continue;
                         }
-                        upstream.first = model2;
+                        upstream.targetNode = model2;
+                        found = true;
+                        break;
+                    }
+                    if (!found) {
+                        upstream.targetNode.reset();
                     }
                 }
             }
+
+            // Deep-copy tk_subTasks to map to the NEW containers, preventing dangling pointers
+            tk_subTasks.clear();
+            // for (const auto& kv : other.tk_subTasks) {
+            //     std::vector<std::weak_ptr<ContainerHandle>> new_container_list;
+            //     for (const auto& old_cont_weak : kv.second) {
+            //         auto old_cont = old_cont_weak.lock();
+            //         if (!old_cont) continue;
+
+            //         for (auto& pm : tk_pipelineModels) {
+            //             for (auto& new_cont : pm->manifestations) {
+            //                 if (new_cont->name == old_cont->name) {
+            //                     new_container_list.push_back(new_cont);
+            //                 }
+            //             }
+            //         }
+            //     }
+            //     tk_subTasks[kv.first] = new_container_list;
+            // }
+
             tk_newlyAdded = other.tk_newlyAdded;
         }
         return *this;
+    }
+
+    /**
+     * @brief Copy the references to the containers in tk_subTasks from another TaskHandle. 
+     * This is used when we want to keep the same container references to keep track of the same running instances.
+     * 
+     * @param other 
+     */
+    void copySubTasksFrom(const TaskHandle& other) {
+        // FIX 1: Prevent self-assignment deadlocks
+        if (this == &other) {
+            return;
+        }
+
+        std::lock(tk_mutex, other.tk_mutex);
+        std::lock_guard<std::mutex> lock1(tk_mutex, std::adopt_lock);
+        std::lock_guard<std::mutex> lock2(other.tk_mutex, std::adopt_lock);
+        
+        tk_subTasks.clear();
+
+        for (auto& pModel : tk_pipelineModels) {
+            {
+                std::lock_guard<std::mutex> pmLock(pModel->pipelineModelMutex);
+                pModel->manifestations.clear();
+            }
+
+            for (auto& otherModel : other.tk_pipelineModels) {
+                if (pModel->name == otherModel->name && pModel->device == otherModel->device) {
+                    std::lock(pModel->pipelineModelMutex, otherModel->pipelineModelMutex);
+                    std::lock_guard<std::mutex> pmLock1(pModel->pipelineModelMutex, std::adopt_lock);
+                    std::lock_guard<std::mutex> pmLock2(otherModel->pipelineModelMutex, std::adopt_lock);
+
+                    for (auto& cont : otherModel->manifestations) {
+                        tk_subTasks[pModel->name].push_back(cont);
+                        pModel->manifestations.push_back(cont);
+                    }
+                    break;
+                }
+            }
+        }
     }
 };
 
@@ -726,9 +978,13 @@ namespace TaskDescription {
     void from_json(const nlohmann::json &j, TaskStruct &val);
 }
 
+/**
+ * @brief This is the main data structure that the Controller uses to track the device list in the system.
+ * 
+ */
 struct Devices {
 public:
-    void addDevice(const std::string &name, NodeHandle *node) {
+    void addDevice(const std::string &name, std::shared_ptr<NodeHandle> node) {
         std::lock_guard<std::mutex> lock(devicesMutex);
         list[name] = node;
     }
@@ -738,21 +994,22 @@ public:
         list.erase(name);
     }
 
-    NodeHandle *getDevice(const std::string &name) {
+    std::shared_ptr<NodeHandle> getDevice(const std::string &name) {
         std::lock_guard<std::mutex> lock(devicesMutex);
-        return list[name];
+        auto it = list.find(name);
+        return (it != list.end()) ? it->second : nullptr;
     }
 
-    std::vector<NodeHandle *> getList() {
+    std::vector<std::shared_ptr<NodeHandle>> getList() {
         std::lock_guard<std::mutex> lock(devicesMutex);
-        std::vector<NodeHandle *> elements;
+        std::vector<std::shared_ptr<NodeHandle>> elements;
         for (auto &d: list) {
             elements.push_back(d.second);
         }
         return elements;
     }
 
-    std::map<std::string, NodeHandle*> getMap() {
+    std::map<std::string, std::shared_ptr<NodeHandle>> getMap() {
         std::lock_guard<std::mutex> lock(devicesMutex);
         return list;
     }
@@ -762,13 +1019,17 @@ public:
         return list.find(name) != list.end();
     }
 private:
-    std::map<std::string, NodeHandle*> list = {};
+    std::map<std::string, std::shared_ptr<NodeHandle>> list = {};
     std::mutex devicesMutex;
 };
 
+/**
+ * @brief This is the main data structure that the Controller uses to track the task lists in the system.
+ * 
+ */
 struct Tasks {
 public:
-    void addTask(const std::string &name, TaskHandle *task) {
+    void addTask(const std::string &name, std::shared_ptr<TaskHandle> task) {
         std::lock_guard<std::mutex> lock(tasksMutex);
         list[name] = task;
     }
@@ -778,21 +1039,22 @@ public:
         list.erase(name);
     }
 
-    TaskHandle *getTask(const std::string &name) {
+    std::shared_ptr<TaskHandle> getTask(const std::string &name) {
         std::lock_guard<std::mutex> lock(tasksMutex);
-        return list[name];
+        auto it = list.find(name);
+        return (it != list.end()) ? it->second : nullptr;
     }
 
-    std::vector<TaskHandle *> getList() {
+    std::vector<std::shared_ptr<TaskHandle>> getList() {
         std::lock_guard<std::mutex> lock(tasksMutex);
-        std::vector<TaskHandle *> tasks;
+        std::vector<std::shared_ptr<TaskHandle>> tasks;
         for (auto &t: list) {
             tasks.push_back(t.second);
         }
         return tasks;
     }
 
-    std::map<std::string, TaskHandle*> getMap() {
+    std::map<std::string, std::shared_ptr<TaskHandle>> getMap() {
         std::lock_guard<std::mutex> lock(tasksMutex);
         return list;
     }
@@ -803,19 +1065,28 @@ public:
     }
 
     bool hasTasks() {
+        std::lock_guard<std::mutex> lock(tasksMutex);
         return !list.empty();
     }
 
     Tasks() = default;
 
-    // Copy constructor
+    // Copy constructor (Deep Copy via make_shared)
     Tasks(const Tasks &other) {
         std::lock(tasksMutex, other.tasksMutex);
         std::lock_guard<std::mutex> lock1(tasksMutex, std::adopt_lock);
         std::lock_guard<std::mutex> lock2(other.tasksMutex, std::adopt_lock);
         list = {};
         for (auto &t: other.list) {
-            list[t.first] = new TaskHandle(*t.second);
+            // Copy the task itself
+            auto newTask = std::make_shared<TaskHandle>(*t.second);
+            
+            // Adding the task pointer to the new PipelineModels and their manifestations to maintain the graph structure.
+            for (auto& model : newTask->tk_pipelineModels) {
+                model->task = newTask; // implicitly casts to weak_ptr
+            }
+            
+            list[t.first] = newTask;
         }
     }
 
@@ -824,22 +1095,68 @@ public:
             std::lock(tasksMutex, other.tasksMutex);
             std::lock_guard<std::mutex> lock1(tasksMutex, std::adopt_lock);
             std::lock_guard<std::mutex> lock2(other.tasksMutex, std::adopt_lock);
-            list = {};
+            
+            // list.clear() safely drops the reference counts of the old shared_ptrs, preventing memory leaks!
+            list.clear();
+            
             for (auto &t: other.list) {
-                list[t.first] = new TaskHandle(*t.second);
+                // Copy the task itself
+                auto newTask = std::make_shared<TaskHandle>(*t.second);
+                
+                // Adding the task pointer to the new PipelineModels and their manifestations to maintain the graph structure.
+                for (auto& model : newTask->tk_pipelineModels) {
+                    model->task = newTask; // implicitly casts to weak_ptr
+                }
+                
+                list[t.first] = newTask;
             }
         }
         return *this;
     }
 
+    /**
+     * @brief Basically a copy constructor but this also copies the references to the containers thus it takes a snapshot of the
+     * current state of the system with the same running instances. This is used when we want to keep track of the same running
+     * instances in the scheduling cycle.
+     * 
+     * @param source 
+     */
+    void createSnapshotFrom(const Tasks& source) {
+        if (this == &source) {
+            return;
+        }
+
+        std::lock(tasksMutex, source.tasksMutex);
+        std::lock_guard<std::mutex> lock1(tasksMutex, std::adopt_lock);
+        std::lock_guard<std::mutex> lock2(source.tasksMutex, std::adopt_lock);
+        
+        list.clear();
+        
+        for (const auto& t : source.list) {
+            auto newTask = std::make_shared<TaskHandle>(*t.second);
+            
+            for (auto& model : newTask->tk_pipelineModels) {
+                model->task = newTask; 
+            }
+            
+            newTask->copySubTasksFrom(*t.second);
+            
+            list[t.first] = newTask;
+        }
+    }
+
 private:
-    std::map<std::string, TaskHandle*> list = {};
+    std::map<std::string, std::shared_ptr<TaskHandle>> list = {};
     mutable std::mutex tasksMutex;
 };
 
+/**
+ * @brief This is the main data structure that the Controller uses to track the containers running in the system
+ * 
+ */
 struct Containers {
 public:
-    void addContainer(const std::string &name, ContainerHandle *container) {
+    void addContainer(const std::string &name, std::shared_ptr<ContainerHandle> container) {
         std::lock_guard<std::mutex> lock(containersMutex);
         list[name] = container;
     }
@@ -849,14 +1166,15 @@ public:
         list.erase(name);
     }
 
-    ContainerHandle *getContainer(const std::string &name) {
+    std::shared_ptr<ContainerHandle> getContainer(const std::string &name) {
         std::lock_guard<std::mutex> lock(containersMutex);
-        return list[name];
+        auto it = list.find(name);
+        return (it != list.end()) ? it->second : nullptr;
     }
 
-    std::vector<ContainerHandle *> getList() {
+    std::vector<std::shared_ptr<ContainerHandle>> getList() {
         std::lock_guard<std::mutex> lock(containersMutex);
-        std::vector<ContainerHandle *> elements;
+        std::vector<std::shared_ptr<ContainerHandle>> elements;
         for (auto &c: list) {
             elements.push_back(c.second);
         }
@@ -867,12 +1185,16 @@ public:
         std::lock_guard<std::mutex> lock(containersMutex);
         std::vector<std::tuple<std::string, std::string, nlohmann::json>> elements;
         for (auto &c: list) {
-            elements.push_back(std::make_tuple(c.first, c.second->device_agent->name, c.second->fcpo_conf));
+            // Safely lock the weak_ptr before accessing the device agent name
+            auto agent = c.second->device_agent.lock();
+            std::string agentName = agent ? agent->name : "unassigned";
+            
+            elements.push_back(std::make_tuple(c.first, agentName, c.second->fcpo_conf));
         }
         return elements;
     }
 
-    std::map<std::string, ContainerHandle *> getMap() {
+    std::map<std::string, std::shared_ptr<ContainerHandle>> getMap() {
         std::lock_guard<std::mutex> lock(containersMutex);
         return list;
     }
@@ -883,7 +1205,7 @@ public:
     }
 
 private:
-    std::map<std::string, ContainerHandle*> list = {};
+    std::map<std::string, std::shared_ptr<ContainerHandle>> list = {};
     std::mutex containersMutex;
 };
 
@@ -904,18 +1226,11 @@ public:
         isPipelineInitialised = true;
     }
     void InitRemain() {
-        for (auto &t: remainTasks) {
-            if (!t.added) {
-                t.added = AddTask(t);
-            }
-            if (t.added) {
-                // Remove the task from the remain list
-                remainTasks.erase(std::remove_if(remainTasks.begin(), remainTasks.end(),
-                                                 [&t](const TaskDescription::TaskStruct &task) {
-                                                     return task.name == t.name;
-                                                 }), remainTasks.end());
-            }
-        }
+        remainTasks.erase(std::remove_if(remainTasks.begin(), remainTasks.end(),
+        [this](TaskDescription::TaskStruct &t) {
+            if (!t.added) { t.added = this->AddTask(t); }
+            return t.added; // Remove it if it was successfully added
+        }), remainTasks.end());
     }
 
     void AddDevice(const std::string name);
@@ -937,9 +1252,11 @@ private:
         uint64_t scaleUpIntervalThresholdSec;
         uint64_t scaleDownIntervalThresholdSec;
 
-        ClockType nextSchedulingTime = std::chrono::system_clock::time_point::min();
+        std::map<std::string, std::chrono::system_clock::time_point> nextSchedulingtime = std::map<std::string, std::chrono::system_clock::time_point>();
+        std::map<std::string, std::chrono::system_clock::time_point> nextRescalingTime = std::map<std::string, std::chrono::system_clock::time_point>();
+        // ClockType nextSchedulingTime = std::chrono::system_clock::time_point::min();
         ClockType currSchedulingTime = std::chrono::system_clock::time_point::min();
-        ClockType nextRescalingTime = std::chrono::system_clock::time_point::max();
+        // ClockType nextRescalingTime = std::chrono::system_clock::time_point::max();
     };
 
     /////////////////////////////////////////// PRIVATE FUNCTIONS ///////////////////////////////////////////
@@ -950,12 +1267,13 @@ private:
     PipelineModelListType getModelsByPipelineType(PipelineType type, const std::string &startDevice,
                                                   const std::string &pipelineName = "", const std::string &streamName = "", const std::string &edgeNode = "server");
     std::vector<std::string> getPipelineNames();
-    TaskHandle *CreatePipelineFromMessage(TaskDesc msg);
-    void UpdatePipelineFromMessage(TaskHandle* task, TaskDesc msg);
+    
+    std::shared_ptr<TaskHandle> CreatePipelineFromMessage(TaskDesc msg);
+    void UpdatePipelineFromMessage(std::shared_ptr<TaskHandle> task, TaskDesc msg);
 
     // STARTUP
     void ApplyScheduling();
-    ContainerHandle *TranslateToContainer(PipelineModel *model, NodeHandle *device, unsigned int i);
+    std::shared_ptr<ContainerHandle> TranslateToContainer(std::shared_ptr<PipelineModel> model, std::shared_ptr<NodeHandle> device, unsigned int i);
 
     // CWD
     void crossDeviceWorkloadDistributor(TaskHandle *task, uint64_t slo);
@@ -969,36 +1287,39 @@ private:
     uint8_t decNumReplicas(const PipelineModel *model);
 
     // GPU HANDLING
-    void basicGPUScheduling(std::vector<ContainerHandle *> new_containers);
+    void basicGPUScheduling(std::vector<std::shared_ptr<ContainerHandle>> new_containers);
     void initialiseGPU(NodeHandle *node, int numGPUs, std::vector<int> memLimits);
     void initiateGPULanes(NodeHandle &node);
     void insertFreeGPUPortion(GPUPortionList &portionList, GPUPortion *freePortion);
     bool removeFreeGPUPortion(GPUPortionList &portionList, GPUPortion *freePortion);
-    std::pair<GPUPortion *, GPUPortion *> insertUsedGPUPortion(GPUPortionList &portionList, ContainerHandle *container, GPUPortion *toBeDividedFreePortion);
+    std::pair<GPUPortion *, GPUPortion *> insertUsedGPUPortion(GPUPortionList &portionList,  std::shared_ptr<ContainerHandle> container, GPUPortion *toBeDividedFreePortion);
     bool reclaimGPUPortion(GPUPortion *toBeReclaimedPortion);
     GPUPortion* findFreePortionForInsertion(GPUPortionList &portionList, ContainerHandle *container);
 
     // CORAL
-    bool containerColocationTemporalScheduling(ContainerHandle *container);
+    bool containerColocationTemporalScheduling(std::shared_ptr<ContainerHandle> container);
     bool modelColocationTemporalScheduling(PipelineModel *pipelineModel, int replica_id);
     void colocationTemporalScheduling();
 
     // CONTAINER MANAGEMENT
-    void StartContainer(ContainerHandle *container, bool easy_allocation = true);
-    void MoveContainer(ContainerHandle *container, NodeHandle *new_device);
-    void StopContainer(ContainerHandle *container, NodeHandle *device, bool forced = false);
-    void AdjustUpstream(ContainerHandle *cont, ContainerHandle *upstr, NodeHandle *new_device,
+    void StartContainer(std::shared_ptr<ContainerHandle> container, bool easy_allocation = true);
+    void MoveContainer(std::shared_ptr<ContainerHandle> container, 
+                       NodeHandle *new_device);
+    void StopContainer(std::shared_ptr<ContainerHandle> container, NodeHandle *device, bool forced = false);
+    void AdjustContainerDownstreams(std::shared_ptr<ContainerHandle> cont, std::shared_ptr<ContainerHandle> upstr, NodeHandle *new_device,
                                AdjustMode mode, const std::string &old_link = "");
-    void SyncDatasource(ContainerHandle *prev, ContainerHandle *curr);
-    void AdjustBatchSize(ContainerHandle *msvc, int new_bs);
-    void AdjustCudaDevice(ContainerHandle *msvc, GPUHandle *new_device);
-    void AdjustResolution(ContainerHandle *msvc, std::vector<int> new_resolution);
-    void AdjustTiming(ContainerHandle *container);
+    void AdjustContainerDownstreamsInBatch(const std::shared_ptr<ContainerHandle> container,
+                                    const SingleContainerDownstreamAdjustmentList &downstreamAdjustmentList);
+    void SyncDatasource(std::shared_ptr<ContainerHandle> prev, std::shared_ptr<ContainerHandle> curr);
+    void AdjustBatchSize(std::shared_ptr<ContainerHandle> msvc, int new_bs);
+    void AdjustCudaDevice(std::shared_ptr<ContainerHandle> msvc, GPUHandle *new_device);
+    void AdjustResolution(std::shared_ptr<ContainerHandle> msvc, std::vector<int> new_resolution);
+    void AdjustTiming(std::shared_ptr<ContainerHandle> container);
 
     // PROFILING DATA & MONITORING
     void queryingProfiles(TaskHandle *task);
-    void queryInDeviceNetworkEntries(NodeHandle *node);
-    void calculateQueueSizes(ContainerHandle &model, const ModelType modelType);
+    void queryInDeviceNetworkEntries(std::shared_ptr<NodeHandle> node);
+    void calculateQueueSizes(std::shared_ptr<ContainerHandle> container, const ModelType modelType);
     uint64_t calculateQueuingLatency(float &arrival_rate, const float &preprocess_rate);
     NetworkEntryType initNetworkCheck(NodeHandle &node, uint32_t minPacketSize = 1000, uint32_t maxPacketSize = 1228800, uint32_t numLoops = 20);
     void checkNetworkConditions();
@@ -1021,7 +1342,8 @@ private:
             float arrivalRate2,
             const std::string &device);
     bool mergeModels(PipelineModel *mergedModel, PipelineModel *tobeMergedModel, const std::string &device);
-    TaskHandle* mergePipelines(const std::string& taskName);
+    
+    std::shared_ptr<TaskHandle> mergePipelines(const std::string& taskName);
     void mergePipelines();
 
     // CONTROL MESSAGING
@@ -1032,7 +1354,8 @@ private:
     void sendMessageToDevice(const std::string &topik, const std::string &type, const std::string &content);
 
     // API CALLS
-    void ScheduleSingleTask(const std::string &msg);
+    void ScheduleSingleTask(std::shared_ptr<TaskHandle> task);
+    void HandleStartTask(const std::string &msg);
     void StopSingleTask(const std::string &msg);
 
     /////////////////////////////////////////// PRIVATE VARIABLES ///////////////////////////////////////////
@@ -1084,7 +1407,7 @@ private:
     std::map<std::string, std::map<std::string, float>> ctrl_initialRequestRates;
 
     // FCPO
-    FCPOServer *ctrl_fcpo_server;
+    std::unique_ptr<FCPOServer> ctrl_fcpo_server;
     json ctrl_fcpo_config;
 
     BandwidthPredictor ctrl_bandwidth_predictor;
