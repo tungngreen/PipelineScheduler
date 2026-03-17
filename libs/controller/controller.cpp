@@ -494,6 +494,7 @@ void Controller::readConfigFile(const std::string &path) {
     ctrl_controlTimings.scaleDownIntervalThresholdSec = j["scale_down_interval_threshold_sec"];
     initialTasks = j["initial_pipelines"];
     AddDevice("sink");
+    AddDevice("server");
     if (j.contains("initial_devices")) {
         auto initialDevices = j["initial_devices"];
         for (const auto &device: initialDevices)

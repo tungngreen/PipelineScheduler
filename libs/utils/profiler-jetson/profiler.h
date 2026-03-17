@@ -57,7 +57,7 @@ public:
     void addPid(unsigned int pid) {};
     void removePid(unsigned int pid) {};
     static int getGpuCount() { return 1; };
-    static std::vector<unsigned int> getGpuMemory(int device_count) { return {0}; };
+    static std::vector<long> getGpuMemory(int device_count) { return {0}; };
 
     sysStats reportAtRuntime(unsigned int voidPid, unsigned int pid) {
         std::lock_guard<std::mutex> lock(m); return stats[pid]; };
