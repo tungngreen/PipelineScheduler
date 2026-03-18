@@ -1,15 +1,15 @@
 #include "fcpo_learning.h"
 
-FCPOAgent::FCPOAgent(std::string& cont_name, uint state_size, uint timeout_size, uint max_batch,  uint scaling_size,
-                     socket_t *socket, BatchInferProfileListType profile, int base_batch, torch::Dtype precision,
-                     uint update_steps, uint update_steps_inc, uint federated_steps, double lambda, double gamma,
-                     double clip_epsilon, double penalty_weight, double theta, double sigma, double phi, double rho,
-                     int seed)
-        : precision(precision), batchInferProfileList(profile), cont_name(cont_name), device_socket(socket),
-          lambda(lambda), gamma(gamma), clip_epsilon(clip_epsilon), penalty_weight(penalty_weight), theta(theta),
-          sigma(sigma), phi(phi), rho(rho), state_size(state_size), timeout_size(timeout_size), max_batch(max_batch),
-          base_batch(base_batch), scaling_size(scaling_size), update_steps(update_steps),
-          update_steps_inc(update_steps_inc), federated_steps(federated_steps) {
+FCPOAgent::FCPOAgent(std::string& cont_name, std::string& dev_name, uint state_size, uint timeout_size, uint max_batch,
+                     uint scaling_size, socket_t *socket, BatchInferProfileListType profile, int base_batch,
+                     torch::Dtype precision, uint update_steps, uint update_steps_inc, uint federated_steps,
+                     double lambda, double gamma, double clip_epsilon, double penalty_weight, double theta,
+                     double sigma, double phi, double rho, int seed)
+        : precision(precision), batchInferProfileList(profile), cont_name(cont_name), device_name(dev_name),
+        device_socket(socket), lambda(lambda), gamma(gamma), clip_epsilon(clip_epsilon), penalty_weight(penalty_weight),
+        theta(theta), sigma(sigma), phi(phi), rho(rho), state_size(state_size), timeout_size(timeout_size),
+        max_batch(max_batch), base_batch(base_batch), scaling_size(scaling_size), update_steps(update_steps),
+        update_steps_inc(update_steps_inc), federated_steps(federated_steps) {
     path = "../models/fcpo_learning/" + cont_name;
     std::filesystem::create_directories(std::filesystem::path(path));
     out.open(path + "/latest_log_" + getTimestampString() + ".csv");
@@ -59,10 +59,6 @@ void FCPOAgent::update() {
     T action3_probs = torch::softmax(policy3, -1);
     T action3_log_probs = torch::log(action3_probs.gather(-1, torch::tensor(experiences.get_scaling()).reshape({-1, 1})).squeeze(-1));
     T new_log_probs = (1 * action1_log_probs + 1 * action2_log_probs + 1 * action3_log_probs).squeeze(-1);
-    // code if using SinglePolicyNet
-    // auto [policy, val] = model->forward(torch::stack(experiences.get_states()));
-    // T actions = model->combine_actions(experiences.get_timeout(), experiences.get_batching(), experiences.get_scaling(), max_batch, scaling_size).to(torch::kInt64);
-    // T new_log_probs = torch::log(policy.gather(-1, actions.reshape({-1, 1})).squeeze(-1));
 
     T ratio = torch::exp(new_log_probs - torch::stack(experiences.get_log_probs()));
 
@@ -118,6 +114,7 @@ void FCPOAgent::federatedUpdate(const double loss) {
     // save model information in uchar* pointer and then reload it from that information
     std::ostringstream oss;
     request.set_name(cont_name);
+    request.set_device_name(device_name);
     request.set_state_size(state_size);
     request.set_timeout_size(timeout_size);
     request.set_max_batch(max_batch);
@@ -127,7 +124,7 @@ void FCPOAgent::federatedUpdate(const double loss) {
     request.set_network(oss.str());
     oss.str("");
 
-    std::string msg = absl::StrFormat("%s %s", MSG_TYPE[START_FL], request.SerializeAsString());
+    std::string msg = absl::StrFormat("%s %s %s", MSG_TYPE[TO_CONTROLLER], MSG_TYPE[START_FL], request.SerializeAsString());
     message_t zmq_msg(msg.size()), reply;
     memcpy(zmq_msg.data(), msg.data(), msg.size());
     if (!device_socket->send(zmq_msg, send_flags::dontwait)) {
@@ -277,11 +274,6 @@ void FCPOAgent::selectAction() {
     timeout = action_dist.item<int>();
     action_dist = torch::multinomial(policy3, 1);
     scaling = action_dist.item<int>();
-    // code if using SinglePolicyNet
-    // auto [policy, val] = model->forward(state);
-    // T action_dist = torch::multinomial(policy, 1);  // Sample from policy (discrete distribution)
-    // std::tie(timeout, batching, scaling) = model->interpret_action(action_dist.item<int>(), max_batch, scaling_size);
-    // log_prob = torch::log(policy[action_dist.item<int>()]);
 
     // ensure that the action is within the valid range of the given SLO
     if (batching > 0 && batchInferProfileList[batching].p95inferLat > last_slo) {

@@ -1247,7 +1247,7 @@ TaskHandle *Controller::CreatePipelineFromMessage(TaskDesc msg) {
         auto *datasource = new PipelineModel{msg.srcdevice(), "datasource", ModelType::DataSource, {}, 0, true};
         datasource->possibleDevices = {msg.srcdevice()};
         datasource->canBeCombined = false;
-        std::map<std::string, std::vector<controlmessages::PipelineNeighbor>> downstreams, upstreams;
+        std::map<std::string, std::vector<PipelineNeighbor>> downstreams, upstreams;
         std::map<std::string, PipelineModel*> models;
         models["datasource"] = datasource;
         for (auto &m: msg.models()){
@@ -1314,7 +1314,7 @@ void Controller::UpdatePipelineFromMessage(TaskHandle* task, TaskDesc msg) {
             model->name = model->name.substr(model->name.find('_') + 1);
     }
 
-    std::map<std::string, std::vector<controlmessages::PipelineNeighbor>> downstreams, upstreams;
+    std::map<std::string, std::vector<PipelineNeighbor>> downstreams, upstreams;
     std::map<std::string, PipelineModel*> models;
     PipelineModel *datasource = nullptr, *sink = nullptr;
 

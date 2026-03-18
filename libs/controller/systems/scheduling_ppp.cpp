@@ -236,7 +236,7 @@ void Controller::ScaleUp(PipelineModel *model, uint8_t numIncReps) {
         for (auto &upstream : model->upstreams) {
             for (auto &upstreamContainer : upstream.first->task->tk_subTasks[upstream.first->name]) {
                 AdjustUpstream(newContainer->recv_port, upstreamContainer, newContainer->device_agent,
-                               model->name, AdjustUpstreamMode::Add);
+                               model->name, AdjustMode::Add);
             }
         }
     }
@@ -258,7 +258,7 @@ void Controller::ScaleDown(PipelineModel *model, uint8_t numDecReps) {
         for (auto &upstream : model->upstreams) {
             for (auto &upstreamContainer : upstream.first->task->tk_subTasks[upstream.first->name]) {
                 AdjustUpstream(currContainers[i]->recv_port, upstreamContainer, currContainers[i]->device_agent,
-                               model->name, AdjustUpstreamMode::Remove);
+                               model->name, AdjustMode::Remove);
             }
         }
         StopContainer(currContainers[i], currContainers[i]->device_agent);

@@ -69,6 +69,7 @@ target_include_directories(misc
             ${CUDA_INCLUDE_DIRS} 
             ${PostgreSQL_INCLUDE_DIRS}
             ${LIBPQXX_INCLUDE_DIRS}
+            $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/../utils/protobufprotocols>
             
         PRIVATE
             # Used only when building the library:
@@ -76,6 +77,7 @@ target_include_directories(misc
 
 target_link_libraries(misc
         PUBLIC
+        control_mess_grpc_proto
         ${OpenCV_LIBS}
         ${CUDA_LIBRARIES}
         ${CMAKE_THREAD_LIBS_INIT}

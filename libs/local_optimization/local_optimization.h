@@ -5,14 +5,10 @@
 #include <random>
 #include <cmath>
 #include <chrono>
-#include "indevicemessages.grpc.pb.h"
-#include "controlmessages.grpc.pb.h"
 
 #ifndef PIPEPLUSPLUS_MICRO_OPTIMIZATION_H
 #define PIPEPLUSPLUS_MICRO_OPTIMIZATION_H
 
-using indevicemessages::FlData;
-using indevicemessages::CrlUtilityWeights;
 using T = torch::Tensor;
 
 enum threadingAction {
@@ -97,7 +93,7 @@ public:
         return {rewards.begin(), rewards.begin() + current_index  - 1};
     }
 
-    void clear() {
+    virtual void clear() {
         current_index = 0;
         is_full = false;
     }
@@ -135,6 +131,3 @@ protected:
 };
 
 #endif //PIPEPLUSPLUS_MICRO_OPTIMIZATION_H
-
-using indevicemessages::FlData;
-using T = torch::Tensor;

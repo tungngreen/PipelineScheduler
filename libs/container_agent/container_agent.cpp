@@ -221,7 +221,7 @@ json msvcconfigs::loadJson() {
         if (absl::GetFlag(FLAGS_json_path).has_value()) {
             std::ifstream file(absl::GetFlag(FLAGS_json_path).value());
             auto json_file = json::parse(file);
-            file = std::ifstream("../jsons/container_lib.json");
+            file = std::ifstream("../jsons/cpp_containers/container_lib.json");
             auto containerLibs = json::parse(file);
             std::string d = json_file["container"]["cont_taskName"].get<std::string>() + "_" +
                             json_file["container"]["cont_hostDeviceType"].get<std::string>();
@@ -564,11 +564,11 @@ ContainerAgent::ContainerAgent(const json& configs) {
 
     };
     messaging_ctx = context_t(1);
-    std::string server_address = absl::StrFormat("tcp://localhost:%d", IN_DEVICE_RECEIVE_PORT + absl::GetFlag(FLAGS_port_offset));
+    std::string server_address = absl::StrFormat("tcp://localhost:%d", DEVICE_RECEIVE_PORT + absl::GetFlag(FLAGS_port_offset));
     sending_socket = socket_t(messaging_ctx, ZMQ_REQ);
     sending_socket.connect(server_address);
     sending_socket.setsockopt(ZMQ_RCVTIMEO, 100);
-    server_address = absl::StrFormat("tcp://localhost:%d", IN_DEVICE_MESSAGE_QUEUE_PORT + absl::GetFlag(FLAGS_port_offset));
+    server_address = absl::StrFormat("tcp://localhost:%d", DEVICE_MESSAGE_QUEUE_PORT + absl::GetFlag(FLAGS_port_offset));
     device_message_queue = socket_t(messaging_ctx, ZMQ_SUB);
     device_message_queue.setsockopt(ZMQ_SUBSCRIBE, (cont_name + "|").c_str(), cont_name.size() + 1);
     device_message_queue.connect(server_address);
@@ -587,7 +587,7 @@ ContainerAgent::ContainerAgent(const json& configs) {
     }
     if ((cont_systemName == "fcpo" || cont_systemName == "apis") && !isDataSource) {
         nlohmann::json rl_conf = configs["fcpo"];
-        cont_fcpo_agent = new FCPOAgent(cont_name, rl_conf["state_size"], rl_conf["timeout_size"],
+        cont_fcpo_agent = new FCPOAgent(cont_name, cont_hostDevice, rl_conf["state_size"], rl_conf["timeout_size"],
                                         rl_conf["batch_size"], rl_conf["threads_size"], &sending_socket,
                                         cont_batchInferProfileList,
                                         cont_msvcsGroups["batcher"].msvcList[0]->msvc_idealBatchSize,
@@ -1069,8 +1069,8 @@ void ContainerAgent::collectRuntimeMetrics() {
                 cont_nextOptimizationMetricsTime = std::chrono::high_resolution_clock::now() + std::chrono::milliseconds(cont_localOptimizationIntervalMillisec);
             } else if (cont_systemName == "bce") {
                 ClientContext context;
-                indevicemessages::BCEdgeData request;
-                indevicemessages::BCEdgeConfig reply;
+                BCEdgeData request;
+                BCEdgeConfig reply;
                 request.set_msvc_name(cont_name);
                 request.set_slo(cont_msvcsGroups["inference"].msvcList[0]->msvc_contSLO);
                 aggExecutedBatchSize = 0.1;
@@ -1491,7 +1491,7 @@ void ContainerAgent::updateSender(const std::string &msg) {
     }
     std::string link = absl::StrFormat("%s:%d", request.ip(), request.port());
     auto senders = &cont_msvcsGroups["sender"].msvcList;
-    if (request.mode() == AdjustUpstreamMode::Start) {
+    if (request.mode() == AdjustMode::Start) {
         for (auto sender: *senders) {
             if (sender->dnstreamMicroserviceList[0].name != request.name()) continue;
             spdlog::get("container_agent")->error("Sender for downstream {0:s} already existing as: {1:s}", request.name(), sender->msvc_name);
@@ -1520,7 +1520,7 @@ void ContainerAgent::updateSender(const std::string &msg) {
         START();
         return;
     }
-    if (request.mode() == AdjustUpstreamMode::Stop) {
+    if (request.mode() == AdjustMode::Stop) {
         for (auto sender: *senders) {
             if (sender->dnstreamMicroserviceList[0].name != request.name()) continue;
             for (auto *postprocessor : cont_msvcsGroups["postprocessor"].msvcList) {
@@ -1564,7 +1564,7 @@ void ContainerAgent::updateSender(const std::string &msg) {
                 }
             }
             auto nb_links = config->at("msvc_dnstreamMicroservices")[0]["nb_link"];
-            if (request.mode() == AdjustUpstreamMode::Overwrite) {
+            if (request.mode() == AdjustMode::Overwrite) {
                 if (request.old_link() == "") {
                     config->at("msvc_dnstreamMicroservices")[0]["nb_link"] = {link};
                     config->at("msvc_dnstreamMicroservices")[0]["nb_portions"] = {};
@@ -1590,7 +1590,7 @@ void ContainerAgent::updateSender(const std::string &msg) {
                     }
                 }
                 spdlog::get("container_agent")->trace("Overwrote link {0:s} over {1:s}", link, request.old_link());
-            } else if (request.mode() == AdjustUpstreamMode::Add) {
+            } else if (request.mode() == AdjustMode::Add) {
                     if (std::find(nb_links.begin(),nb_links.end(), link) == nb_links.end()) {
                         config->at("msvc_dnstreamMicroservices")[0]["nb_link"].push_back(link);
                         config->at("msvc_dnstreamMicroservices")[0]["nb_portions"].push_back(request.data_portion());
@@ -1616,7 +1616,7 @@ void ContainerAgent::updateSender(const std::string &msg) {
                     return;
                 }
                 int index = std::distance(nb_links.begin(), it);
-                if (request.mode() == AdjustUpstreamMode::Remove) {
+                if (request.mode() == AdjustMode::Remove) {
                     nb_links.erase(std::remove(nb_links.begin(), nb_links.end(), link), nb_links.end());
                     config->at("msvc_dnstreamMicroservices")[0]["nb_link"] = nb_links;
                     if (index != 0) {
@@ -1628,7 +1628,7 @@ void ContainerAgent::updateSender(const std::string &msg) {
                         }
                     }
                     spdlog::get("container_agent")->trace("Removed link {0:s} from {1:s}", link, sender->msvc_name);
-                } else if (request.mode() == AdjustUpstreamMode::Modify) {
+                } else if (request.mode() == AdjustMode::Modify) {
                     sender->dnstreamMicroserviceList[0].portions[index - 1] = request.data_portion();
                     for (auto postprocessor : postprocessor_dnstreams) {
                         float portion_diff = postprocessor->portions[index] - request.data_portion();
@@ -1653,7 +1653,7 @@ void ContainerAgent::updateSender(const std::string &msg) {
 
 
 void ContainerAgent::updateBatchSize(const std::string &msg) {
-    indevicemessages::Int32 request;
+    Int32 request;
     if (!request.ParseFromString(msg)) {
         spdlog::get("container_agent")->error("Failed to parse updateBatchSize request: {0:s}", msg);
         return;
@@ -1704,7 +1704,7 @@ void ContainerAgent::updateTimeKeeping(const std::string &msg) {
 }
 
 void ContainerAgent::transferFrameID(const std::string &msg) {
-    indevicemessages::Int32 request;
+    Int32 request;
     if (!request.ParseFromString(msg)) {
         spdlog::get("container_agent")->error("Failed to parse transferFrameID request: {0:s}", msg);
         return;
@@ -1729,7 +1729,7 @@ void ContainerAgent::transferFrameID(const std::string &msg) {
 }
 
 void ContainerAgent::setFrameID(const std::string &msg) {
-    indevicemessages::Int32 request;
+    Int32 request;
     if (!request.ParseFromString(msg)) {
         spdlog::get("container_agent")->error("Failed to parse setFrameID request: {0:s}", msg);
         return;

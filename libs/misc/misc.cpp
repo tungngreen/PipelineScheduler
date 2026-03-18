@@ -7,7 +7,8 @@ using json = nlohmann::json;
 std::ofstream errOutFile;
 
 std::unordered_map<MESSAGE_TYPE_VALUES, std::string> MSG_TYPE = {
-        {DEVICE_ADVERTISEMENT, "DEV_AD"},
+        {TO_CONTROLLER, "FWD_CTRL"},
+        {TO_CONTAINER, "FWD_CONT"},
         {DUMMY_DATA, "DUMMY"},
 
         {NETWORK_CHECK, "NET_CHECK"},
@@ -31,8 +32,12 @@ std::unordered_map<MESSAGE_TYPE_VALUES, std::string> MSG_TYPE = {
         {CRL_WEIGHTS, "CRLW"},
         {BCEDGE_UPDATE, "BCEDGE_UPD"},
 
+
+        {DEVICE_ADVERTISEMENT, "DEV_AD"},
+        {CONNECT_DEVICE, "CON_DEV"},
         {START_TASK, "START"},
-        {STOP_TASK, "STOP"}
+        {STOP_TASK, "STOP"},
+        {STOP_EXPERIMENT, "STOP_EXP"}
 };
 
 std::chrono::time_point<std::chrono::_V2::system_clock, std::chrono::milliseconds> timePointCastMillisecond(
@@ -1475,7 +1480,7 @@ ContainerLibType getContainerLib(std::string deviceType) {
         deviceType = "server";
     }
     ContainerLibType containerLib;
-    std::ifstream file("../jsons/container_lib.json");
+    std::ifstream file("../jsons/cpp_containers/container_lib.json");
     json j = json::parse(file);
     file.close();
     for (const auto &item : j.items()) {
@@ -1534,9 +1539,9 @@ void addTimestampsToPath(
 }
 
 std::string generateComposeConfig(const std::string &base_file, const std::string &cont_name,
-                                   const std::string &docker_tag, const std::string &executable,
-                                   const std::string &start_string, int device, int port, int port_offset,
-                                   bool deploy_mode) {
+                                  const std::string &docker_name, const std::string &executable,
+                                  const std::string &start_string, int device,
+                                  int port, int port_offset, bool deploy_mode) {
     std::ifstream infile(base_file);
     if (!infile.is_open()) {
         spdlog::get("container_agent")->error("Failed to open base compose file: {}", base_file);
@@ -1554,8 +1559,8 @@ std::string generateComposeConfig(const std::string &base_file, const std::strin
         }
     };
 
+    replaceAll(yaml_content, "${DOCKER_NAME}", docker_name);
     replaceAll(yaml_content, "${CONTAINER_NAME}", cont_name);
-    replaceAll(yaml_content, "${DOCKER_TAG}", docker_tag);
     replaceAll(yaml_content, "${EXECUTABLE}", executable);
     replaceAll(yaml_content, "${START_STRING}", start_string);
     replaceAll(yaml_content, "${DEVICE}", std::to_string(device));

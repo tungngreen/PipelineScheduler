@@ -13,7 +13,7 @@ ABSL_FLAG(int, hidden_size, 64, "Hidden size for LSTM");
 ABSL_FLAG(int, num_layers, 2, "Number of LSTM layers");
 
 std::vector<double> load_latency_data() {
-    nlohmann::json metricsCfgs = nlohmann::json::parse(std::ifstream("../jsons/metricsserver.json"));
+    nlohmann::json metricsCfgs = nlohmann::json::parse(std::ifstream("../jsons/experiments/metricsserver.json"));
     MetricsServerConfigs metricsServerConfigs;
     metricsServerConfigs.from_json(metricsCfgs);
     metricsServerConfigs.schema = "pf15_ppp";
@@ -87,7 +87,7 @@ int main(int argc, char** argv) {
 
     spdlog::info("Loading data from database...");
     std::vector<double> latency_data = load_latency_data();
-    if (latency_data.size() < seq_len + 1) {
+    if ((int) latency_data.size() < seq_len + 1) {
         spdlog::error("Not enough data for training.");
         return 1;
     }

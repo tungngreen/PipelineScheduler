@@ -11,21 +11,6 @@
 #include "fcpo_learning.h"
 #include "bandwidth_predictor/bandwidth_predictor.h"
 
-using controlmessages::TaskCommand;
-using controlmessages::TaskDesc;
-using controlmessages::PipeModelDesc;
-using controlmessages::LoopRange;
-using controlmessages::ContainerConfig;
-using controlmessages::ContainerLink;
-using controlmessages::ContainerInts;
-using controlmessages::SinkMetrics;
-using controlmessages::ConnectionConfigs;
-using controlmessages::SystemInfo;
-using controlmessages::DummyMessage;
-using indevicemessages::FlData;
-using indevicemessages::TimeKeeping;
-using indevicemessages::ContainerSignal;
-
 ABSL_DECLARE_FLAG(std::string, ctrl_configPath);
 ABSL_DECLARE_FLAG(uint16_t, ctrl_verbose);
 ABSL_DECLARE_FLAG(uint16_t, ctrl_loggingMode);
@@ -600,7 +585,7 @@ struct TaskHandle {
     MsvcSLOType tk_slo;
     int tk_memSlo;
     ClockType tk_startTime;
-    MsvcSLOType tk_lastLatency;
+    float tk_lastLatency;
     float tk_lastThroughput;
     std::map<std::string, std::vector<ContainerHandle*>> tk_subTasks;
     PipelineModelListType tk_pipelineModels;
@@ -817,6 +802,10 @@ public:
         return list.find(name) != list.end();
     }
 
+    bool hasTasks() {
+        return !list.empty();
+    }
+
     Tasks() = default;
 
     // Copy constructor
@@ -928,8 +917,10 @@ public:
             }
         }
     }
+
+    void AddDevice(const std::string name);
     bool AddTask(const TaskDescription::TaskStruct &task);
-    void addRemainTask(const TaskDescription::TaskStruct &task) {remainTasks.push_back(task);}
+    void AddRemainTask(const TaskDescription::TaskStruct &task) {remainTasks.push_back(task);}
 
     void Scheduling();
     void HandleControlMessages();
@@ -997,7 +988,7 @@ private:
     void MoveContainer(ContainerHandle *container, NodeHandle *new_device);
     void StopContainer(ContainerHandle *container, NodeHandle *device, bool forced = false);
     void AdjustUpstream(ContainerHandle *cont, ContainerHandle *upstr, NodeHandle *new_device,
-                               AdjustUpstreamMode mode, const std::string &old_link = "");
+                               AdjustMode mode, const std::string &old_link = "");
     void SyncDatasource(ContainerHandle *prev, ContainerHandle *curr);
     void AdjustBatchSize(ContainerHandle *msvc, int new_bs);
     void AdjustCudaDevice(ContainerHandle *msvc, GPUHandle *new_device);
@@ -1064,6 +1055,7 @@ private:
     // EXPERIMENT CONFIG
     std::string ctrl_experimentName;
     std::string ctrl_systemName;
+    json ctrl_clusterInfo;
     std::vector<TaskDescription::TaskStruct> initialTasks;
     std::vector<TaskDescription::TaskStruct> remainTasks;
     uint16_t ctrl_systemFPS;
@@ -1073,7 +1065,6 @@ private:
     std::map<std::string, BatchSizeType> ctrl_initialBatchSizes;
     TimingControl ctrl_controlTimings;
     ContainerLibType ctrl_containerLib;
-    std::string ctrl_sinkNodeIP;
 
     // LOGGING
     std::string ctrl_logPath;

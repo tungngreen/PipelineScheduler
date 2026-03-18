@@ -127,7 +127,7 @@ public:
 
     float predict(const std::vector<float> &input);
 
-    int64_t getWindowSize() const {
+    size_t getWindowSize() const {
         return args.window;
     }
 

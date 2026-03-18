@@ -485,7 +485,6 @@ void Controller::readConfigFile(const std::string &path) {
     ctrl_clusterCount = j["cluster_count"];
     ctrl_port_offset = j["port_offset"];
     ctrl_systemFPS = j["system_fps"];
-    ctrl_sinkNodeIP = j["sink_ip"];
     ctrl_initialBatchSizes["yolov5"] = j["yolov5_batch_size"];
     ctrl_initialBatchSizes["edge"] = j["edge_batch_size"];
     ctrl_initialBatchSizes["server"] = j["server_batch_size"];
@@ -494,6 +493,19 @@ void Controller::readConfigFile(const std::string &path) {
     ctrl_controlTimings.scaleUpIntervalThresholdSec = j["scale_up_interval_threshold_sec"];
     ctrl_controlTimings.scaleDownIntervalThresholdSec = j["scale_down_interval_threshold_sec"];
     initialTasks = j["initial_pipelines"];
+    AddDevice("sink");
+    AddDevice("server");
+    if (j.contains("initial_devices")) {
+        auto initialDevices = j["initial_devices"];
+        for (const auto &device: initialDevices)
+            AddDevice(device);
+    } else {
+        for (const auto &task : initialTasks) {
+            AddDevice(task.srcDevice);
+            AddDevice(task.edgeNode);
+        }
+    }
+
     if (ctrl_systemName == "fcpo" || ctrl_systemName== "apis") ctrl_fcpo_config = j["fcpo_parameters"];
 }
 
@@ -552,7 +564,7 @@ bool GPUHandle::removeContainer(ContainerHandle *container) {
 }
 
 
-// ============================================================= Con/Destructors ============================================================= //
+// ============================================================= Con/Destructors ============================================================== //
 // ============================================================================================================================================ //
 // ============================================================================================================================================ //
 // ============================================================================================================================================ //
@@ -560,8 +572,10 @@ bool GPUHandle::removeContainer(ContainerHandle *container) {
 
 Controller::Controller(int argc, char **argv) {
     absl::ParseCommandLine(argc, argv);
+    std::ifstream file("../jsons/experiments/cluster_info.json");
+    ctrl_clusterInfo = json::parse(file);
     readConfigFile(absl::GetFlag(FLAGS_ctrl_configPath));
-    readInitialObjectCount("../jsons/object_count.json");
+    readInitialObjectCount("../jsons/experiments/object_count.json");
 
     ctrl_logPath = absl::GetFlag(FLAGS_ctrl_logPath);
     ctrl_logPath += "/" + ctrl_experimentName;
@@ -586,7 +600,7 @@ Controller::Controller(int argc, char **argv) {
 
     ctrl_containerLib = getContainerLib("all");
 
-    json metricsCfgs = json::parse(std::ifstream("../jsons/metricsserver.json"));
+    json metricsCfgs = json::parse(std::ifstream("../jsons/experiments/metricsserver.json"));
     ctrl_metricsServerConfigs.from_json(metricsCfgs);
     ctrl_metricsServerConfigs.schema = abbreviate(ctrl_experimentName + "_" + ctrl_systemName);
     ctrl_metricsServerConfigs.user = "controller";
@@ -642,11 +656,6 @@ Controller::Controller(int argc, char **argv) {
     message_queue.bind(server_address);
     message_queue.set(zmq::sockopt::sndtimeo, 100);
 
-    // append one device for sink of type server
-    NodeHandle *sink_node = new NodeHandle("sink", ctrl_sinkNodeIP,  SystemDeviceType::Server,
-                                            DATA_BASE_PORT + ctrl_port_offset, {});
-    devices.addDevice("sink", sink_node);
-
     if (ctrl_systemName == "fcpo" || ctrl_systemName== "apis") {
         ctrl_fcpo_server = new FCPOServer(ctrl_systemName + "_" + ctrl_experimentName, ctrl_fcpo_config, ctrl_clusterCount, &message_queue);
     }
@@ -683,6 +692,51 @@ MemUsageType ContainerHandle::getExpectedTotalMemUsage() const {
             pipelineModel->processProfiles.at(deviceTypeName).batchInfer[pipelineModel->batchSize].rssMemUsage) / 1000;
 }
 
+void Controller::AddDevice(const std::string name) {
+    // check if devices already contains the device
+    if (devices.hasDevice(name)) return;
+    std::string ip = ctrl_clusterInfo[name]["ip"];
+    std::string port = ctrl_clusterInfo[name]["port"];
+    SystemInfo request;
+    request.set_name(ctrl_systemName);
+    request.set_experiment(ctrl_experimentName);
+    std::string message = absl::StrFormat("%s %s", MSG_TYPE[CONNECT_DEVICE], request.SerializeAsString());
+    message_t zmq_msg(message.size()), reply;
+    memcpy(zmq_msg.data(), message.data(), message.size());
+    context_t ctx(1);
+    socket_t socket(ctx, ZMQ_REQ);
+    std::string address = absl::StrFormat("tcp://%s:%s", ip, port);
+    socket.connect(address);
+    if (!socket.send(zmq_msg, send_flags::dontwait)) {
+        spdlog::get("container_agent")->error("Failed to send connection request to device %s.", ip.c_str());
+        return;
+    }
+    if (!socket.recv(reply)) {
+        spdlog::get("container_agent")->error("Failed to receive reply from device %s.", ip.c_str());
+        return;
+    }
+    DeviceInfo info;
+    if (!info.ParseFromString(reply.to_string())) {
+        spdlog::get("container_agent")->error("Failed to parse reply from device %s.", ip.c_str());
+        return;
+    }
+    std::string deviceName = info.name();
+    NodeHandle *node = new NodeHandle{deviceName, ip, static_cast<SystemDeviceType>(info.type()),
+                                      DATA_BASE_PORT + (std::stoi(port) - DEVICE_RECEIVE_PORT), {}};
+    initialiseGPU(node, info.processors(), std::vector<int>(info.memory().begin(), info.memory().end()));
+    devices.addDevice(deviceName, node);
+    spdlog::get("container_agent")->info("Device {} is connected to the system", deviceName);
+
+    queryInDeviceNetworkEntries(devices.getDevice(deviceName));
+
+    if (node->type != SystemDeviceType::Server) {
+        std::thread networkCheck(&Controller::initNetworkCheck, this, std::ref(*(devices.getDevice(deviceName))), 1000, 300000, 30);
+        networkCheck.detach();
+    } else {
+        node->initialNetworkCheck = true;
+    }
+}
+
 bool Controller::AddTask(const TaskDescription::TaskStruct &t) {
     std::cout << "Adding task: " << t.name << std::endl;
     TaskHandle *task = new TaskHandle{t.name, t.type, t.stream, t.srcDevice, t.slo, {}};
@@ -713,7 +767,7 @@ bool Controller::AddTask(const TaskDescription::TaskStruct &t) {
 
 void Controller::initialiseGPU(NodeHandle *node, int numGPUs, std::vector<int> memLimits) {
     if (node->type == SystemDeviceType::Virtual) {
-        GPUHandle *gpuNode = new GPUHandle{"3090", node->name, 0, memLimits[0] - 2000, NUM_LANES_PER_GPU, node};
+        GPUHandle *gpuNode = new GPUHandle{node->name, node->name, 0, memLimits[0] - 2000, NUM_LANES_PER_GPU, node};
         // TODO: differentiate between virtualEdge and virtualServer
         //GPUHandle *gpuNode = new GPUHandle{node->name, node->name, 0, memLimits[0] / 5, 1, node};
         node->gpuHandles.emplace_back(gpuNode);
@@ -874,7 +928,7 @@ void Controller::ApplyScheduling() {
     }
     // Rearranging the upstreams and downstreams for containers;
     for (auto pipe: ctrl_scheduledPipelines.getList()) {
-        std::vector<std::tuple<ContainerHandle*, ContainerHandle*, AdjustUpstreamMode>> adjust_list = {};
+        std::vector<std::tuple<ContainerHandle*, ContainerHandle*, AdjustMode>> adjust_list = {};
         for (auto &model: pipe->tk_pipelineModels) {
             // If it's a datasource, we don't have to do it now
             // datasource doesn't have upstreams and the downstreams will be set later
@@ -899,7 +953,7 @@ void Controller::ApplyScheduling() {
                         auto it = std::find(downs.begin(), downs.end(), container);
                         if (it != downs.end()) {
                             downs.erase(it);
-                            adjust_list.push_back({oldUp, container, AdjustUpstreamMode::Stop});
+                            adjust_list.push_back({oldUp, container, AdjustMode::Stop});
                         }
                     }
                 }
@@ -913,7 +967,7 @@ void Controller::ApplyScheduling() {
                     auto &downs = wantUp->downstreams;
                     if (std::find(downs.begin(), downs.end(), container) == downs.end()) {
                         downs.push_back(container);
-                        adjust_list.push_back({wantUp, container, AdjustUpstreamMode::Start});
+                        adjust_list.push_back({wantUp, container, AdjustMode::Start});
                     }
                 }
             }
@@ -1064,15 +1118,19 @@ void Controller::AdjustTiming(ContainerHandle *container) {
     // `container->task->tk_slo` for the total SLO of the pipeline
     container->cycleStartTime = ctrl_currSchedulingTime;
 
-    TimeKeeping request;
-    request.set_name(container->name);
-    request.set_slo(container->pipelineSLO);
-    request.set_time_budget(container->timeBudgetLeft);
-    request.set_start_time(container->startTime);
-    request.set_end_time(container->endTime);
-    request.set_local_duty_cycle(container->localDutyCycle);
-    request.set_cycle_start_time(std::chrono::duration_cast<TimePrecisionType>(container->cycleStartTime.time_since_epoch()).count());
-    sendMessageToDevice(container->device_agent->name, MSG_TYPE[TIME_KEEPING_UPDATE], request.SerializeAsString());
+    TimeKeeping message;
+    message.set_slo(container->pipelineSLO);
+    message.set_time_budget(container->timeBudgetLeft);
+    message.set_start_time(container->startTime);
+    message.set_end_time(container->endTime);
+    message.set_local_duty_cycle(container->localDutyCycle);
+    message.set_cycle_start_time(std::chrono::duration_cast<TimePrecisionType>(container->cycleStartTime.time_since_epoch()).count());
+
+    PackagedMsg request;
+    request.set_target_name(container->name);
+    request.set_payload(absl::StrFormat("%s %s", MSG_TYPE[TIME_KEEPING_UPDATE], message.SerializeAsString()));
+
+    sendMessageToDevice(container->device_agent->name, MSG_TYPE[TO_CONTAINER], request.SerializeAsString());
     spdlog::get("container_agent")->info("Requested container {0:s} to update time keeping!", container->name);
 }
 
@@ -1233,6 +1291,15 @@ void Controller::StartContainer(ContainerHandle *container, bool easy_allocation
     container->fcpo_conf = start_config["fcpo"];
 
     request.set_name(container->name);
+    std::string docker_tag = "lucasliebe/pipeplusplus:";
+    auto dev_type = container->device_agent->type;
+    if (dev_type == Virtual || dev_type == Server || dev_type == OnPremise)
+        docker_tag += "amd64-torch";
+    else if (dev_type == NanoXavier || dev_type == NXXavier || dev_type == AGXXavier)
+        docker_tag += "jp512-torch";
+    else if (dev_type == OrinNano || dev_type == OrinNX || dev_type == OrinAGX)
+        docker_tag += "jp61-torch";
+    request.set_docker_tag(docker_tag);
     request.set_json_config(start_config.dump());
     std::cout << start_config.dump() << std::endl;
     request.set_executable(ctrl_containerLib[modelName].runCommand);
@@ -1292,7 +1359,7 @@ void Controller::MoveContainer(ContainerHandle *container, NodeHandle *device) {
             SyncDatasource(upstr, container);
             StopContainer(upstr, old_device);
         } else {
-            AdjustUpstream(container, upstr, device, AdjustUpstreamMode::Overwrite, old_link);
+            AdjustUpstream(container, upstr, device, AdjustMode::Overwrite, old_link);
         }
     }
     StopContainer(container, old_device);
@@ -1301,26 +1368,29 @@ void Controller::MoveContainer(ContainerHandle *container, NodeHandle *device) {
 }
 
 void Controller::AdjustUpstream(ContainerHandle *cont, ContainerHandle *upstr, NodeHandle *new_device,
-                                AdjustUpstreamMode mode, const std::string &old_link) {
-    ContainerLink request;
-    request.set_mode(mode);
-    request.set_name(upstr->name);
-    request.set_downstream_name(cont->pipelineModel->name);
-    request.set_ip(new_device->ip);
-    request.set_port(cont->recv_port);
-    request.set_data_portion(1.0);
-    request.set_old_link(old_link);
-    request.set_offloading_duration(0);
-    request.set_class_of_interest(cont->class_of_interest);
+                                AdjustMode mode, const std::string &old_link) {
+    Connection message;
+    message.set_mode(mode);
+    message.set_name(cont->pipelineModel->name);
+    message.set_ip(new_device->ip);
+    message.set_port(cont->recv_port);
+    message.set_data_portion(1.0);
+    message.set_old_link(old_link);
+    message.set_offloading_duration(0);
+    message.set_class_of_interest(cont->class_of_interest);
 
-    sendMessageToDevice(upstr->device_agent->name, MSG_TYPE[ADJUST_UPSTREAM], request.SerializeAsString());
+    PackagedMsg request;
+    request.set_target_name(upstr->name);
+    request.set_payload(absl::StrFormat("%s %s", MSG_TYPE[UPDATE_SENDER], message.SerializeAsString()));
+
+    sendMessageToDevice(upstr->device_agent->name, MSG_TYPE[TO_CONTAINER], request.SerializeAsString());
     spdlog::get("container_agent")->info("Upstream of {0:s} adjusted to container {1:s}", upstr->name, cont->pipelineModel->name);
 }
 
 void Controller::SyncDatasource(ContainerHandle *prev, ContainerHandle *curr) {
-    ContainerLink request;
+    Connection request;
     request.set_name(prev->name);
-    request.set_downstream_name(curr->name);
+    request.set_old_link(curr->name);
 
     sendMessageToDevice(curr->device_agent->name, MSG_TYPE[SYNC_DATASOURCES], request.SerializeAsString());
     spdlog::get("container_agent")->info("Datasource {0:s} synced with {1:s}", prev->name, curr->name);
@@ -1328,11 +1398,14 @@ void Controller::SyncDatasource(ContainerHandle *prev, ContainerHandle *curr) {
 
 void Controller::AdjustBatchSize(ContainerHandle *msvc, int new_bs) {
     msvc->batch_size = new_bs;
-    ContainerInts request;
-    request.set_name(msvc->name);
-    request.add_value(new_bs);
+    Int32 bs;
+    bs.set_value(new_bs);
 
-    sendMessageToDevice(msvc->device_agent->name, MSG_TYPE[BATCH_SIZE_UPDATE], request.SerializeAsString());
+    PackagedMsg request;
+    request.set_target_name(msvc->name);
+    request.set_payload(absl::StrFormat("%s %s", MSG_TYPE[BATCH_SIZE_UPDATE], bs.SerializeAsString()));
+
+    sendMessageToDevice(msvc->device_agent->name, MSG_TYPE[TO_CONTAINER], request.SerializeAsString());
     spdlog::get("container_agent")->info("Batch size of {0:s} adjusted to {1:d}", msvc->name, new_bs);
 }
 
@@ -1343,13 +1416,16 @@ void Controller::AdjustCudaDevice(ContainerHandle *msvc, GPUHandle *new_device) 
 
 void Controller::AdjustResolution(ContainerHandle *msvc, std::vector<int> new_resolution) {
     msvc->dimensions = new_resolution;
-    ContainerInts request;
-    request.set_name(msvc->name);
-    request.add_value(new_resolution[0]);
-    request.add_value(new_resolution[1]);
-    request.add_value(new_resolution[2]);
+    Dimensions dims;
+    dims.set_channels(new_resolution[0]);
+    dims.set_height(new_resolution[1]);
+    dims.set_width(new_resolution[2]);
 
-    sendMessageToDevice(msvc->device_agent->name, MSG_TYPE[RESOLUTION_UPDATE], request.SerializeAsString());
+    PackagedMsg request;
+    request.set_target_name(msvc->name);
+    request.set_payload(absl::StrFormat("%s %s", MSG_TYPE[RESOLUTION_UPDATE], dims.SerializeAsString()));
+
+    sendMessageToDevice(msvc->device_agent->name, MSG_TYPE[TO_CONTAINER], request.SerializeAsString());
     spdlog::get("container_agent")->info("Resolution of {0:s} adjusted to {1:d}x{2:d}x{3:d}",
                                       msvc->name, new_resolution[0], new_resolution[1], new_resolution[2]);
 }
@@ -1471,22 +1547,22 @@ void Controller::HandleControlMessages() {
 }
 
 void Controller::handleDeviseAdvertisement(const std::string& msg) {
-    ConnectionConfigs request;
+    DeviceInfo request;
     SystemInfo reply;
     if (!request.ParseFromString(msg)){
         spdlog::get("container_agent")->error("Failed to connect device with msg: {}", msg);
         return;
     }
-    std::string deviceName = request.device_name();
+    std::string deviceName = request.name();
 
-    NodeHandle *node = new NodeHandle{deviceName, request.ip_address(), static_cast<SystemDeviceType>(request.device_type()),
+    NodeHandle *node = new NodeHandle{deviceName, request.ip_address(), static_cast<SystemDeviceType>(request.type()),
                                       DATA_BASE_PORT + ctrl_port_offset + request.agent_port_offset(), {}};
     reply.set_name(ctrl_systemName);
     reply.set_experiment(ctrl_experimentName);
     server_socket.send(message_t(reply.SerializeAsString()), send_flags::dontwait);
     initialiseGPU(node, request.processors(), std::vector<int>(request.memory().begin(), request.memory().end()));
     devices.addDevice(deviceName, node);
-    spdlog::get("container_agent")->info("Device {} is connected to the system", request.device_name());
+    spdlog::get("container_agent")->info("Device {} is connected to the system", request.name());
     queryInDeviceNetworkEntries(devices.getDevice(deviceName));
 
     if (node->type != SystemDeviceType::Server) {
@@ -1600,11 +1676,13 @@ NetworkEntryType Controller::initNetworkCheck(NodeHandle &node, uint32_t minPack
     if (entries.empty()) entries = {std::pair<uint32_t, uint64_t>{1, 1}};
     node.latestNetworkEntries["server"] = entries;
     node.lastNetworkCheckTime = std::chrono::system_clock::now();
-    if (node.transmissionLatencyHistory.size() > ctrl_bandwidth_predictor.getWindowSize()) {
-        node.transmissionLatencyHistory.erase(node.transmissionLatencyHistory.begin());
+    if (ctrl_systemName == "fcpo") {
+        if (node.transmissionLatencyHistory.size() > ctrl_bandwidth_predictor.getWindowSize()) {
+            node.transmissionLatencyHistory.erase(node.transmissionLatencyHistory.begin());
+        }
+        node.transmissionLatencyHistory.push_back(latency / 1000.0f); // convert to ms
+        node.transmissionLatencyPrediction = ctrl_bandwidth_predictor.predict(node.transmissionLatencyHistory);
     }
-    node.transmissionLatencyHistory.push_back(latency / 1000.0f); // convert to ms
-    node.transmissionLatencyPrediction = ctrl_bandwidth_predictor.predict(node.transmissionLatencyHistory);
     node.networkCheckMutex.unlock();
     return entries;
 };

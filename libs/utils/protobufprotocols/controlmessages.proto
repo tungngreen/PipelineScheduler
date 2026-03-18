@@ -5,6 +5,102 @@ option objc_class_prefix = "HLW";
 
 package controlmessages;
 
+enum SystemPorts {
+  UNKNOWN_PORT = 0;
+  DATA_BASE_PORT = 55001;
+  CONTROLLER_API_PORT = 60000;
+  CONTROLLER_RECEIVE_PORT = 60001;
+  CONTROLLER_MESSAGE_QUEUE_PORT = 60002;
+  DEVICE_RECEIVE_PORT = 60011;
+  DEVICE_MESSAGE_QUEUE_PORT = 60012;
+}
+
+enum MESSAGE_TYPE_VALUES {
+    TO_CONTROLLER = 0;
+    TO_CONTAINER = 1;
+    DUMMY_DATA = 2;
+
+    NETWORK_CHECK = 3;
+    DEVICE_SHUTDOWN = 4;
+
+    CONTAINER_START = 5;
+    MSVC_START_REPORT = 6;
+    CONTEXT_METRICS = 7;
+    SINK_METRICS = 8;
+    ADJUST_UPSTREAM = 9;
+    UPDATE_SENDER = 10;
+    SYNC_DATASOURCES = 11;
+    TRANSFER_FRAME_ID = 12;
+    BATCH_SIZE_UPDATE = 13;
+    RESOLUTION_UPDATE = 14;
+    TIME_KEEPING_UPDATE = 15;
+    CONTAINER_STOP = 16;
+
+    START_FL = 17;
+    RETURN_FL = 18;
+    CRL_WEIGHTS = 19;
+    BCEDGE_UPDATE = 20;
+
+    DEVICE_ADVERTISEMENT = 21;
+    CONNECT_DEVICE = 22;
+    START_TASK = 23;
+    STOP_TASK = 24;
+    STOP_EXPERIMENT = 25;
+};
+
+enum AdjustMode {
+  Overwrite = 0;
+  Add = 1;
+  Remove = 2;
+  Modify = 3;
+  Start = 4;
+  Stop = 5;
+};
+
+enum SystemDeviceType {
+  Virtual = 0;
+  Server = 1;
+  OnPremise = 2;
+
+  OrinAGX = 3;
+  OrinNX = 4;
+  OrinNano = 5;
+
+  AGXXavier = 6;
+  NXXavier = 7;
+  NanoXavier = 8;
+
+  SinkDevice = 9;
+};
+
+enum ModelType {
+    DataSource = 0;
+    Sink = 1;
+    Yolov5n = 2;
+    Yolov5n320 = 3;
+    Yolov5n512 = 4;
+    Yolov5s = 5;
+    Yolov5m = 6;
+    Yolov5nDsrc = 7;
+    Arcface = 8;
+    Retinaface = 9;
+    RetinaMtface = 10;
+    RetinaMtfaceDsrc = 11;
+    PlateDet = 12;
+    Movenet = 13;
+    Emotionnet = 14;
+    Gender = 15;
+    Age = 16;
+    CarBrand = 17;
+    CarColor = 18;
+    CarDamage = 19;
+    FireDetect = 20;
+    FashionColor = 21;
+    GearDetect = 22;
+    EquipDetect = 23;
+    End = 24;
+};
+
 message PipelineNeighbor {
   string name = 1;
   int32 classOfInterest = 2;
@@ -36,19 +132,21 @@ message TaskCommand {
   string task_srcDevice = 2;
 }
 
-message ConnectionConfigs {
-  string device_name = 1;
-  uint32 device_type = 2;
-  string ip_address = 3;
-  int32 agent_port_offset = 4;
-  int32 processors = 5;
-  repeated uint64 memory = 6;
+message DeviceInfo {
+  string name = 1;
+  uint32 type = 2;
+  int32 processors = 3;
+  repeated uint64 memory = 4;
+  string ip_address = 5;
+  int32 agent_port_offset = 6;
 }
 
 message SystemInfo {
   string name = 1;
   string experiment = 2;
-  repeated DownStreamElement offloading_targets = 3;
+  string ctrl_ip_address = 3;
+  int32 bandwidth_setting = 4;
+  repeated DownStreamElement offloading_targets = 5;
 }
 
 message DownStreamElement {
@@ -66,30 +164,13 @@ message DummyMessage {
 
 message ContainerConfig {
   string name = 1;
-  string json_config = 2;
-  string executable = 3;
-  int32 device = 4;
-  int32 control_port = 5;
-  int32 model_type = 6;
-  repeated int32 input_shape = 7;
-}
-
-message ContainerLink {
-  int32 mode = 1;
-  string name = 2;
-  string downstream_name = 3;
-  string ip = 4;
-  int32 port = 5;
-  float data_portion = 6;
-  string old_link = 7;
-  int64 timestamp = 8;
-  int32 offloading_duration = 9;
-  int32 class_of_interest = 10;
-}
-
-message ContainerInts {
-  string name = 1;
-  repeated int32 value = 2;
+  string docker_tag = 2;
+  string json_config = 3;
+  string executable = 4;
+  int32 device = 5;
+  int32 control_port = 6;
+  int32 model_type = 7;
+  repeated int32 input_shape = 8;
 }
 
 message LoopRange {
@@ -100,6 +181,97 @@ message LoopRange {
 
 message SinkMetrics {
   string name = 1;
-  int64 avg_latency = 2;
+  float avg_latency = 2;
   int32 throughput = 3;
+}
+
+message PackagedMsg {
+  string target_name = 1;
+  string payload = 2;
+}
+
+message ContainerSignal {
+  string name = 1;
+  bool forced = 2;
+}
+
+message Connection {
+  int32 mode = 1;
+  string name = 2;
+  string ip = 3;
+  int32 port = 4;
+  float data_portion = 5;
+  string old_link = 6;
+  int64 timestamp = 7;
+  int32 offloading_duration = 8;
+  int32 class_of_interest = 9;
+}
+
+message TimeKeeping {
+  int32 slo = 1;
+  uint64 time_budget = 2;
+  uint64 start_time = 3;
+  uint64 end_time = 4;
+  uint64 local_duty_cycle = 5;
+  uint64 cycle_start_time = 6;
+}
+
+message Dimensions {
+  int32 channels = 1;
+  int32 height = 2;
+  int32 width = 3;
+}
+
+message Int32 {
+  int32 value = 1;
+  string name = 2;
+}
+
+message BCEdgeData {
+  string msvc_name = 1;
+  int32 slo = 2;
+  double throughput = 3;
+  double latency = 4;
+}
+
+message BCEdgeConfig {
+  int32 batch_size = 1;
+  int32 shared_mem_config = 2;
+}
+
+message CrlUtilityWeights {
+  string name = 1;
+  float theta = 2;
+  float sigma = 3;
+  float phi = 4;
+  float rho = 5;
+}
+
+message ProcessData {
+  string msvc_name = 1;
+  uint32 pid = 2;
+}
+
+message ContainerMetrics {
+  string name = 1;
+  float arrival_rate = 2;
+  int32 queue_size = 3;
+  int64 avg_latency = 4;
+  int32 drops = 5;
+  int32 throughput = 6;
+}
+
+message FlData {
+  string name = 1;
+  string device_name = 2;
+  uint32 state_size = 3;
+  uint32 timeout_size = 4;
+  uint32 max_batch = 5;
+  uint32 threading_size = 6;
+  double latest_loss = 7;
+  bytes network = 8;
+  optional bytes states = 9;
+  optional bytes timeout_actions = 10;
+  optional bytes batching_actions = 11;
+  optional bytes scaling_actions = 12;
 }

@@ -35,14 +35,6 @@ ABSL_DECLARE_FLAG(bool, restart);
 
 using json = nlohmann::ordered_json;
 
-using indevicemessages::ContainerSignal;
-using indevicemessages::Connection;
-using indevicemessages::TimeKeeping;
-using indevicemessages::Dimensions;
-using indevicemessages::ProcessData;
-using indevicemessages::ContainerMetrics;
-using EmptyMessage = google::protobuf::Empty;
-
 extern std::atomic<bool> CONT_RUN;
 
 enum TransferMethod {

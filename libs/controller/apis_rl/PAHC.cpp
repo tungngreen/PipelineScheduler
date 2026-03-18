@@ -83,26 +83,22 @@ std::vector<float> PAHC::runStep() {
     sw.stop();
 
     out << "step," << sw.elapsed_microseconds() << "," << steps_counter << "," << cumu_reward  << "," ;
-    for (int i = 0; i < weights_size; i++) {
-        out << output[0][i].item<float>();
-        weights.emplace_back(output[0][i].item<float>());
+    for (unsigned int i = 0; i < weights_size; i++) {
+        out << output[i].item<float>();
+        weights.emplace_back(output[i].item<float>());
         if (i < weights_size - 1) out << ",";
     }
     out << std::endl;
 
     if (update_steps > 0 ) {
         steps_counter++;
-        if (steps_counter % update_steps == 0) {
-            update();
-        }
     }
     return weights;
 }
 
 void PAHC::rewardCallback(double throughput, double latency, double memory_use) {
     if (update_steps > 0 ) {
-        if (first) { // First reward is not valid and needs to be discarded
-            first = false;
+        if (first) {
             return;
         }
         double reward = (throughput + latency + memory_use) / 3.0;
@@ -133,44 +129,59 @@ T PAHC::selectAction() {
     auto W = torch::tanh(raw_W);
 
     if (update_steps > 0 ) {
-        log_prob = (-0.5 * ((raw_W - mean) / std).pow(2) - log_std - 0.5 * std::log(2 * M_PI) - torch::log(1.0 - W.pow(2) + 1e-6)).sum(1, true);
-        experiences.add(state, log_prob, W);
+        experiences.add(state, log_std, mean, W);
     }
     return W;
 }
 
 void PAHC::update() {
-    steps_counter = 0;
-    spdlog::get("container_agent")->info("Locally training RL Agent at cumulative Reward {}!", cumu_reward);
+    if (steps_counter < update_steps)
+        return;
+    spdlog::get("container_agent")->info("Training ApisRL Agent at cumulative Reward {}!", cumu_reward);
     Stopwatch sw;
     sw.start();
-    auto states = torch::stack(experiences.get_states());
-    auto actions = torch::stack(experiences.get_weights());
-    auto log_probs = torch::stack(experiences.get_log_probs());
-
-    int x = experiences.get_states().size() - experiences.get_rewards().size();
-    if (x > 0) {
-        states.narrow(0, 0, states.size(0) - x);
-        actions.narrow(0, 0, actions.size(0) - x);
-        log_probs.narrow(0, 0, log_probs.size(0) - x);
+    T states, actions, log_stds, means, rewards;
+    try {
+        std::tie(states, actions, log_stds, means, rewards) = experiences.sample(steps_counter);
+    } catch (const c10::Error& e) {
+        spdlog::get("container_agent")->error("Error sampling experiences for PAHC update: {}", e.what());
+        reset();
+        experiences.clear();
+        return;
     }
+    rewards.to(precision);
+
+    size_t buffer_size = rewards.size(0);
+    if (buffer_size < new_states.size()) {
+        new_states.erase(new_states.begin(), new_states.end() - buffer_size);
+    } else if (buffer_size > new_states.size()) {
+        spdlog::get("container_agent")->warn("Not enough new states collected for PAHC update! Expected: {}, Got: {}. Skipping update.",
+                                             buffer_size, new_states.size());
+        buffer_size = new_states.size();
+        states = states.slice(0, 0, buffer_size, 1);
+        actions = actions.slice(0, 0, buffer_size, 1);
+        log_stds = log_stds.slice(0, 0, buffer_size, 1);
+        means = means.slice(0, 0, buffer_size, 1);
+        rewards = rewards.slice(0, 0, buffer_size, 1);
+    }
+    T next_states = torch::stack(new_states).to(precision);
 
     // --- CRITIC UPDATE (L_Q) ---
-    auto [mean, log_std] = actor->forward(torch::stack(new_states));
-    auto std = torch::exp(log_std);
-    auto noise = torch::randn_like(mean);
-    auto raw_W = mean + noise * std;
-    auto next_actions = torch::tanh(raw_W);
-    auto next_log_prob = (-0.5 * ((raw_W - mean) / std).pow(2) - log_std - 0.5 * std::log(2 * M_PI) - torch::log(1.0 - next_actions.pow(2) + 1e-6)).sum(1, true);
+    auto [mean, log_std] = actor->forward(next_states);
+    auto next_std = torch::exp(log_std);
+    auto next_noise = torch::randn_like(mean);
+    auto next_raw_W = mean + next_noise * next_std;
+    auto next_actions = torch::tanh(next_raw_W);
+    auto next_log_prob = (-0.5 * ((next_raw_W - mean) / next_std).pow(2) - log_std - 0.5 * std::log(2 * M_PI) - torch::log(1.0 - next_actions.pow(2) + 1e-6)).sum(1, true);
 
-    auto target_q1 = critic1_target->forward(states, next_actions);
-    auto target_q2 = critic2_target->forward(states, next_actions);
+    auto target_q1 = critic1_target->forward(next_states, next_actions);
+    auto target_q2 = critic2_target->forward(next_states, next_actions);
     double alpha_meta = std::exp(log_alpha_meta.item<double>());
 
     // Soft Q target: Y^m = R^m + gamma * [ min(Q_target) - alpha_meta * log(pi(W'|S')) ]
     auto min_target_q = torch::min(target_q1, target_q2);
     auto next_q_value = min_target_q - alpha_meta * next_log_prob;
-    auto target_q_value = torch::tensor(experiences.get_rewards()).to(precision) + 0.99 * next_q_value;
+    auto target_q_value = rewards + 0.99 * next_q_value;
 
     auto current_q1 = critic1->forward(states, actions);
     auto current_q2 = critic2->forward(states, actions);
@@ -179,11 +190,13 @@ void PAHC::update() {
     auto critic2_loss = torch::mse_loss(current_q2, target_q_value.detach());
 
     optimizer_critic1->zero_grad();
-    critic1_loss.backward();
+    torch::autograd::backward({critic1_loss}, {}, /*retain_graph=*/true);
     optimizer_critic1->step();
+    torch::save(critic1, path + "/latest_critic1.pt");
     optimizer_critic2->zero_grad();
-    critic2_loss.backward();
+    torch::autograd::backward({critic2_loss}, {}, /*retain_graph=*/true);
     optimizer_critic2->step();
+    torch::save(critic2, path + "/latest_critic2.pt");
 
     // --- ACTOR UPDATE (L_pi) ---
     auto q1_pi = critic1->forward(states, actions);
@@ -194,43 +207,49 @@ void PAHC::update() {
     // Assuming reward tensor 'reward' is scalarized by V to get the single R used above.
     // To strictly implement the suggested loss:
     // L_pi = E[ alpha*log(pi(W|S)) - V * min(Q(S,W)) ]
+
+    auto raw_W = actions.atanh(); // Inverse of tanh to get raw actions
+    auto std = torch::exp(log_stds);
+    auto log_probs = (-0.5 * ((raw_W - means) / std).pow(2) - log_stds - 0.5 * std::log(2 * M_PI) - torch::log(1.0 - actions.pow(2) + 1e-6)).sum(0, true);
     auto actor_loss = (alpha_meta * log_probs - min_q_pi).mean();
 
     optimizer_actor->zero_grad();
-    actor_loss.backward();
+    torch::autograd::backward({actor_loss}, {}, /*retain_graph=*/true);
     optimizer_actor->step();
+    torch::save(actor, path + "/latest_actor.pt");
 
     // --- ALPHA (Temperature) UPDATE (L_alpha) ---
-    auto alpha_loss = -(log_alpha_meta * (log_prob.detach() + (-static_cast<double>(weights_size)))).mean();
+    auto alpha_loss = -(log_alpha_meta * (log_probs.detach() + (-static_cast<double>(weights_size)))).mean();
 
     optimizer_alpha->zero_grad();
-    alpha_loss.backward();
+    torch::autograd::backward({alpha_loss}, {}, /*retain_graph=*/true);
     optimizer_alpha->step();
     soft_update_targets();
 
     double avg_reward = cumu_reward / (double) update_steps;
     out << "episodeEnd," << sw.elapsed_microseconds() << "," << steps_counter << "," << cumu_reward << ","
         << avg_reward << std::endl;
-
     reset();
 }
 
 void PAHC::soft_update_targets() {
-    torch::NoGradGuard no_grad; // Ensure no gradients are tracked during update
+    torch::NoGradGuard no_grad;
+    constexpr double tau = 0.005;
+    constexpr double one_minus_tau = 1.0 - tau;
 
-    // Update Critic 1 Target
     for (const auto& pair : critic1->named_parameters()) {
-        auto name = pair.key();
-        auto param = pair.value();
+        const auto& name = pair.key();
+        const auto& param = pair.value();
         auto target_param = critic1_target->named_parameters()[name];
-        target_param.copy_(target_param * (1.0 - 0.005) + param * 0.005);
+
+        target_param.data().copy_(target_param.data() * one_minus_tau + param.data() * tau);
     }
 
-    // Update Critic 2 Target
     for (const auto& pair : critic2->named_parameters()) {
-        auto name = pair.key();
-        auto param = pair.value();
+        const auto& name = pair.key();
+        const auto& param = pair.value();
         auto target_param = critic2_target->named_parameters()[name];
-        target_param.copy_(target_param * (1.0 - 0.005) + param * 0.005);
+
+        target_param.data().copy_(target_param.data() * one_minus_tau + param.data() * tau);
     }
 }

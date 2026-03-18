@@ -165,7 +165,6 @@ target_include_directories(controller
 target_link_libraries(controller
         PUBLIC
         cppzmq
-        device_mess_grpc_proto
         control_mess_grpc_proto
         absl::flags
         absl::flags_parse

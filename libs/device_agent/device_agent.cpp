@@ -40,6 +40,7 @@ std::string getHostIP() {
 }
 
 DeviceAgent::DeviceAgent() {
+    // init core structures and settings
     dev_name = absl::GetFlag(FLAGS_name);
     std::string type = absl::GetFlag(FLAGS_device_type);
     if (type == "virtual") {
@@ -58,10 +59,16 @@ DeviceAgent::DeviceAgent() {
         dev_type = SystemDeviceType::AGXXavier;
     } else if (type == "nxavier") {
         dev_type = SystemDeviceType::NXXavier;
+    } else if (type == "sink") {
+        dev_type = SystemDeviceType::SinkDevice;
     } else {
-        std::cerr << "Invalid device type, use [virtual, server, onprem, orinagx, orinnx, orinano, agxavier, nxavier]" << std::endl;
+        std::cerr << "Invalid device type, use [virtual, server, onprem, orinagx, orinnx, orinano, agxavier, nxavier, sink]" << std::endl;
         exit(1);
     }
+    dev_system_name = "ppp";        // dummy value
+    dev_experiment_name = "test";   // dummy value
+    dev_numCudaDevices = 1;         // dummy value
+    controller_url = absl::GetFlag(FLAGS_controller_url);
     dev_agent_port_offset = absl::GetFlag(FLAGS_dev_port_offset);
     dev_system_port_offset = absl::GetFlag(FLAGS_dev_system_port_offset) + dev_agent_port_offset;
     dev_gpuID = absl::GetFlag(FLAGS_dev_gpuID);
@@ -69,40 +76,69 @@ DeviceAgent::DeviceAgent() {
     dev_verbose = absl::GetFlag(FLAGS_dev_verbose);
     dev_logPath = absl::GetFlag(FLAGS_dev_logPath);
     deploy_mode = absl::GetFlag(FLAGS_deploy_mode);
-
     containers = std::map<std::string, DevContainerHandle>();
 
-    dev_metricsServerConfigs.from_json(json::parse(std::ifstream("../jsons/metricsserver.json")));
-    dev_metricsServerConfigs.user = "device_agent";
-    dev_metricsServerConfigs.password = "agent";
-    dev_metricsServerConn = connectToMetricsServer(dev_metricsServerConfigs, "Device_agent");
-
-    in_device_handlers = {
-        {MSG_TYPE[MSVC_START_REPORT], std::bind(&DeviceAgent::ReceiveStartReport, this, std::placeholders::_1)},
-        {MSG_TYPE[START_FL], std::bind(&DeviceAgent::ForwardFL, this, std::placeholders::_1)},
-        {MSG_TYPE[BCEDGE_UPDATE], std::bind(&DeviceAgent::InferBCEdge, this, std::placeholders::_1)},
-        {MSG_TYPE[CONTEXT_METRICS], std::bind(&DeviceAgent::ReceiveContainerMetrics, this, std::placeholders::_1)}
-    };
-
-    controller_handlers = {
-        {MSG_TYPE[NETWORK_CHECK], std::bind(&DeviceAgent::testNetwork, this, std::placeholders::_1)},
-        {MSG_TYPE[CONTAINER_START], std::bind(&DeviceAgent::CreateContainer, this, std::placeholders::_1)},
-        {MSG_TYPE[ADJUST_UPSTREAM], std::bind(static_cast<void (DeviceAgent::*)(const std::string&)>
-                                            (&DeviceAgent::UpdateContainerSender), this, std::placeholders::_1)},
-        {MSG_TYPE[SYNC_DATASOURCES], std::bind(&DeviceAgent::SyncDatasources, this, std::placeholders::_1)},
-        {MSG_TYPE[BATCH_SIZE_UPDATE], std::bind(&DeviceAgent::UpdateBatchSize, this, std::placeholders::_1)},
-        {MSG_TYPE[RESOLUTION_UPDATE], std::bind(&DeviceAgent::UpdateResolution, this, std::placeholders::_1)},
-        {MSG_TYPE[TIME_KEEPING_UPDATE], std::bind(&DeviceAgent::UpdateTimeKeeping, this, std::placeholders::_1)},
-        {MSG_TYPE[CONTAINER_STOP], std::bind(static_cast<void (DeviceAgent::*)(const std::string&)>
-                                            (&DeviceAgent::StopContainer), this, std::placeholders::_1)},
-        {MSG_TYPE[RETURN_FL], std::bind(&DeviceAgent::ReturnFL, this, std::placeholders::_1)},
-        {MSG_TYPE[CRL_WEIGHTS], std::bind(&DeviceAgent::ForwardUtilityWeights, this, std::placeholders::_1)},
-        {MSG_TYPE[DEVICE_SHUTDOWN], std::bind(&DeviceAgent::Shutdown, this, std::placeholders::_1)}
-    };
-
+    // setup logging
+    dev_logPath += "/" + dev_name;
+    std::filesystem::create_directories(
+            std::filesystem::path(dev_logPath)
+    );
+    setupLogger(
+            dev_logPath,
+            "device_agent",
+            dev_loggingMode,
+            dev_verbose,
+            dev_loggerSinks,
+            dev_logger
+    );
     if (absl::GetFlag(FLAGS_dev_verbose_compose))
         std::filesystem::create_directories(COMPOSE_PATH);
 
+    // connect to metrics server and init profiler
+    dev_metricsServerConfigs.from_json(json::parse(std::ifstream("../jsons/experiments/metricsserver.json")));
+    dev_metricsServerConfigs.user = "device_agent";
+    dev_metricsServerConfigs.password = "agent";
+    dev_metricsServerConn = connectToMetricsServer(dev_metricsServerConfigs, "Device_agent");
+    dev_profiler = new Profiler({(unsigned int) getpid()}, "runtime");
+
+    if (dev_type == SystemDeviceType::Virtual) {
+        auto processing_units = dev_profiler->getGpuCount();
+        memory_sizes = dev_profiler->getGpuMemory(processing_units);
+        dev_numCudaDevices = 1;
+    } else if (dev_type == SystemDeviceType::Server) {
+        dev_numCudaDevices = dev_profiler->getGpuCount();
+        memory_sizes = dev_profiler->getGpuMemory(dev_numCudaDevices);
+    } else if (dev_type == SystemDeviceType::OnPremise) {
+        auto processing_units = dev_profiler->getGpuCount();
+        memory_sizes = dev_profiler->getGpuMemory(processing_units);
+        dev_numCudaDevices = 1;
+    } else {
+        struct sysinfo sys_info;
+        if (sysinfo(&sys_info) != 0) {
+            spdlog::get("container_agent")->error("sysinfo call failed!");
+            exit(1);
+        }
+        dev_numCudaDevices = 1;
+        memory_sizes = {static_cast<long>(sys_info.totalram * sys_info.mem_unit / 1000000)};
+    }
+
+    // setup message handlers
+    msg_handlers = {
+            {MSG_TYPE[CONNECT_DEVICE], std::bind(&DeviceAgent::Ready, this, std::placeholders::_1)},
+            {MSG_TYPE[MSVC_START_REPORT], std::bind(&DeviceAgent::ReceiveStartReport, this, std::placeholders::_1)},
+            {MSG_TYPE[TO_CONTROLLER], std::bind(&DeviceAgent::ForwardToController, this, std::placeholders::_1)},
+            {MSG_TYPE[TO_CONTAINER], std::bind(&DeviceAgent::ForwardToContainer, this, std::placeholders::_1)},
+            {MSG_TYPE[BCEDGE_UPDATE], std::bind(&DeviceAgent::InferBCEdge, this, std::placeholders::_1)},
+            {MSG_TYPE[CONTEXT_METRICS], std::bind(&DeviceAgent::ReceiveContainerMetrics, this, std::placeholders::_1)},
+            {MSG_TYPE[NETWORK_CHECK], std::bind(&DeviceAgent::testNetwork, this, std::placeholders::_1)},
+            {MSG_TYPE[CONTAINER_START], std::bind(&DeviceAgent::CreateContainer, this, std::placeholders::_1)},
+            {MSG_TYPE[SYNC_DATASOURCES], std::bind(&DeviceAgent::SyncDatasources, this, std::placeholders::_1)},
+            {MSG_TYPE[CONTAINER_STOP], std::bind(static_cast<void (DeviceAgent::*)(const std::string&)>(&DeviceAgent::StopContainer), this, std::placeholders::_1)},
+            {MSG_TYPE[STOP_EXPERIMENT], std::bind(&DeviceAgent::StopExperiment, this, std::placeholders::_1)},
+            {MSG_TYPE[DEVICE_SHUTDOWN], std::bind(&DeviceAgent::Shutdown, this, std::placeholders::_1)}
+    };
+
+    // load bandwidth limit configurations
     dev_totalBandwidthData = std::vector<BandwidthManager>();
     for (int id = 0; id <= 20; ++id) {
         BandwidthManager data;
@@ -123,63 +159,48 @@ DeviceAgent::DeviceAgent() {
         data.prepare();
         dev_totalBandwidthData.push_back(data);
     }
-
-    dev_startTime = std::chrono::high_resolution_clock::now();
-}
-
-DeviceAgent::DeviceAgent(const std::string &ctrl_url) : DeviceAgent() {
-    controller_url = ctrl_url;
-    in_device_ctx = context_t(dev_type == Server ? 2 : 1);
-    std::string server_address = absl::StrFormat("tcp://*:%d", IN_DEVICE_RECEIVE_PORT + dev_system_port_offset);
-    in_device_socket = socket_t(in_device_ctx, ZMQ_REP);
-    in_device_socket.bind(server_address);
-    in_device_socket.set(zmq::sockopt::rcvtimeo, 1000);
-    server_address = absl::StrFormat("tcp://*:%d", IN_DEVICE_MESSAGE_QUEUE_PORT + dev_system_port_offset);
-    in_device_message_queue = socket_t(in_device_ctx, ZMQ_PUB);
-    in_device_message_queue.bind(server_address);
-    in_device_message_queue.set(zmq::sockopt::sndtimeo, 100);
-
-    if (controller_url != "") {
-        controller_ctx = context_t(1);
-        server_address = absl::StrFormat("tcp://%s:%d", controller_url, CONTROLLER_RECEIVE_PORT + dev_system_port_offset - dev_agent_port_offset);
-        controller_socket = socket_t(controller_ctx, ZMQ_REQ);
-        controller_socket.connect(server_address);
-        server_address = absl::StrFormat("tcp://%s:%d", controller_url, CONTROLLER_MESSAGE_QUEUE_PORT + dev_system_port_offset - dev_agent_port_offset);
-        controller_message_queue = socket_t(controller_ctx, ZMQ_SUB);
-        controller_message_queue.setsockopt(ZMQ_SUBSCRIBE, (dev_name + "|").c_str(), dev_name.size() + 1);
-        controller_message_queue.connect(server_address);
-        controller_message_queue.set(zmq::sockopt::rcvtimeo, 1000);
-    }
-
-    dev_profiler = new Profiler({(unsigned int) getpid()}, "runtime");
-    SystemInfo readyReply = Ready(getHostIP());
-
-    dev_logPath += "/" + dev_experiment_name;
-    std::filesystem::create_directories(
-            std::filesystem::path(dev_logPath)
-    );
-
-    dev_logPath += "/" + dev_system_name;
-    std::filesystem::create_directories(
-            std::filesystem::path(dev_logPath)
-    );
-
-    setupLogger(
-            dev_logPath,
-            "device_agent",
-            dev_loggingMode,
-            dev_verbose,
-            dev_loggerSinks,
-            dev_logger
-    );
-    if (controller_url == "") spdlog::get("container_agent")->warn("No connection to Controller specified, skipping Ready advertisement and running in testing mode.");
-
     if (dev_totalBandwidthData.size() <= absl::GetFlag(FLAGS_dev_bandwidthLimitID)) {
         spdlog::get("container_agent")->error("Invalid bandwidth limit ID, use [0, 20]! Defaulting to 0.");
         dev_bandwidthLimit = dev_totalBandwidthData[0];
     } else {
         dev_bandwidthLimit = dev_totalBandwidthData[absl::GetFlag(FLAGS_dev_bandwidthLimitID)];
     }
+
+    // setup device communication-infrastructure
+    device_msg_ctx = context_t(dev_type == Server ? 2 : 1);
+    std::string server_address = absl::StrFormat("tcp://*:%d", DEVICE_RECEIVE_PORT + dev_system_port_offset);
+    device_socket = socket_t(device_msg_ctx, ZMQ_REP);
+    device_socket.bind(server_address);
+    device_socket.set(zmq::sockopt::rcvtimeo, 1000);
+    server_address = absl::StrFormat("tcp://*:%d", DEVICE_MESSAGE_QUEUE_PORT + dev_system_port_offset);
+    device_message_queue = socket_t(device_msg_ctx, ZMQ_PUB);
+    device_message_queue.bind(server_address);
+    device_message_queue.set(zmq::sockopt::sndtimeo, 100);
+
+    // finish startup
+    threads = std::vector<std::thread>();
+    threads.emplace_back(&DeviceAgent::HandleControlCommands, this);
+    if (dev_type != SinkDevice) {
+        threads.emplace_back(&DeviceAgent::HandleDeviceMessages, this);
+        threads.emplace_back(&DeviceAgent::collectRuntimeMetrics, this);
+        threads.emplace_back(&DeviceAgent::limitBandwidth, this, absl::GetFlag(FLAGS_dev_networkInterface));
+    }
+    running = true;
+    for (auto &thread: threads) {
+        thread.detach();
+    }
+    dev_startTime = std::chrono::high_resolution_clock::now();
+}
+
+void DeviceAgent::StartExperiment(const SystemInfo &info) {
+    if (experiment_active)
+        spdlog::get("container_agent")->warn("Received start experiment command while another experiment is still active. Overwriting current experiment with new one.");
+    if (dev_type == SinkDevice) {
+        dev_startTime = std::chrono::high_resolution_clock::now();
+        experiment_active = true;
+        return;
+    }
+    spdlog::get("container_agent")->info("Starting new experiment: {}", dev_experiment_name);
 
     dev_metricsServerConfigs.schema = abbreviate(dev_experiment_name + "_" + dev_system_name);
     dev_hwMetricsTableName =  dev_metricsServerConfigs.schema + "." + abbreviate(dev_experiment_name + "_" + dev_name) + "_hw";
@@ -238,27 +259,18 @@ DeviceAgent::DeviceAgent(const std::string &ctrl_url) : DeviceAgent() {
         }
     } else if (dev_system_name == "edvi") {
         dev_rlDecisionInterval = TimePrecisionType(200000);
-        for (auto &el: readyReply.offloading_targets()) {
+        for (auto &el: info.offloading_targets()) {
             edgevision_dwnstrList.push_back({el.name(), el.offloading_ip(), el.bandwidth_id()});
         }
         dev_edgevision_agent = new EdgeVisionAgent(dev_name, (int) edgevision_dwnstrList.size() - 1, torch::kF32, 0);
     }
 
-    running = true;
-    threads = std::vector<std::thread>();
-    threads.emplace_back(&DeviceAgent::HandleDeviceMessages, this);
-    if (controller_url != "") threads.emplace_back(&DeviceAgent::HandleControlCommands, this);
-    for (auto &thread: threads) {
-        thread.detach();
-    }
-    dev_startTime = std::chrono::high_resolution_clock::now(); // update start_time compared to previous timestamp
+    dev_bandwidthLimit = dev_totalBandwidthData[info.bandwidth_setting()];
+    dev_startTime = std::chrono::high_resolution_clock::now();
+    experiment_active = true;
 }
 
 void DeviceAgent::collectRuntimeMetrics() {
-    if (controller_url == "")
-        while (running)
-            std::this_thread::sleep_for(std::chrono::seconds(1));
-
     std::string sql;
     std::vector<double> edgevisionBWs(std::max(1, (int) edgevision_dwnstrList.size() - 1));
     auto timeNow = std::chrono::high_resolution_clock::now();
@@ -272,6 +284,10 @@ void DeviceAgent::collectRuntimeMetrics() {
                 dev_metricsServerConfigs.hwMetricsScrapeIntervalMillisec);
     }
     while (running) {
+        if (!experiment_active) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(500));
+            continue;
+        }
         auto metricsStopwatch = Stopwatch();
         metricsStopwatch.start();
         auto startTime = metricsStopwatch.getStartTime();
@@ -356,7 +372,6 @@ void DeviceAgent::collectRuntimeMetrics() {
                     local_downstreams.push_back(&container.second);
                 }
             }
-            EmptyMessage request;
             int i = 0, target = 0;
             for (auto *dnstr: local_downstreams) {
                 if (i == 0) {
@@ -378,10 +393,10 @@ void DeviceAgent::collectRuntimeMetrics() {
                     }
                 }
                 if (target == 0) {
-                    UpdateContainerSender(AdjustUpstreamMode::Overwrite, "cont_people", dnstr->name, "localhost",
+                    UpdateContainerSender(AdjustMode::Overwrite, "cont_people", dnstr->name, "localhost",
                                           dnstr->port + 5000, 1.0, "", std::chrono::duration_cast<TimePrecisionType>(std::chrono::high_resolution_clock::now().time_since_epoch()).count(), 10);
                 } else {
-                    UpdateContainerSender(AdjustUpstreamMode::Overwrite, "cont_people", dnstr->name,
+                    UpdateContainerSender(AdjustMode::Overwrite, "cont_people", dnstr->name,
                           edgevision_dwnstrList[target - 1].offloading_ip, edgevision_dwnstrList[target - 1].offloading_port,
                           1.0, "", std::chrono::duration_cast<TimePrecisionType>(std::chrono::high_resolution_clock::now().time_since_epoch()).count(), 10);
                 }
@@ -402,6 +417,26 @@ void DeviceAgent::collectRuntimeMetrics() {
         spdlog::get("container_agent")->trace("{0:s} Container Agent's Metric Reporter sleeps for {1:d} milliseconds.", dev_name, sleepPeriod.count());
         std::this_thread::sleep_for(sleepPeriod);
     }
+}
+
+void DeviceAgent::StopExperiment(const std::string &msg) {
+    spdlog::get("container_agent")->info("Stopping experiment: {}", dev_experiment_name);
+    experiment_active = false;
+    dev_bandwidthLimit.clear();
+
+    std::lock_guard<std::mutex> lock(containers_mutex);
+    for (auto const& [name, handle] : containers) {
+        ContainerSignal sig;
+        sig.set_name(name);
+        StopContainer(sig);
+    }
+    containers.clear();
+    dev_runtimeMetrics.clear();
+    dev_system_name = "ppp";        // reset to dummy value
+    dev_experiment_name = "test";   // reset to dummy value
+
+    std::string cmd = "sudo bash ../scripts/set_bandwidth.sh " + absl::GetFlag(FLAGS_dev_networkInterface);
+    runCommand(cmd);
 }
 
 void DeviceAgent::testNetwork(const std::string &msg) {
@@ -454,7 +489,7 @@ void DeviceAgent::CreateContainer(const std::string &msg) {
         if (c.name().find("sink") != std::string::npos) {
             c.set_json_config(replaceSubstring(c.json_config(), "<IP>", controller_url));
         }
-        std::string command = runCompose(c.executable(), c.name(), c.json_config(), c.device(), c.control_port());
+        std::string command = runCompose(c.executable(), c.name(), c.docker_tag(), c.json_config(), c.device(), c.control_port());
         std::string target = absl::StrFormat("%s:%d", "localhost", c.control_port());
         if (c.name().find("sink") != std::string::npos) {
             return;
@@ -507,16 +542,6 @@ void DeviceAgent::StopContainer(ContainerSignal request) {
     }
 }
 
-void DeviceAgent::UpdateContainerSender(const std::string &msg) {
-    ContainerLink request;
-    if (!request.ParseFromString(msg)){
-        spdlog::get("container_agent")->error("Failed update container sender with msg: {}", msg);
-        return;
-    }
-    UpdateContainerSender(request.mode(), request.name(), request.downstream_name(), request.ip(), request.port(),
-                          request.data_portion(), request.old_link(), request.timestamp(), request.offloading_duration(), request.class_of_interest());
-}
-
 void DeviceAgent::UpdateContainerSender(int mode, const std::string &cont_name, const std::string &dwnstr,
                                         const std::string &ip, const int &port, const float &data_portion,
                                         const std::string &old_link, const int64_t &timestamp,
@@ -541,13 +566,13 @@ void DeviceAgent::UpdateContainerSender(int mode, const std::string &cont_name, 
 }
 
 void DeviceAgent::SyncDatasources(const std::string &msg) {
-    ContainerLink link;
+    Connection link;
     if (!link.ParseFromString(msg)){
         spdlog::get("container_agent")->error("Failed sync datasources with msg: {}", msg);
         return;
     }
-    indevicemessages::Int32 request;
-    request.set_value(containers[link.downstream_name()].port);
+    Int32 request;
+    request.set_value(containers[link.old_link()].port);
     //check if cont_name is in containers
     if (containers.find(link.name()) == containers.end()) {
         spdlog::get("container_agent")->error("SyncDatasources: Container {} not found!", link.name());
@@ -556,56 +581,33 @@ void DeviceAgent::SyncDatasources(const std::string &msg) {
     sendMessageToContainer(link.name(), MSG_TYPE[SYNC_DATASOURCES], request.SerializeAsString());
 }
 
-SystemInfo DeviceAgent::Ready(const std::string &ip) {
-    if (controller_url == "") {
-        dev_system_name = "ppp";
-        dev_experiment_name = "test";
-        dev_numCudaDevices = 1;
-        return SystemInfo();
-    }
-    ConnectionConfigs request;
-    request.set_device_name(dev_name);
-    request.set_device_type(dev_type);
+void DeviceAgent::SelfReady() {
+    std::string ip = getHostIP();
+    if (controller_url.empty()) return; // Wait for Connection from Cluster Controller
+
+    ConnectController();
+    DeviceInfo request;
+    request.set_name(dev_name);
+    request.set_type(dev_type);
     request.set_ip_address(ip);
     request.set_agent_port_offset(dev_agent_port_offset);
-    if (dev_type == SystemDeviceType::Virtual) {
-        auto processing_units = dev_profiler->getGpuCount();
-        auto mem = dev_profiler->getGpuMemory(processing_units);
-        dev_numCudaDevices = 1;
-        request.set_processors(dev_numCudaDevices);
-        request.add_memory(mem[std::max(0,dev_gpuID)]);
-    } else if (dev_type == SystemDeviceType::Server) {
-        dev_numCudaDevices = dev_profiler->getGpuCount();
-        request.set_processors(dev_numCudaDevices);
-        for (auto &mem: dev_profiler->getGpuMemory(dev_numCudaDevices)) {
+    request.set_processors(dev_numCudaDevices);
+    if (dev_type == SystemDeviceType::Virtual || dev_type == SystemDeviceType::OnPremise) {
+        request.add_memory(memory_sizes[std::max(0,dev_gpuID)]);
+    } else {
+        for (auto &mem: memory_sizes) {
             request.add_memory(mem);
         }
-    } else if (dev_type == SystemDeviceType::OnPremise) {
-        auto processing_units = dev_profiler->getGpuCount();
-        auto mem = dev_profiler->getGpuMemory(processing_units);
-        dev_numCudaDevices = 1;
-        request.set_processors(dev_numCudaDevices);
-        request.add_memory(mem[dev_gpuID]);
-    } else {
-        struct sysinfo sys_info;
-        if (sysinfo(&sys_info) != 0) {
-            spdlog::get("container_agent")->error("sysinfo call failed!");
-            exit(1);
-        }
-        dev_numCudaDevices = 1;
-        request.set_processors(dev_numCudaDevices);
-        request.add_memory(sys_info.totalram * sys_info.mem_unit / 1000000);
     }
-    std::string test = request.SerializeAsString();
     std::string msg = absl::StrFormat("%s %s", MSG_TYPE[DEVICE_ADVERTISEMENT], request.SerializeAsString());
     message_t zmq_msg(msg.size()), reply;
     memcpy(zmq_msg.data(), msg.data(), msg.size());
     if (!controller_socket.send(zmq_msg, send_flags::dontwait)){
-        spdlog::error("Sending ready message failed! Is the Controller running?");
+        spdlog::get("container_agent")->error("Sending ready message failed! Is the Controller running?");
         exit(1);
     }
     if (!controller_socket.recv(reply)) {
-        spdlog::error("Ready message reply failed! Is the Controller running correctly?");
+        spdlog::get("container_agent")->error("Ready message reply failed! Is the Controller running correctly?");
         exit(1);
     }
     SystemInfo info;
@@ -615,13 +617,60 @@ SystemInfo DeviceAgent::Ready(const std::string &ip) {
     }
     dev_system_name = info.name();
     dev_experiment_name = info.experiment();
-    return info;
+    StartExperiment(info);
+}
+
+void DeviceAgent::Ready(const std::string &msg) {
+    SystemInfo info;
+    if (!info.ParseFromString(msg)){
+        spdlog::get("container_agent")->error("Failed to parse SystemInfo from msg: {}", msg);
+        return;
+    }
+
+    dev_system_name = info.name();
+    dev_experiment_name = info.experiment();
+    controller_url = info.ctrl_ip_address();
+    ConnectController();
+
+    DeviceInfo reply;
+    reply.set_name(dev_name);
+    reply.set_type(dev_type);
+    reply.set_processors(dev_numCudaDevices);
+    if (dev_type == SystemDeviceType::Virtual || dev_type == SystemDeviceType::OnPremise) {
+        reply.add_memory(memory_sizes[std::max(0,dev_gpuID)]);
+    } else {
+        for (auto &mem: memory_sizes) {
+            reply.add_memory(mem);
+        }
+    }
+    if (!device_socket.send(message_t(reply.SerializeAsString()), send_flags::none)){
+        spdlog::get("container_agent")->error("Sending ready reply failed! Is the Controller running?");
+        dev_system_name = "ppp";        // reset to dummy value
+        dev_experiment_name = "test";   // reset to dummy value
+        return;
+    }
+    spdlog::get("container_agent")->info("Device Agent connected to Controller for run {}-{}.", dev_system_name, dev_experiment_name);
+    StartExperiment(info);
+}
+
+void DeviceAgent::ConnectController() {
+    controller_ctx = context_t(1);
+    std::string server_address = absl::StrFormat("tcp://%s:%d", controller_url,
+                                                 CONTROLLER_RECEIVE_PORT + dev_system_port_offset - dev_agent_port_offset);
+    controller_socket = socket_t(controller_ctx, ZMQ_REQ);
+    controller_socket.connect(server_address);
+    server_address = absl::StrFormat("tcp://%s:%d", controller_url,
+                                     CONTROLLER_MESSAGE_QUEUE_PORT + dev_system_port_offset - dev_agent_port_offset);
+    controller_message_queue = socket_t(controller_ctx, ZMQ_SUB);
+    controller_message_queue.setsockopt(ZMQ_SUBSCRIBE, (dev_name + "|").c_str(), dev_name.size() + 1);
+    controller_message_queue.connect(server_address);
+    controller_message_queue.set(zmq::sockopt::rcvtimeo, 1000);
 }
 
 void DeviceAgent::HandleDeviceMessages() {
     while (running) {
         message_t message;
-        if (in_device_socket.recv(message, recv_flags::none)) {
+        if (device_socket.recv(message, recv_flags::none)) {
             std::string raw = message.to_string();
             std::istringstream iss(raw);
             std::string topic;
@@ -629,8 +678,8 @@ void DeviceAgent::HandleDeviceMessages() {
             iss.get(); // skip the space after the topic
             std::string payload((std::istreambuf_iterator<char>(iss)),
                                 std::istreambuf_iterator<char>());
-            if (in_device_handlers.count(topic)) {
-                in_device_handlers[topic](payload);
+            if (msg_handlers.count(topic)) {
+                msg_handlers[topic](payload);
             } else {
                 spdlog::get("container_agent")->error("Received unknown device topic: {}", topic);
             }
@@ -643,6 +692,10 @@ void DeviceAgent::HandleDeviceMessages() {
 void DeviceAgent::HandleControlCommands() {
     while (running) {
         message_t message;
+        if (!experiment_active) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(500));
+            continue;
+        }
         if (controller_message_queue.recv(message, recv_flags::none)) {
             std::string raw = message.to_string();
             std::istringstream iss(raw);
@@ -652,8 +705,8 @@ void DeviceAgent::HandleControlCommands() {
             iss.get(); // skip the space after the topic
             std::string payload((std::istreambuf_iterator<char>(iss)),
                                 std::istreambuf_iterator<char>());
-            if (controller_handlers.count(type)) {
-                controller_handlers[type](payload);
+            if (msg_handlers.count(type)) {
+                msg_handlers[type](payload);
             } else {
                 spdlog::get("container_agent")->error("Received unknown controller type: {} (topic: {})", type, topic);
             }
@@ -685,7 +738,7 @@ void DeviceAgent::ReceiveStartReport(const std::string &msg) {
     ProcessData request;
     if (!request.ParseFromString(msg)){
         spdlog::get("container_agent")->error("Error receiving container start report with msg: {}", msg);
-        in_device_socket.send(message_t("error"), send_flags::dontwait);
+        device_socket.send(message_t("error"), send_flags::dontwait);
         return;
     }
 
@@ -695,41 +748,47 @@ void DeviceAgent::ReceiveStartReport(const std::string &msg) {
     ProcessData reply;
     reply.set_msvc_name(request.msvc_name());
     reply.set_pid(pid);
-    in_device_socket.send(message_t(reply.SerializeAsString()), send_flags::none);
+    device_socket.send(message_t(reply.SerializeAsString()), send_flags::none);
     spdlog::get("container_agent")->info("Received start report from {} with pid: {}", request.msvc_name(), pid);
 }
 
-void DeviceAgent::ForwardFL(const std::string &msg) {
-    FlData request;
-    if (!request.ParseFromString(msg)){
-        spdlog::get("container_agent")->error("Failed stopping container with msg: {}", msg);
-        in_device_socket.send(message_t("error"), send_flags::dontwait);
-        return;
-    }
-    request.set_device_name(dev_name);
-
-    std::string message = absl::StrFormat("%s %s", MSG_TYPE[START_FL], request.SerializeAsString());
-    message_t zmq_msg(message.size()), reply;
-    memcpy(zmq_msg.data(), message.data(), message.size());
+void DeviceAgent::ForwardToController(const std::string &msg) {
+    message_t zmq_msg(msg.size()), reply;
+    memcpy(zmq_msg.data(), msg.data(), msg.size());
     if (!controller_socket.send(zmq_msg, send_flags::dontwait)) {
-        spdlog::get("container_agent")->error("Failed to send FL data to controller.");
-        in_device_socket.send(message_t("error"), send_flags::dontwait);
+        spdlog::get("container_agent")->error("Failed to Forward Message to controller: {}", msg);
+        device_socket.send(message_t("error"), send_flags::dontwait);
         return;
     }
     if (controller_socket.recv(reply)) {
-        spdlog::get("container_agent")->info("Forwarded FL data to controller successfully.");
-        in_device_socket.send(reply, send_flags::dontwait);
+        spdlog::get("container_agent")->info("Forwarded Message to controller successfully.");
+        device_socket.send(reply, send_flags::dontwait);
     } else {
-        spdlog::get("container_agent")->error("Failed to receive reply from controller for FL data forwarding.");
-        in_device_socket.send(message_t("error"), send_flags::dontwait);
+        spdlog::get("container_agent")->error("Failed to receive reply from controller for Message Forwarding: {}", msg);
+        device_socket.send(message_t("error"), send_flags::dontwait);
     }
+}
+
+void DeviceAgent::ForwardToContainer(const std::string &msg) {
+    PackagedMsg request;
+    if (!request.ParseFromString(msg)){
+        spdlog::get("container_agent")->error("Failed unpacking data for Forwarding to Container with msg: {}", msg);
+        return;
+    }
+
+    //check if cont_name is in containers
+    if (containers.find(request.target_name()) == containers.end()) {
+        spdlog::get("container_agent")->error("Forward Target Container {} not found!", request.target_name());
+        return;
+    }
+    sendMessageToContainer(request.target_name(), request.payload());
 }
 
 void DeviceAgent::InferBCEdge(const std::string &msg) {
     BCEdgeData request;
     if (!request.ParseFromString(msg)){
         spdlog::get("container_agent")->error("Failed InferBCEdge with msg: {}", msg);
-        in_device_socket.send(message_t("error"), send_flags::dontwait);
+        device_socket.send(message_t("error"), send_flags::dontwait);
         return;
     }
 
@@ -743,109 +802,26 @@ void DeviceAgent::InferBCEdge(const std::string &msg) {
     reply.set_batch_size(batching);
     node->instances = scaling;
     reply.set_shared_mem_config(memory);
-    in_device_socket.send(message_t(reply.SerializeAsString()), send_flags::dontwait);
+    device_socket.send(message_t(reply.SerializeAsString()), send_flags::dontwait);
 }
 
 void DeviceAgent::ReceiveContainerMetrics(const std::string &msg) {
     ContainerMetrics request;
     if (!request.ParseFromString(msg)){
         spdlog::get("container_agent")->error("Failed to receive container metrics with msg: {}", msg);
-        in_device_socket.send(message_t("error"), send_flags::dontwait);
+        device_socket.send(message_t("error"), send_flags::dontwait);
         return;
     }
 
     //check if cont_name is in containers
     if (containers.find(request.name()) == containers.end()) {
         spdlog::get("container_agent")->error("ReceiveContainerMetrics: Container {} not found!", request.name());
-        in_device_socket.send(message_t("error"), send_flags::dontwait);
+        device_socket.send(message_t("error"), send_flags::dontwait);
         return;
     }
 
     containers[request.name()].contextMetrics = request;
-    in_device_socket.send(message_t("success"), send_flags::dontwait);
-}
-
-void DeviceAgent::UpdateBatchSize(const std::string &msg) {
-    ContainerInts request;
-    if (!request.ParseFromString(msg)){
-        spdlog::get("container_agent")->error("Failed UpdateBatchSize container with msg: {}", msg);
-        return;
-    }
-
-    indevicemessages::Int32 bs;
-    bs.set_value(request.value().at(0));
-
-    //check if cont_name is in containers
-    if (containers.find(request.name()) == containers.end()) {
-        spdlog::get("container_agent")->error("UpdateBatchSize: Container {} not found!", request.name());
-        return;
-    }
-    sendMessageToContainer(request.name(), MSG_TYPE[BATCH_SIZE_UPDATE], bs.SerializeAsString());
-}
-
-void DeviceAgent::UpdateResolution(const std::string &msg) {
-    ContainerInts request;
-    if (!request.ParseFromString(msg)){
-        spdlog::get("container_agent")->error("Failed UpdateResolution container with msg: {}", msg);
-        return;
-    }
-
-    indevicemessages::Dimensions dims;
-    dims.set_channels(request.value().at(0));
-    dims.set_height(request.value().at(1));
-    dims.set_width(request.value().at(2));
-
-    //check if cont_name is in containers
-    if (containers.find(request.name()) == containers.end()) {
-        spdlog::get("container_agent")->error("UpdateResolution: Container {} not found!", request.name());
-        return;
-    }
-    sendMessageToContainer(request.name(), MSG_TYPE[RESOLUTION_UPDATE], dims.SerializeAsString());
-}
-
-void DeviceAgent::UpdateTimeKeeping(const std::string &msg) {
-    TimeKeeping request;
-    if (!request.ParseFromString(msg)){
-        spdlog::get("container_agent")->error("Failed UpdateTimeKeeping container with msg: {}", msg);
-        return;
-    }
-
-    //check if cont_name is in containers
-    if (containers.find(request.name()) == containers.end()) {
-        spdlog::get("container_agent")->error("UpdateTimeKeeping: Container {} not found!", request.name());
-        return;
-    }
-    sendMessageToContainer(request.name(), MSG_TYPE[TIME_KEEPING_UPDATE], msg);
-}
-
-void DeviceAgent::ReturnFL(const std::string &msg) {
-    FlData request;
-    if (!request.ParseFromString(msg)){
-        spdlog::get("container_agent")->error("Failed returning FL to container with msg: {}", msg);
-        return;
-    }
-
-    //check if cont_name is in containers
-    if (containers.find(request.name()) == containers.end()) {
-        spdlog::get("container_agent")->error("ReturnFL: Container {} not found!", request.name());
-        return;
-    }
-    sendMessageToContainer(request.name(), MSG_TYPE[RETURN_FL], msg);
-}
-
-void DeviceAgent::ForwardUtilityWeights(const std::string &msg) {
-    CrlUtilityWeights request;
-    if (!request.ParseFromString(msg)){
-        spdlog::get("container_agent")->error("Failed forwarding utility weights to container with msg: {}", msg);
-        return;
-    }
-
-    //check if cont_name is in containers
-    if (containers.find(request.name()) == containers.end()) {
-        spdlog::get("container_agent")->error("ForwardUtilityWeights: Container {} not found!", request.name());
-        return;
-    }
-    sendMessageToContainer(request.name(), MSG_TYPE[CRL_WEIGHTS], msg);
+    device_socket.send(message_t("success"), send_flags::dontwait);
 }
 
 void DeviceAgent::Shutdown(const std::string &msg) {
@@ -856,27 +832,33 @@ void DeviceAgent::sendMessageToContainer(const std::string &topik, const std::st
     std::string msg = absl::StrFormat("%s| %s %s", topik, type, content);
     message_t zmq_msg(msg.size());
     memcpy(zmq_msg.data(), msg.data(), msg.size());
-    in_device_message_queue.send(zmq_msg, send_flags::none);
+    device_message_queue.send(zmq_msg, send_flags::none);
+}
+
+void DeviceAgent::sendMessageToContainer(const std::string &topik, const std::string &content) {
+    std::string msg = absl::StrFormat("%s| %s", topik, content);
+    message_t zmq_msg(msg.size());
+    memcpy(zmq_msg.data(), msg.data(), msg.size());
+    device_message_queue.send(zmq_msg, send_flags::none);
 }
 
 // Function to run the bash script with parameters from a JSON file
-void DeviceAgent::limitBandwidth(const std::string& scriptPath, std::string interface) {
-    if (dev_bandwidthLimit.empty()) {
-        return;
-    }
-
+void DeviceAgent::limitBandwidth(std::string interface) {
     unsigned int bwThresholdIndex = 0;
     ClockType nextThresholdSetTime = dev_startTime + std::chrono::seconds(dev_bandwidthLimit[bwThresholdIndex].time);
     while (isRunning()) {
-        if (bwThresholdIndex >= dev_bandwidthLimit.size()) {
-            break;
+        if (!experiment_active || dev_bandwidthLimit.empty()) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(500));
+            bwThresholdIndex = 0;
+            continue;
         }
+        if (bwThresholdIndex >= dev_bandwidthLimit.size()) bwThresholdIndex = 0;
         if (std::chrono::system_clock::now() >= nextThresholdSetTime) {
             Stopwatch stopwatch;
 
             // Build and execute the command
             std::ostringstream command;
-            command << "sudo bash " << scriptPath << " " << interface << " " << std::fixed << std::setprecision(2) << dev_bandwidthLimit[bwThresholdIndex].mbps;
+            command << "sudo bash ../scripts/set_bandwidth.sh " << interface << " " << std::fixed << std::setprecision(2) << dev_bandwidthLimit[bwThresholdIndex].mbps;
             spdlog::get("container_agent")->info("{0:s} Setting BW limit to {1:f} Mbps", dev_name, dev_bandwidthLimit[bwThresholdIndex].mbps);
             int result = runCommand(command.str());
             spdlog::get("container_agent")->info("Command executed with result: {0:d}", result);
@@ -892,5 +874,4 @@ void DeviceAgent::limitBandwidth(const std::string& scriptPath, std::string inte
             std::this_thread::sleep_for(sleepTime + std::chrono::nanoseconds(10000000));
         }
     }
-    std::cout << "Finished bandwidth limiting." << std::endl;
 }

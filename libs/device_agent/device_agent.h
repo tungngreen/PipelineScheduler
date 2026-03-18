@@ -35,19 +35,9 @@ ABSL_DECLARE_FLAG(std::string, dev_networkInterface);
 ABSL_DECLARE_FLAG(int, dev_gpuID);
 ABSL_DECLARE_FLAG(bool, dev_verbose_compose);
 
-using indevicemessages::ContainerSignal;
-using indevicemessages::Connection;
-using indevicemessages::TimeKeeping;
-using indevicemessages::ProcessData;
-using indevicemessages::BCEdgeConfig;
-using indevicemessages::BCEdgeData;
-using indevicemessages::ContainerMetrics;
-using EmptyMessage = google::protobuf::Empty;
-
 class DeviceAgent {
 public:
     DeviceAgent();
-    explicit DeviceAgent(const std::string &controller_url);
 
     virtual ~DeviceAgent() {
         running = false;
@@ -65,11 +55,7 @@ public:
 
     [[nodiscard]] bool isRunning() const { return running; }
 
-    void collectRuntimeMetrics();
-
-    void limitBandwidth(const std::string& scriptPath, std::string interface);
-
-    void HandleControlCommands();
+    void SelfReady();
 
 protected:
 
@@ -90,47 +76,44 @@ protected:
     /////////////////////////////////////////// PROTECTED FUNCTIONS ///////////////////////////////////////////
 
     // GENERAL OPERATION
-    SystemInfo Ready(const std::string &ip);
+    void Ready(const std::string &msg);
+    void StartExperiment(const SystemInfo &info);
+    void collectRuntimeMetrics();
+    void StopExperiment(const std::string &msg);
     void Shutdown(const std::string &msg);
 
     // CONTAINER CONTROL
     void CreateContainer(const std::string &msg);
     void ReceiveStartReport(const std::string &msg);
     void ReceiveContainerMetrics(const std::string &msg);
-    void UpdateContainerSender(const std::string &msg);
     void UpdateContainerSender(int mode, const std::string &cont_name, const std::string &dwnstr, const std::string &ip,
                                const int &port, const float &data_portion, const std::string &old_link,
                                const int64_t &timestamp, const int offloading_duration = 0, const int coi = -1);
     void SyncDatasources(const std::string &msg);
     void InferBCEdge(const std::string &msg);
-    void UpdateBatchSize(const std::string &msg);
-    void UpdateResolution(const std::string &msg);
-    void UpdateTimeKeeping(const std::string &msg);
-    void ForwardFL(const std::string &msg);
-    void ReturnFL(const std::string &msg);
-    void ForwardUtilityWeights(const std::string &msg);
+    void ForwardToController(const std::string &msg);
+    void ForwardToContainer(const std::string &msg);
     void StopContainer(const std::string &msg);
     void StopContainer(ContainerSignal request);
 
     // MESSAGING & NETWORK
+    void ConnectController();
+    void HandleControlCommands();
     void HandleDeviceMessages();
     void testNetwork(const std::string &msg);
+    void limitBandwidth(std::string interface);
     void sendMessageToContainer(const std::string &topik, const std::string &type, const std::string &content);
+    void sendMessageToContainer(const std::string &topik, const std::string &content);
 
     // SYSTEM COMMANDS
-    std::string runCompose(const std::string &executable, const std::string &cont_name, const std::string &start_string,
-                           int device, const int &port) {
-        std::string command, docker_tag, compose_file = "../dockerfiles/";
+    std::string runCompose(const std::string &executable, const std::string &cont_name, const std::string &docker_tag,
+                           const std::string &start_string, int device, const int &port) {
+        std::string command, compose_file = "../dockerfiles/";
         if (dev_type == Virtual || dev_type == Server || dev_type == OnPremise) {
             if (dev_gpuID >= 0) device = dev_gpuID;
             compose_file += "docker-compose.server.yml";
-            docker_tag = "amd64-torch";
-        } else if (dev_type == NanoXavier || dev_type == NXXavier || dev_type == AGXXavier) {
+        } else if (dev_type == NanoXavier || dev_type == NXXavier || dev_type == AGXXavier || dev_type == OrinNano || dev_type == OrinNX || dev_type == OrinAGX) {
             compose_file += "docker-compose.jetson.yml";
-            docker_tag = "jp512-torch";
-        } else if (dev_type == OrinNano || dev_type == OrinNX || dev_type == OrinAGX) {
-            compose_file += "docker-compose.jetson.yml";
-            docker_tag = "jp61-torch";
         } else {
             spdlog::get("container_agent")->error("Unknown device type while trying to start container!");
             return "";
@@ -145,12 +128,10 @@ protected:
             command = "docker compose -f " + config + " -p " + cont_name + " up -d";
         } else {
             std::string env = absl::StrFormat(
-                    "CONTAINER_NAME=%s EXECUTABLE=%s START_STRING='%s' DEVICE=%i PORT=%i PORT_OFFSET=%i "
-                    "LOGGING_ARGS='%s' DOCKER_TAG=%s",
-                    cont_name, executable, start_string, device, port, dev_system_port_offset,
-                    (deploy_mode ? "--logging_mode 1" : "--verbose 0 --logging_mode 2"),
-                    docker_tag
-            );
+                    "DOCKER_NAME=%s CONTAINER_NAME=%s EXECUTABLE=%s START_STRING='%s' DEVICE=%i PORT=%i PORT_OFFSET=%i "
+                    "LOGGING_ARGS='%s'",
+                    docker_tag, cont_name, executable, start_string, device, port, dev_system_port_offset,
+                    (deploy_mode ? "--logging_mode 1" : "--verbose 0 --logging_mode 2"));
             command = env + " docker compose -f " + compose_file + " -p " + cont_name + " up -d";
         }
         if (runCommand(command) != 0) {
@@ -180,6 +161,7 @@ protected:
     // RUNTIME VARIABLES
     std::atomic<bool> running;
     std::atomic<bool> deploy_mode = false;
+    std::atomic<bool> experiment_active = false;
     std::chrono::high_resolution_clock::time_point dev_startTime;
     std::map<std::string, DevContainerHandle> containers;
     std::mutex containers_mutex;
@@ -197,11 +179,10 @@ protected:
     context_t controller_ctx;
     socket_t controller_socket;
     socket_t controller_message_queue;
-    context_t in_device_ctx;
-    socket_t in_device_socket;
-    socket_t in_device_message_queue;
-    std::unordered_map<std::string, std::function<void(const std::string&)>> in_device_handlers;
-    std::unordered_map<std::string, std::function<void(const std::string&)>> controller_handlers;
+    context_t device_msg_ctx;
+    socket_t device_socket;
+    socket_t device_message_queue;
+    std::unordered_map<std::string, std::function<void(const std::string&)>> msg_handlers;
     std::vector<BandwidthManager> dev_totalBandwidthData;
     BandwidthManager dev_bandwidthLimit;
 
@@ -210,6 +191,7 @@ protected:
     MetricsServerConfigs dev_metricsServerConfigs;
     std::vector<DeviceHardwareMetrics> dev_runtimeMetrics;
     uint16_t dev_numCudaDevices{};
+    std::vector<long> memory_sizes;
     std::unique_ptr<pqxx::connection> dev_metricsServerConn = nullptr;
     std::string dev_hwMetricsTableName;
     std::string dev_networkTableName;

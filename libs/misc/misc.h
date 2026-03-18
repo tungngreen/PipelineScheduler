@@ -22,10 +22,12 @@
 #include <fstream>
 #include <typeinfo>
 #include <boost/circular_buffer.hpp>
+#include "controlmessages.grpc.pb.h"
 
 ABSL_DECLARE_FLAG(uint16_t, deploy_mode);
 
 using namespace zmq;
+using namespace controlmessages;
 
 typedef uint16_t NumQueuesType;
 typedef uint16_t QueueLengthType;
@@ -45,43 +47,7 @@ typedef cv::Mat LocalCPUReqDataType;
 typedef uint16_t BatchSizeType;
 typedef uint32_t RequestMemSizeType;
 
-const int DATA_BASE_PORT = 55001;
-const int CONTROLLER_API_PORT = 60000;
-const int CONTROLLER_RECEIVE_PORT = 60001;
-const int CONTROLLER_MESSAGE_QUEUE_PORT = 60002;
-const int IN_DEVICE_RECEIVE_PORT = 60011;
-const int IN_DEVICE_MESSAGE_QUEUE_PORT = 60012;
-
 const std::string COMPOSE_PATH = "../dockerfiles/tmp/";
-
-enum MESSAGE_TYPE_VALUES {
-    DEVICE_ADVERTISEMENT,
-    DUMMY_DATA,
-
-    NETWORK_CHECK,
-    DEVICE_SHUTDOWN,
-
-    CONTAINER_START,
-    MSVC_START_REPORT,
-    CONTEXT_METRICS,
-    SINK_METRICS,
-    ADJUST_UPSTREAM,
-    UPDATE_SENDER,
-    SYNC_DATASOURCES,
-    TRANSFER_FRAME_ID,
-    BATCH_SIZE_UPDATE,
-    RESOLUTION_UPDATE,
-    TIME_KEEPING_UPDATE,
-    CONTAINER_STOP,
-
-    START_FL,
-    RETURN_FL,
-    CRL_WEIGHTS,
-    BCEDGE_UPDATE,
-
-    START_TASK,
-    STOP_TASK
-};
 
 extern std::unordered_map<MESSAGE_TYPE_VALUES, std::string> MSG_TYPE;
 
@@ -499,29 +465,6 @@ struct MetricsServerConfigs {
 
 std::unique_ptr<pqxx::connection> connectToMetricsServer(MetricsServerConfigs &metricsServerConfigs, const std::string &name);
 
-enum SystemDeviceType {
-    Virtual,
-    Server,
-    OnPremise,
-
-    OrinAGX,
-    OrinNX,
-    OrinNano,
-
-    AGXXavier,
-    NXXavier,
-    NanoXavier
-};
-
-enum AdjustUpstreamMode {
-    Overwrite = 0,
-    Add = 1,
-    Remove = 2,
-    Modify = 3,
-    Start = 4,
-    Stop = 5
-};
-
 typedef std::map<SystemDeviceType, std::string> DeviceInfoType;
 
 enum PipelineType {
@@ -539,34 +482,6 @@ enum MODEL_DATA_TYPE {
     int8 = sizeof(uint8_t),
     fp16 = int(sizeof(float) / 2),
     fp32 = sizeof(float)
-};
-
-enum ModelType {
-    DataSource,
-    Sink,
-    Yolov5n,
-    Yolov5n320,
-    Yolov5n512,
-    Yolov5s,
-    Yolov5m,
-    Yolov5nDsrc,
-    Arcface,
-    Retinaface,
-    RetinaMtface,
-    RetinaMtfaceDsrc,
-    PlateDet,
-    Movenet,
-    Emotionnet,
-    Gender,
-    Age,
-    CarBrand,
-    CarColor,
-    CarDamage,
-    FireDetect,
-    FashionColor,
-    GearDetect,
-    EquipDetect,
-    End
 };
 
 extern std::map<std::string, std::string> keywordAbbrs;
@@ -625,6 +540,7 @@ public:
 
     bool empty() { return limits.empty(); }
     unsigned int size() { return limits.size(); }
+    void clear() { limits.clear(); }
 
     const BandwidthLimit& operator[](size_t index) const { return limits.at(index); }
 private:
@@ -897,7 +813,7 @@ void addTimestampsToPath(
 );
 
 std::string generateComposeConfig(const std::string &base_file, const std::string &cont_name,
-                                  const std::string &docker_tag, const std::string &executable,
-                                  const std::string &start_string, int device, int port, int port_offset,
-                                  bool deploy_mode);
+                                  const std::string &docker_name, const std::string &executable,
+                                  const std::string &start_string, int device,
+                                  int port, int port_offset, bool deploy_mode);
 #endif
