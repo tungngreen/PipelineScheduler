@@ -696,7 +696,7 @@ void Controller::AddDevice(const std::string name) {
     // check if devices already contains the device
     if (devices.hasDevice(name)) return;
     std::string ip = ctrl_clusterInfo[name]["ip"];
-    std::string port = ctrl_clusterInfo[name]["port"];
+    int port = ctrl_clusterInfo[name]["port"];
     SystemInfo request;
     request.set_name(ctrl_systemName);
     request.set_experiment(ctrl_experimentName);
@@ -705,27 +705,30 @@ void Controller::AddDevice(const std::string name) {
     memcpy(zmq_msg.data(), message.data(), message.size());
     context_t ctx(1);
     socket_t socket(ctx, ZMQ_REQ);
-    std::string address = absl::StrFormat("tcp://%s:%s", ip, port);
+    socket.set(zmq::sockopt::sndtimeo, 100);
+    socket.set(zmq::sockopt::rcvtimeo, 100);
+    socket.set(zmq::sockopt::linger, 0);
+    std::string address = absl::StrFormat("tcp://%s:%d", ip, port);
     socket.connect(address);
-    if (!socket.send(zmq_msg, send_flags::dontwait)) {
-        spdlog::get("container_agent")->error("Failed to send connection request to device %s.", ip.c_str());
+    if (!socket.send(zmq_msg)) {
+        spdlog::error("Failed to send connection request to device {}.", ip);
         return;
     }
     if (!socket.recv(reply)) {
-        spdlog::get("container_agent")->error("Failed to receive reply from device %s.", ip.c_str());
+        spdlog::error("Failed to receive reply from device {}.", ip);
         return;
     }
     DeviceInfo info;
     if (!info.ParseFromString(reply.to_string())) {
-        spdlog::get("container_agent")->error("Failed to parse reply from device %s.", ip.c_str());
+        spdlog::error("Failed to parse reply from device {}.", ip);
         return;
     }
     std::string deviceName = info.name();
     NodeHandle *node = new NodeHandle{deviceName, ip, static_cast<SystemDeviceType>(info.type()),
-                                      DATA_BASE_PORT + (std::stoi(port) - DEVICE_RECEIVE_PORT), {}};
+                                      DATA_BASE_PORT + port - DEVICE_RECEIVE_PORT, {}};
     initialiseGPU(node, info.processors(), std::vector<int>(info.memory().begin(), info.memory().end()));
     devices.addDevice(deviceName, node);
-    spdlog::get("container_agent")->info("Device {} is connected to the system", deviceName);
+    spdlog::info("Device {} is connected to the system", deviceName);
 
     queryInDeviceNetworkEntries(devices.getDevice(deviceName));
 
