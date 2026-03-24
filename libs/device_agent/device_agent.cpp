@@ -178,6 +178,7 @@ DeviceAgent::DeviceAgent() {
     device_message_queue.set(zmq::sockopt::sndtimeo, 100);
 
     // finish startup
+    running = true;
     threads = std::vector<std::thread>();
     threads.emplace_back(&DeviceAgent::HandleControlCommands, this);
     if (dev_type != SinkDevice) {
@@ -185,7 +186,6 @@ DeviceAgent::DeviceAgent() {
         threads.emplace_back(&DeviceAgent::collectRuntimeMetrics, this);
         threads.emplace_back(&DeviceAgent::limitBandwidth, this, absl::GetFlag(FLAGS_dev_networkInterface));
     }
-    running = true;
     for (auto &thread: threads) {
         thread.detach();
     }

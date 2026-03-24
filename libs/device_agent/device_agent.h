@@ -159,7 +159,7 @@ protected:
     int dev_gpuID;
 
     // RUNTIME VARIABLES
-    std::atomic<bool> running;
+    std::atomic<bool> running = false;
     std::atomic<bool> deploy_mode = false;
     std::atomic<bool> experiment_active = false;
     std::chrono::high_resolution_clock::time_point dev_startTime;

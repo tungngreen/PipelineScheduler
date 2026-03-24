@@ -633,7 +633,7 @@ Controller::Controller(int argc, char **argv) {
     running = true;
     ctrl_clusterID = 0;
 
-    std::string server_address = absl::StrFormat("tcp://*:%d", CONTROLLER_API_PORT);
+    std::string server_address = absl::StrFormat("tcp://*:%d", CONTROLLER_API_PORT + ctrl_port_offset);
     api_ctx = context_t(1);
     api_socket = socket_t(api_ctx, ZMQ_REP);
     api_socket.bind(server_address);
