@@ -1022,7 +1022,10 @@ void Controller::ApplyScheduling() {
 }
 
 bool CheckMergable(const std::string &m) {
-    return m == "datasource" || m == "yolov5n" || m == "retinamtface" || m == "yolov5ndsrc" || m == "retinamtfacedsrc";
+    return m.find("datasource") != std::string::npos || m.find("yolov5n") != std::string::npos || m.find("retinamtface") != std::string::npos ||
+           m.find("yolov5ndsrc") != std::string::npos || m.find("retinamtfacedsrc") != std::string::npos || \
+           m.find("firedetect") != std::string::npos || m.find("firedetectdsrc") != std::string::npos || m.find("equipmentdetect") != std::string::npos || \
+           m.find("equipmentdetectdsrc") != std::string::npos;
 }
 
 ContainerHandle *Controller::TranslateToContainer(PipelineModel *model, NodeHandle *device, unsigned int i) {
