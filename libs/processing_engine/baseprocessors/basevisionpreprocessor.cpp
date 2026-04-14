@@ -279,9 +279,9 @@ void BaseVisionPreprocessor::loadConfigs(const json &jsonConfigs, bool isConstru
     msvc_subVals = configs.msvc_subVals;
     msvc_divVals = configs.msvc_divVals;
 
-    if (msvc_BATCH_MODE == BATCH_MODE::OURS) {
-        updateCycleTiming();
-    }
+    // if (msvc_BATCH_MODE == BATCH_MODE::OURS) {
+    //     updateCycleTiming();
+    // }
     msvc_toReloadConfigs = false;
 }
 

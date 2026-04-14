@@ -301,6 +301,10 @@ public:
         bool notify = false;
         uint16_t queueSize = 0;
 
+        if (timeout > 100000) {
+            timeout = 100000;
+        }
+
         {
             std::unique_lock<std::mutex> lock(q_mutex);
             spdlog::get("container_agent")->trace("{0:s} starts waiting for CPU queue {1:s}", caller, q_name);
@@ -358,6 +362,10 @@ public:
         bool isEmpty = false;
         bool notify = false;
         uint16_t queueSize = 0;
+
+        if (timeout > 100000) {
+            timeout = 100000;
+        }
 
         {
             std::unique_lock<std::mutex> lock(q_mutex);

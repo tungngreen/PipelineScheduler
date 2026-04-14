@@ -70,7 +70,7 @@ void BaseBatcher::updateCycleTiming() {
     if (msvc_BATCH_MODE == BATCH_MODE::OURS) {
 
         // The time when the last cycle started
-        ClockType lastCycleStartTime = msvc_cycleStartTime + TimePrecisionType((int) numCyclesSince * msvc_localDutyCycle);
+        ClockType lastCycleStartTime = msvc_cycleStartTime + TimePrecisionType(numCyclesSince * msvc_localDutyCycle);
         // The time when the next cycle should start
         ClockType nextCycleStartTime = lastCycleStartTime + TimePrecisionType(msvc_localDutyCycle);
 
@@ -170,7 +170,11 @@ inline bool BaseBatcher::isTimeToBatch() {
     uint64_t lastReqWaitTime = std::chrono::duration_cast<TimePrecisionType>(
             timeNow - oldestReqTime).count();
 
-    // OURS BATCH MODE
+    /**
+     * @brief LAZY BATCHING
+     * If the batch wait limit is set, then we batch when the oldest request in the buffer has waited for more than the batch wait limit.
+     * 
+     */
     if (msvc_BATCH_MODE == BATCH_MODE::DYNAMIC) {
         if (msvc_onBufferBatchSize >= msvc_idealBatchSize) return true;
         if (msvc_batchWaitLimit > 0) {
@@ -184,6 +188,13 @@ inline bool BaseBatcher::isTimeToBatch() {
         }
         return false;
     }
+
+    /**
+     * @brief OURS BATCHING
+     * We calculate the ideal batch time based on the duty cycle and the batch infer profile, 
+     * which is the time when the batch should be ideally batched to meet the cycle SLO.
+     * 
+     */
 
     // nextIdealBatchTime assumes that the batch is filled with the ideal batch size
     // nextMustBatchTime is to make sure that the oldest request in the buffer is not late
@@ -210,10 +221,12 @@ inline bool BaseBatcher::isTimeToBatch() {
     // into the total reserved time for the requests already in batch.
     // If this preprocessing doesnt happen (as the next request doesn't come as expectd), then the batcher will just batch
     // the next time as this timer is expired
-    uint64_t timeOutByLastReq = msvc_contSLO - lastReqWaitTime - 
-                            (msvc_batchInferProfileList.at(msvc_onBufferBatchSize).p95inferLat +
-                            msvc_batchInferProfileList.at(msvc_onBufferBatchSize).p95postLat) * msvc_onBufferBatchSize * 1.2 -
-                            msvc_batchInferProfileList.at(msvc_onBufferBatchSize).p95prepLat * 1.2;
+    int64_t timeOutSigned = (int64_t)msvc_contSLO - (int64_t)lastReqWaitTime - 
+                        (int64_t)((msvc_batchInferProfileList.at(msvc_onBufferBatchSize).p95inferLat +
+                        msvc_batchInferProfileList.at(msvc_onBufferBatchSize).p95postLat) * msvc_onBufferBatchSize * 1.2) -
+                        (int64_t)(msvc_batchInferProfileList.at(msvc_onBufferBatchSize).p95prepLat * 1.2);
+
+    uint64_t timeOutByLastReq = (uint64_t)std::max((int64_t)0, timeOutSigned);
     timeOutByLastReq = std::max((uint64_t) 0, timeOutByLastReq);
     msvc_nextMustBatchTime = timeNow + TimePrecisionType(timeOutByLastReq);
 
@@ -311,7 +324,7 @@ void BaseBatcher::batchRequests() {
 
         // Processing the next incoming request
         // Current incoming equest and request to be sent out to the next
-        Request<LocalGPUReqDataType> currReq = msvc_InQueue.at(0)->pop2(msvc_name);
+        Request<LocalGPUReqDataType> currReq = msvc_InQueue.at(0)->pop2(msvc_name, timeout);
         // Meaning the the timeout in pop() has been reached and no request was actually popped
         if (strcmp(currReq.req_travelPath[0].c_str(), "empty") == 0)
             continue;

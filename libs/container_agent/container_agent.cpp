@@ -2085,14 +2085,14 @@ void ContainerAgent::updateTimeKeeping(const std::string &msg) {
         spdlog::get("container_agent")->error("Failed to parse updateTimeKeeping request: {0:s}", msg);
         return;
     }
-    for (auto &preprocessor : cont_msvcsGroups["preprocessor"].msvcList) {
-        preprocessor->msvc_pipelineSLO = request.slo();
-        preprocessor->msvc_timeBudgetLeft = request.time_budget();
-        preprocessor->msvc_contStartTime = request.start_time();
-        preprocessor->msvc_contEndTime = request.end_time();
-        preprocessor->msvc_localDutyCycle = request.local_duty_cycle();
-        preprocessor->msvc_cycleStartTime = ClockType(TimePrecisionType(request.cycle_start_time()));
-        preprocessor->updateCycleTiming();
+    for (auto &batcher : cont_msvcsGroups.at("batcher").msvcList) {
+        batcher->msvc_pipelineSLO = request.slo();
+        batcher->msvc_timeBudgetLeft = request.time_budget();
+        batcher->msvc_contStartTime = request.start_time();
+        batcher->msvc_contEndTime = request.end_time();
+        batcher->msvc_localDutyCycle = request.local_duty_cycle();
+        batcher->msvc_cycleStartTime = ClockType(TimePrecisionType(request.cycle_start_time()));
+        batcher->updateCycleTiming();
     }
 }
 

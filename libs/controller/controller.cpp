@@ -1897,12 +1897,16 @@ void Controller::StartContainer(std::shared_ptr<ContainerHandle> container, bool
         start_config["container"]["cont_hostDeviceType"] = SystemDeviceTypeList[agent->type];
         start_config["container"]["cont_name"] = container->name;
         start_config["container"]["cont_allocationMode"] = easy_allocation ? 1 : 0;
-        if (ctrl_systemName == "ppp" || ctrl_systemName == "bce") {
-            //TODO: set back to 2 after OURs working again with batcher
+        if (ctrl_systemName == "bce") {
             start_config["container"]["cont_batchMode"] = 0;
-        } if (ctrl_systemName == "fcpo" || ctrl_systemName== "apis") {
+        } else if (ctrl_systemName == "ppp") {
+            //TODO: set back to 2 after OURs working again with batcher
             start_config["container"]["cont_batchMode"] = 1;
-        } if (ctrl_systemName == "ppp" || ctrl_systemName == "jlf") {
+        } else if (ctrl_systemName == "fcpo" || ctrl_systemName== "apis") {
+            start_config["container"]["cont_batchMode"] = 1;
+        } 
+        
+        if (ctrl_systemName == "ppp" || ctrl_systemName == "jlf") {
             start_config["container"]["cont_dropMode"] = 1;
         }
         start_config["container"]["cont_pipelineSLO"] = task->tk_slo;
