@@ -633,7 +633,7 @@ ContainerAgent::ContainerAgent(const json& configs) {
     std::string server_address = absl::StrFormat("tcp://localhost:%d", DEVICE_RECEIVE_PORT + absl::GetFlag(FLAGS_port_offset));
     sending_socket = socket_t(messaging_ctx, ZMQ_REQ);
     sending_socket.connect(server_address);
-    sending_socket.setsockopt(ZMQ_RCVTIMEO, 100);
+    sending_socket.setsockopt(ZMQ_RCVTIMEO, 250);
     server_address = absl::StrFormat("tcp://localhost:%d", DEVICE_MESSAGE_QUEUE_PORT + absl::GetFlag(FLAGS_port_offset));
     device_message_queue = socket_t(messaging_ctx, ZMQ_SUB);
     device_message_queue.setsockopt(ZMQ_SUBSCRIBE, (cont_name + "|").c_str(), cont_name.size() + 1);
@@ -1037,6 +1037,7 @@ void ContainerAgent::collectRuntimeMetrics() {
             }
             std::this_thread::sleep_for(std::chrono::milliseconds(100));
         }
+        return;
     }
 
     // Maximum number of seconds to keep the arrival records, usually 60

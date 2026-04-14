@@ -934,7 +934,7 @@ void Controller::AddDevice(const std::string name) {
 
     queryInDeviceNetworkEntries(devices.getDevice(deviceName));
 
-    if (node->type != SystemDeviceType::Server) {
+    if (node->type != SystemDeviceType::Server && node->type != SystemDeviceType::SinkDevice) {
         std::thread networkCheck(&Controller::initNetworkCheck, this, std::ref(*(devices.getDevice(deviceName))), 1000, 300000, 30);
         networkCheck.detach();
     } else {
@@ -2130,7 +2130,7 @@ void Controller::StartContainer(std::shared_ptr<ContainerHandle> container, bool
         request.add_input_shape(dim);
     }
 
-    // sendMessageToDevice(agent->name, MSG_TYPE[CONTAINER_START], request.SerializeAsString());
+    sendMessageToDevice(agent->name, MSG_TYPE[CONTAINER_START], request.SerializeAsString());
     spdlog::get("container_agent")->info("Requested container {0:s} to start!", container->name);
     /****************************************************************************************************************************************/
 }

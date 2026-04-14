@@ -1154,15 +1154,15 @@ pqxx::result pushSQL(pqxx::connection &conn, const std::string &sql) {
     pqxx::work session(conn);
     pqxx::result res;
     try {
-        res = session.exec(sql.c_str());
+        res = session.exec(sql);
         session.commit();
         return res;
         //catch error when duplicate key detected
     } catch (const pqxx::unique_violation &e) {
-        spdlog::get("container_agent")->error("{0:s} Unique Violation: {1:s}", __func__, e.what());
+        spdlog::get("container_agent")->error("{0:s} Unique Violation: {1:s} \n by {2:s}", __func__, e.what(), sql);
         return {};
     } catch (const pqxx::sql_error &e) {
-        spdlog::get("container_agent")->error("{0:s} SQL Error: {1:s}", __func__, e.what());
+        spdlog::get("container_agent")->error("{0:s} Error: {1:s} \n by {2:s}", __func__, e.what(), sql);
         exit(1);
     }
 }
@@ -1322,6 +1322,7 @@ std::map<std::string, std::string> keywordAbbrs = {
 std::map<SystemDeviceType, std::string> SystemDeviceTypeList = {
     {Virtual, "virtual"},
     {Server, "server"},
+    {SinkDevice, "sink"},
     {OnPremise, "onprem"},
     {OrinAGX, "orinagx"},
     {OrinNX, "orinnx"},
@@ -1337,6 +1338,7 @@ std::map<std::string, SystemDeviceType> SystemDeviceTypeReverseList = {
     {"virt", Virtual},
     {"server", Server},
     {"serv", Server},
+    {"sink", SinkDevice},
     {"onprem", OnPremise},
     {"onp", OnPremise},
     {"orinagx", OrinAGX},

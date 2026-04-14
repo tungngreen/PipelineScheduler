@@ -4,6 +4,11 @@
         "templateConfigPath": "../jsons/cpp_containers/datasource.json",
         "runCommand": "./Container_DataSource",
         "modelPath": ""
+    }, "sink_sink": {
+        "taskName": "sink",
+        "templateConfigPath": "",
+        "runCommand": "./runSink",
+        "modelPath": ""
     },
     "sink_server": {
         "taskName": "sink",

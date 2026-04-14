@@ -18,6 +18,8 @@ services:
       - /home/cdsn/pipe/models:/app/models
       - /run/jtop.sock:/run/jtop.sock
       - /usr/bin/tegrastats:/usr/bin/tegrastats
+      - /etc/localtime:/etc/localtime:ro
+      - /etc/timezone:/etc/timezone:ro
     command: >
       ${EXECUTABLE} --json '${START_STRING}' --device ${DEVICE}
       --port ${PORT} --port_offset ${PORT_OFFSET}

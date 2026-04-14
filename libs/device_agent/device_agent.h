@@ -109,7 +109,7 @@ protected:
     std::string runCompose(const std::string &executable, const std::string &cont_name, const std::string &docker_tag,
                            const std::string &start_string, int device, const int &port) {
         std::string command, compose_file = "../dockerfiles/";
-        if (dev_type == Virtual || dev_type == Server || dev_type == OnPremise) {
+        if (dev_type == Virtual || dev_type == Server || dev_type == OnPremise || dev_type == SinkDevice) {
             if (dev_gpuID >= 0) device = dev_gpuID;
             compose_file += "docker-compose.server.yml";
         } else if (dev_type == NanoXavier || dev_type == NXXavier || dev_type == AGXXavier || dev_type == OrinNano || dev_type == OrinNX || dev_type == OrinAGX) {

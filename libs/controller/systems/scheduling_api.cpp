@@ -321,7 +321,7 @@ void Controller::HandleStartTask(const std::string &msg) {
     if (ctrl_savedUnscheduledPipelines.hasTask(taskName)) {
         task = ctrl_savedUnscheduledPipelines.getTask(taskName);
     }
-    *task = *CreatePipelineFromMessage(request);
+    task = CreatePipelineFromMessage(request);
 
     // Initial mathematical scheduling
     ScheduleSingleTask(task);
