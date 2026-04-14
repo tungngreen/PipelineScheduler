@@ -2091,7 +2091,7 @@ void Controller::StartContainer(std::shared_ptr<ContainerHandle> container, bool
     
     auto dev_type = agent->type;
     
-    if (dev_type == Virtual || dev_type == Server || dev_type == OnPremise)
+    if (dev_type == Virtual || dev_type == Server || dev_type == OnPremise || dev_type == SinkDevice)
         docker_tag += "amd64-torch";
     else if (dev_type == NanoXavier || dev_type == NXXavier || dev_type == AGXXavier)
         docker_tag += "jp512-torch";

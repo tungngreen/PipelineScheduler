@@ -99,7 +99,7 @@ void DataReader::Process() {
                     // 1. The very moment request is originally generated at the beggining of the pipeline. (FIRST_TIMESTAMP)
                     // This timestamp will remain throughout the lifetime of the request
                     ClockType time = std::chrono::system_clock::now();
-                    req = {{{time, time}}, {msvc_contSLO},
+                    req = {{{time, time, time, time}}, {msvc_contSLO},
                            {"[" + msvc_hostDevice + "|" + link + "|" + std::to_string(readFrames) +
                             "|1|1|" + std::to_string(frameMemSize) + "|" + std::to_string(frameMemSize) + "]"}, 1,
                            {RequestData<LocalCPUReqDataType>{{frame.dims, frame.rows, frame.cols}, frame}}}; 
@@ -110,7 +110,7 @@ void DataReader::Process() {
                 cv::Mat encoded = encodeImage(frame);
                 RequestMemSizeType encodedMemSize = encoded.channels() * encoded.rows * encoded.cols * CV_ELEM_SIZE1(encoded.type());
                 ClockType time = std::chrono::system_clock::now();
-                req = {{{time, time}}, {msvc_contSLO},
+                req = {{{time, time, time, time}}, {msvc_contSLO},
                        {"[" + msvc_hostDevice + "|" + link + "|" + std::to_string(readFrames) +
                         "|1|1|" + std::to_string(frameMemSize) + "|" + std::to_string(encodedMemSize) + "]"}, 1,
                        {RequestData<LocalCPUReqDataType>{{frame.dims, frame.rows, frame.cols},
