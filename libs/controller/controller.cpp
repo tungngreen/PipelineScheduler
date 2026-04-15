@@ -2269,7 +2269,8 @@ void Controller::AdjustContainerDownstreamsInBatch(const std::shared_ptr<Contain
 
         Connection conn;
         conn.set_mode(mode);
-        conn.set_name(dwnstr->name);
+        std::shared_ptr<PipelineModel> model = dwnstr->pipelineModel.lock();
+        conn.set_name(model->name);
         conn.set_ip(dwnstrAgent->ip);
         conn.set_port(dwnstr->recv_port);
         conn.set_data_portion(1.0);
