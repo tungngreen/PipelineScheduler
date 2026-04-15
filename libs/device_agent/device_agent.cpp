@@ -491,9 +491,6 @@ void DeviceAgent::CreateContainer(const std::string &msg) {
         }
         std::string command = runCompose(c.executable(), c.name(), c.docker_tag(), c.json_config(), c.device(), c.control_port());
         std::string target = absl::StrFormat("%s:%d", "localhost", c.control_port());
-        if (c.name().find("sink") != std::string::npos) {
-            return;
-        }
         std::vector<int> dims = {};
         for (auto &dim: c.input_shape()) {
             dims.push_back(dim);
@@ -526,7 +523,7 @@ void DeviceAgent::StopContainer(ContainerSignal request) {
     }
     if (absl::GetFlag(FLAGS_dev_verbose_compose))
         file = COMPOSE_PATH + request.name() + ".yml";
-    else if (dev_type == Virtual || dev_type == Server || dev_type == OnPremise)
+    else if (dev_type == Virtual || dev_type == Server || dev_type == OnPremise || dev_type == SinkDevice)
         file += "docker-compose.server.yml";
     else
         file += "docker-compose.jetson.yml";

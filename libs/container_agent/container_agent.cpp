@@ -1501,7 +1501,7 @@ void ContainerAgent::HandleControlMessages() {
             if (handlers.count(type)) {
                 handlers[type](payload);
             } else {
-                spdlog::get("container_agent")->error("Received unknown device type: {} (topic: {})", type, topic);
+                spdlog::get("container_agent")->error("Received unknown message type: {} (topic: {})", type, topic);
             }
 //        } else {
 //            spdlog::get("container_agent")->trace("Device Communication Receive Timeout");

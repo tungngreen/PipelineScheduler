@@ -1111,13 +1111,14 @@ void Controller::ApplyScheduling() {
     * */
     for (auto &[pipeName, pipe]: newScheduledPipelines) {
         for (auto &model: pipe->tk_pipelineModels) {
-            bool upstreamIsDatasource = (std::find_if(model->upstreams.begin(), model->upstreams.end(),
-                                                      [](const PipelineEdge &upstream) {
-                                                          if (auto up = upstream.targetNode.lock()) {
-                                                              return up->canBeCombined && (up->name.find("datasource") != std::string::npos);
-                                                          }
-                                                          return false;
-                                                      }) != model->upstreams.end());
+            bool upstreamIsDatasource = false;
+//            bool upstreamIsDatasource = (std::find_if(model->upstreams.begin(), model->upstreams.end(),
+//                                                      [](const PipelineEdge &upstream) {
+//                                                          if (auto up = upstream.targetNode.lock()) {
+//                                                              return up->canBeCombined && (up->name.find("datasource") != std::string::npos);
+//                                                          }
+//                                                          return false;
+//                                                      }) != model->upstreams.end());
             if (upstreamIsDatasource) {
                 if (model->name.find("yolov5n") != std::string::npos && model->device != "server") {
                     if (model->name.find("yolov5ndsrc") == std::string::npos) {

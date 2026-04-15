@@ -20,6 +20,7 @@ std::unordered_map<MESSAGE_TYPE_VALUES, std::string> MSG_TYPE = {
         {SINK_METRICS, "SK_MET"},
         {ADJUST_UPSTREAM, "ADJ_UPSTR"},
         {UPDATE_SENDER, "UPD_SENDER"},
+        {UPDATE_SENDER_IN_BATCH, "UPD_SEND_BATCH"},
         {SYNC_DATASOURCES, "SYNC_DS"},
         {TRANSFER_FRAME_ID, "FRAME_ID"},
         {BATCH_SIZE_UPDATE, "BS"},
