@@ -1470,26 +1470,31 @@ void Controller::ApplyScheduling() {
                         // If the old upstream is NOT found in the desired upstreams
                         } else {
                             // We need to remove the downstream edge from the old upstream container to the current container, 
-                            // and add the old upstream edge to the adjustment map with stop mode to adjust its downstream connection later
+                            // and add the old upstream edge to  the adjustment map with stop mode to adjust its downstream connection later
                             auto &downs = oldUp->downstreams;
                             downs.erase(container->name);
+                            // We have the swap later so erasing here won't have any effect, this is just to keep the data structure clean and prevent any potential confusion
+                            container->upstreams.erase(oldUpName);
 
                             if (std::find(toBeStoppedContainers.begin(), toBeStoppedContainers.end(), oldUp) == toBeStoppedContainers.end() &&
                                 std::find(new_containers.begin(), new_containers.end(), oldUp) == new_containers.end()) {
 
-                                    // We check if the old upstream container still has connection to any of the manifestation containers of the current model, 
-                                    // if not, we need to stop the old upstream container's sender to the current container,
-                                    // if yes, we just need to remove the current container from the round robin table of the old upstream container's sender 
-                                    // without stopping it.
-                                    for (auto &manifWeak: container->pipelineModel.lock()->manifestations) {
-                                        if (auto manif = manifWeak.lock()) {
-                                            if (oldUp->downstreams.find(manif->name) == oldUp->downstreams.end()) {
-                                                // If the old upstream container has no downstream connection to any of the manifestation containers of the current model, 
-                                                // we need to stop the old upstream container's sender to the current container
-                                                containerDnstreamAdjustMap[oldUp].push_back({container, AdjustMode::Stop, ""});
-                                                break; // No need to check further because we only need to stop the sender once for all manifestations of the same model
+                                    // We check if the old upstream container `oldUp` still has any downstream edges to any of the manifestation containers 
+                                    bool stillHasDownstream = false;
+                                    for (auto &manifWeakPtr: container->pipelineModel.lock()->manifestations) {
+                                        if (auto manifestCont = manifWeakPtr.lock()) {
+
+                                            // if we cannot find manif->name in the downstreams of the old upstream container `oldUp`, we need to remove the downstream
+                                            // connection from `oldUp` to the current container.
+                                            if (oldUp->downstreams.find(manifestCont->name) != oldUp->downstreams.end()) {
+                                                stillHasDownstream = true;
+                                                break;
                                             }
                                         }
+                                    }
+                                    if (!stillHasDownstream) {
+                                        containerDnstreamAdjustMap[oldUp].push_back({container, AdjustMode::Stop, ""});
+                                    } else {
                                         containerDnstreamAdjustMap[oldUp].push_back({container, AdjustMode::Remove, ""});
                                     }
                             }
@@ -1501,37 +1506,42 @@ void Controller::ApplyScheduling() {
                 // We compare the desired upstreams with current upstreams of the container, 
                 // if there is any desired upstream that is not in the current upstreams, we need to add the upstream edge to the container,
                 for (auto &[desiredUpstrCont, contEdge] : desiredUpstreams) {
-                    auto &upstrConts = container->upstreams;
+                    auto &contUpstrEdges = container->upstreams;
                     
-                    // If the desired upstream container is not in the current upstreams, 
+                    // If the desired upstream container is not in the current upstream edges, 
                     // we need to add the upstream edge to the container, and also add the downstream edge from the desired upstream container to the current container,
-                    if (upstrConts.find(desiredUpstrCont->name) == upstrConts.end()) {
-                        // Add two-way edges between the desired upstream container and the current container with the routing rules specified in the model
-                        upstrConts[desiredUpstrCont->name] = ContainerEdge{desiredUpstrCont, contEdge.classOfInterest, contEdge.streamNames};
-                        auto &downs = desiredUpstrCont->downstreams;
-                        downs[container->name] = ContainerEdge{container, contEdge.classOfInterest, contEdge.streamNames};
-
+                    if (contUpstrEdges.find(desiredUpstrCont->name) == contUpstrEdges.end()) {
                         auto contModel = container->pipelineModel.lock();
                         
-                        // If the upstream container is neither a brand new container nor a container to be stopped, we need to adjust its downstream connection to the current 
+                        // If the upstream container is neither a brand new container nor a container to be stopped, we need to adjust its downstream 
+                        // connection to the current 
                         if (std::find(new_containers.begin(), new_containers.end(), desiredUpstrCont) == new_containers.end() && 
                             std::find(toBeStoppedContainers.begin(), toBeStoppedContainers.end(), desiredUpstrCont) == toBeStoppedContainers.end()) {
-                                // We need to check if the upstream container has established the downstream connection to any of the manifestation containers 
-                                // of the current model
+                                // We need to check if the upstream container `desiredUpstrCont` has established the downstream connection to any of the manifestation 
+                                // containers of the current model
                                 // If NOT ESTABLISHED, we need the start mode to start a new sender in the upstream container to send data to the current container and 
                                 //      all of the other manifestation containers of the current model
                                 // If ESTABLISHED, we use the add mode to just add this container's IP to round robin table of upstream container's sender.
-                                for (auto &manifWeak: contModel->manifestations) {
-                                    if (auto manif = manifWeak.lock()) {
-                                        if (desiredUpstrCont->downstreams.find(manif->name) == desiredUpstrCont->downstreams.end()) {
-                                            // If the downstream connection is not established, we need to start a new sender in the upstream container to send data to the current container and all of the other manifestation containers of the current model
-                                            containerDnstreamAdjustMap[desiredUpstrCont].push_back({container, AdjustMode::Start});
+                                bool isEstablished = false;
+                                for (auto &manifWeakPtr: contModel->manifestations) {
+                                    if (auto manifestCont = manifWeakPtr.lock()) {
+                                        if (desiredUpstrCont->downstreams.find(manifestCont->name) != desiredUpstrCont->downstreams.end()) {
+                                            isEstablished = true;
                                             break; // No need to check further because we only need one sender for all manifestations of the same model
                                         }
                                     }
                                 }
-                                containerDnstreamAdjustMap[desiredUpstrCont].push_back({container, AdjustMode::Add, ""});
+                                if (!isEstablished) {
+                                    containerDnstreamAdjustMap[desiredUpstrCont].push_back({container, AdjustMode::Start, ""});
+                                } else {
+                                    containerDnstreamAdjustMap[desiredUpstrCont].push_back({container, AdjustMode::Add, ""});
+                                }
                         }
+
+                        // Add two-way edges between the desired upstream container and the current container with the routing rules specified in the model
+                        contUpstrEdges[desiredUpstrCont->name] = ContainerEdge{desiredUpstrCont, contEdge.classOfInterest, contEdge.streamNames};
+                        auto &downs = desiredUpstrCont->downstreams;
+                        downs[container->name] = ContainerEdge{container, contEdge.classOfInterest, contEdge.streamNames};
                     }
                 }
 
@@ -2137,7 +2147,7 @@ void Controller::StartContainer(std::shared_ptr<ContainerHandle> container, bool
         request.add_input_shape(dim);
     }
 
-    sendMessageToDevice(agent->name, MSG_TYPE[CONTAINER_START], request.SerializeAsString());
+    // sendMessageToDevice(agent->name, MSG_TYPE[CONTAINER_START], request.SerializeAsString());
     spdlog::get("container_agent")->info("Requested container {0:s} to start!", container->name);
     /****************************************************************************************************************************************/
 }

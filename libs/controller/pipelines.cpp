@@ -1506,7 +1506,7 @@ std::shared_ptr<TaskHandle> Controller::CreatePipelineFromMessage(TaskDesc msg) 
                 if (u.name() == "datasource")
                     datasource->downstreams.push_back(PipelineEdge{m, -1, {msg.stream()}});
             }
-            if (m->downstreams.empty()) {
+            if (m->downstreams.empty() && m->name != "datasource") {
                 m->downstreams.push_back(PipelineEdge{sink, -1, {msg.stream()}});
                 sink->upstreams.push_back(PipelineEdge{m, -1, {msg.stream()}});
             }
