@@ -66,6 +66,7 @@ protected:
         unsigned int port;
         unsigned int pid;
         std::string startCommand;
+        std::string dockerName;
         ModelType modelType;
         std::vector<int> dataShape;
         int instances;
@@ -103,7 +104,6 @@ protected:
     void testNetwork(const std::string &msg);
     void limitBandwidth(std::string interface);
     void sendMessageToContainer(const std::string &topik, const std::string &type, const std::string &content);
-    void sendMessageToContainer(const std::string &topik, const std::string &content);
 
     // SYSTEM COMMANDS
     std::string runCompose(const std::string &executable, const std::string &cont_name, const std::string &docker_tag,

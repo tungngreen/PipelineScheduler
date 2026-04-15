@@ -499,7 +499,7 @@ void DeviceAgent::CreateContainer(const std::string &msg) {
             dims.push_back(dim);
         }
         std::lock_guard<std::mutex> lock(containers_mutex);
-        containers[c.name()] = {c.name(), static_cast<unsigned int>(c.control_port()), 0, command,
+        containers[c.name()] = {c.name(), static_cast<unsigned int>(c.control_port()), 0, command, c.docker_tag(),
                                 static_cast<ModelType>(c.model_type()), dims, 1, {}};
         return;
     } catch (std::exception &e) {
@@ -530,7 +530,7 @@ void DeviceAgent::StopContainer(ContainerSignal request) {
         file += "docker-compose.server.yml";
     else
         file += "docker-compose.jetson.yml";
-    std::string command ="CONTAINER_NAME=" + request.name() + " docker compose -f " + file + " -p " + request.name() + " down";
+    std::string command = "DOCKER_NAME=" + containers[request.name()].dockerName + " CONTAINER_NAME=" + request.name() + " docker compose -f " + file + " -p " + request.name() + " down";
     spdlog::get("container_agent")->info("Stopping container via: {}", command);
     if (runCommand(command) == 0) {
         std::lock_guard<std::mutex> lock(containers_mutex);
@@ -781,7 +781,8 @@ void DeviceAgent::ForwardToContainer(const std::string &msg) {
         spdlog::get("container_agent")->error("Forward Target Container {} not found!", request.target_name());
         return;
     }
-    sendMessageToContainer(request.target_name(), request.payload());
+    sendMessageToContainer(request.target_name(), request.target_type(), request.payload());
+    spdlog::get("container_agent")->trace("Forwarded Message {} Target Container {}!", request.target_type(), request.target_name());
 }
 
 void DeviceAgent::InferBCEdge(const std::string &msg) {
@@ -830,13 +831,6 @@ void DeviceAgent::Shutdown(const std::string &msg) {
 
 void DeviceAgent::sendMessageToContainer(const std::string &topik, const std::string &type, const std::string &content) {
     std::string msg = absl::StrFormat("%s| %s %s", topik, type, content);
-    message_t zmq_msg(msg.size());
-    memcpy(zmq_msg.data(), msg.data(), msg.size());
-    device_message_queue.send(zmq_msg, send_flags::none);
-}
-
-void DeviceAgent::sendMessageToContainer(const std::string &topik, const std::string &content) {
-    std::string msg = absl::StrFormat("%s| %s", topik, content);
     message_t zmq_msg(msg.size());
     memcpy(zmq_msg.data(), msg.data(), msg.size());
     device_message_queue.send(zmq_msg, send_flags::none);

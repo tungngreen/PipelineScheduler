@@ -1637,10 +1637,11 @@ void Controller::ApplyScheduling() {
 }
 
 bool CheckMergable(const std::string &m) {
-    return m.find("datasource") != std::string::npos || m.find("yolov5n") != std::string::npos || m.find("retinamtface") != std::string::npos ||
-           m.find("yolov5ndsrc") != std::string::npos || m.find("retinamtfacedsrc") != std::string::npos || \
-           m.find("firedetect") != std::string::npos || m.find("firedetectdsrc") != std::string::npos || m.find("equipmentdetect") != std::string::npos || \
-           m.find("equipmentdetectdsrc") != std::string::npos;
+    return false;
+//    return m.find("datasource") != std::string::npos || m.find("yolov5n") != std::string::npos || m.find("retinamtface") != std::string::npos ||
+//           m.find("yolov5ndsrc") != std::string::npos || m.find("retinamtfacedsrc") != std::string::npos || \
+//           m.find("firedetect") != std::string::npos || m.find("firedetectdsrc") != std::string::npos || m.find("equipmentdetect") != std::string::npos || \
+//           m.find("equipmentdetectdsrc") != std::string::npos;
 }
 
 /**
@@ -1846,7 +1847,8 @@ void Controller::AdjustTiming(std::shared_ptr<ContainerHandle> container) {
 
     PackagedMsg request;
     request.set_target_name(container->name);
-    request.set_payload(absl::StrFormat("%s %s", MSG_TYPE[TIME_KEEPING_UPDATE], message.SerializeAsString()));
+    request.set_target_type(MSG_TYPE[TIME_KEEPING_UPDATE]);
+    request.set_payload(message.SerializeAsString());
 
     sendMessageToDevice(agent->name, MSG_TYPE[TO_CONTAINER], request.SerializeAsString());
     spdlog::get("container_agent")->info("Requested container {0:s} to update time keeping!", container->name);
@@ -2289,7 +2291,8 @@ void Controller::AdjustContainerDownstreamsInBatch(const std::shared_ptr<Contain
 
     PackagedMsg request;
     request.set_target_name(container->name);
-    request.set_payload(absl::StrFormat("%s %s", MSG_TYPE[UPDATE_SENDER_IN_BATCH], message.SerializeAsString()));
+    request.set_target_type(MSG_TYPE[UPDATE_SENDER_IN_BATCH]);
+    request.set_payload(message.SerializeAsString());
 
     sendMessageToDevice(senderAgent->name, MSG_TYPE[TO_CONTAINER], request.SerializeAsString());
 
@@ -2345,7 +2348,8 @@ void Controller::AdjustContainerDownstreams(std::shared_ptr<ContainerHandle> dns
 
     PackagedMsg request;
     request.set_target_name(container->name);
-    request.set_payload(absl::StrFormat("%s %s", MSG_TYPE[UPDATE_SENDER_IN_BATCH], message.SerializeAsString()));
+    request.set_target_type(MSG_TYPE[UPDATE_SENDER_IN_BATCH]);
+    request.set_payload(message.SerializeAsString());
 
     sendMessageToDevice(upstrAgent->name, MSG_TYPE[TO_CONTAINER], request.SerializeAsString());
     
@@ -2390,7 +2394,8 @@ void Controller::AdjustBatchSize(std::shared_ptr<ContainerHandle> msvc, int new_
 
     PackagedMsg request;
     request.set_target_name(msvc->name);
-    request.set_payload(absl::StrFormat("%s %s", MSG_TYPE[BATCH_SIZE_UPDATE], bs.SerializeAsString()));
+    request.set_target_type(MSG_TYPE[BATCH_SIZE_UPDATE]);
+    request.set_payload(bs.SerializeAsString());
 
     sendMessageToDevice(agent->name, MSG_TYPE[TO_CONTAINER], request.SerializeAsString());
     spdlog::get("container_agent")->info("Batch size of {0:s} adjusted to {1:d}", msvc->name, new_bs);
@@ -2425,7 +2430,8 @@ void Controller::AdjustResolution(std::shared_ptr<ContainerHandle> msvc, std::ve
 
     PackagedMsg request;
     request.set_target_name(msvc->name);
-    request.set_payload(absl::StrFormat("%s %s", MSG_TYPE[RESOLUTION_UPDATE], dims.SerializeAsString()));
+    request.set_target_type(MSG_TYPE[RESOLUTION_UPDATE]);
+    request.set_payload(dims.SerializeAsString());
 
     sendMessageToDevice(agent->name, MSG_TYPE[TO_CONTAINER], request.SerializeAsString());
     spdlog::get("container_agent")->info("Resolution of {0:s} adjusted to {1:d}x{2:d}x{3:d}",

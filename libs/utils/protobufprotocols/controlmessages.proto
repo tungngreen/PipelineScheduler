@@ -191,7 +191,8 @@ message SinkMetrics {
 
 message PackagedMsg {
   string target_name = 1;
-  bytes payload = 2;
+  string target_type = 2;
+  bytes payload = 3;
 }
 
 message ContainerSignal {
