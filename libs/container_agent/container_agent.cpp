@@ -760,7 +760,7 @@ void ContainerAgent::initiateMicroservices(const json &configs) {
         }
     }
 
-    // this->addMicroservice(msvcsList);
+    cont_baseSender = cont_msvcsGroups["sender"].msvcList[0]->msvc_configs; // Assuming at least one sender exists to copy config from
 }
 
 bool ContainerAgent::addPreprocessor(uint8_t totalNumInstances) {
@@ -1611,7 +1611,7 @@ void ContainerAgent::updateSenderInBatch(const std::string &msg) {
             }
             if (already_exists) continue;
 
-            json config = (*senders)[0]->msvc_configs; // Assuming at least one sender exists to copy config from
+            json config = cont_baseSender;
             config["msvc_name"] = absl::StrFormat("sender%s", request.name());
             config["msvc_dnstreamMicroservices"][0]["nb_name"] = request.name();
             config["msvc_dnstreamMicroservices"][0]["nb_classOfInterest"] = request.class_of_interest();

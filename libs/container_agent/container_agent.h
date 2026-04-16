@@ -227,6 +227,7 @@ protected:
     std::string cont_hostDevice; // Device the Container is running on
     std::string cont_hostDeviceType;
     std::string cont_inferModel;
+    json cont_baseSender;
     std::atomic<bool> hasDataReader;
     std::atomic<bool> isDataSource;
     RUNMODE cont_RUNMODE;

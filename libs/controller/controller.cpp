@@ -1473,8 +1473,6 @@ void Controller::ApplyScheduling() {
                             // and add the old upstream edge to  the adjustment map with stop mode to adjust its downstream connection later
                             auto &downs = oldUp->downstreams;
                             downs.erase(container->name);
-                            // We have the swap later so erasing here won't have any effect, this is just to keep the data structure clean and prevent any potential confusion
-                            container->upstreams.erase(oldUpName);
 
                             if (std::find(toBeStoppedContainers.begin(), toBeStoppedContainers.end(), oldUp) == toBeStoppedContainers.end() &&
                                 std::find(new_containers.begin(), new_containers.end(), oldUp) == new_containers.end()) {
@@ -2147,7 +2145,7 @@ void Controller::StartContainer(std::shared_ptr<ContainerHandle> container, bool
         request.add_input_shape(dim);
     }
 
-    // sendMessageToDevice(agent->name, MSG_TYPE[CONTAINER_START], request.SerializeAsString());
+    sendMessageToDevice(agent->name, MSG_TYPE[CONTAINER_START], request.SerializeAsString());
     spdlog::get("container_agent")->info("Requested container {0:s} to start!", container->name);
     /****************************************************************************************************************************************/
 }
