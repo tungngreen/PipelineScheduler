@@ -1575,7 +1575,11 @@ void ContainerAgent::updateSenderInBatch(const std::string &msg) {
 
     auto senders = &cont_msvcsGroups["sender"].msvcList;
 
+    spdlog::get("container_agent")->trace("Received {} requests to update {} existing senders.", requests.size(), senders->size());
+
     for (const auto& request : requests) {
+        std::string link = absl::StrFormat("%s:%d", request.ip(), request.port());
+        spdlog::get("container_agent")->trace("Processing {} to {} with link {} and {} producers.", request.mode(), request.name(), link, request.allowed_producers().size());
         /**
          * @brief Handle the offloading duration by sleeping until the start time of the offloading if the request is received early, 
          * or skipping the request if it's received too late. This ensures that the adjustments are made within the specified time window 
@@ -1593,8 +1597,6 @@ void ContainerAgent::updateSenderInBatch(const std::string &msg) {
             }
         }
         /****************************************************************************************************************************************/
-
-        std::string link = absl::StrFormat("%s:%d", request.ip(), request.port());
 
         /**
          * @brief Start a new sender for the downstream if the mode is Start, ensuring that no duplicate sender exists for the same downstream.
@@ -1642,6 +1644,7 @@ void ContainerAgent::updateSenderInBatch(const std::string &msg) {
             }
             new_sender->SetInQueue({cont_msvcsGroups["postprocessor"].outQueue.back()});
             static_cast<Sender*>(new_sender)->dispatchThread();
+            spdlog::get("container_agent")->info("Sender for downstream {0:s} started as {1:s}", request.name(), new_sender->msvc_name);
             continue;
         }
         /****************************************************************************************************************************************/
@@ -1683,6 +1686,7 @@ void ContainerAgent::updateSenderInBatch(const std::string &msg) {
                 sender->stopThread();
                 senders->erase(it);
                 found = true;
+                spdlog::get("container_agent")->info("Sender for downstream {0:s} succesfully deleted.", request.name());
                 break; 
             }
             if (!found) {
@@ -1697,6 +1701,7 @@ void ContainerAgent::updateSenderInBatch(const std::string &msg) {
          */
         bool sender_updated = false;
         for (auto* sender: *senders) {
+            spdlog::get("container_agent")->trace("Checking update for sender {} to {}.", sender->msvc_name, sender->dnstreamMicroserviceList[0].name);
             if (sender->dnstreamMicroserviceList[0].name != request.name()) {
                 continue;
             }
