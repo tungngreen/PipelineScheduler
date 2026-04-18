@@ -288,6 +288,8 @@ void Controller::Scheduling() {
             }
 
             estimatePipelineTiming();
+            // IMPORTANT DO-NOT-DELETE: This backup keeps the current scheduled pipelines objects as well as their pipelineModel objects alive until ApplyScheduling finishes,
+            auto backupScheduledPipelines = ctrl_scheduledPipelines.getMap();
             ctrl_scheduledPipelines = ctrl_mergedPipelines;
             ApplyScheduling();
         }
