@@ -746,6 +746,9 @@ void ContainerAgent::initiateMicroservices(const json &configs) {
                     msvcsList.back()->SetInQueue({cont_msvcsGroups["postprocessor"].outQueue[numSenders]});
                 }
                 numSenders++;
+                if (numSenders == 1){
+                    cont_baseSender = pipeConfig; // Assuming at least one sender exists initially to copy config from
+                }
             } else {
                 spdlog::get("container_agent")->error("Unknown microservice type: {0:d}", msvc_type);
                 throw std::runtime_error("Unknown microservice type");
@@ -759,8 +762,6 @@ void ContainerAgent::initiateMicroservices(const json &configs) {
             }
         }
     }
-
-    cont_baseSender = cont_msvcsGroups["sender"].msvcList[0]->msvc_configs; // Assuming at least one sender exists to copy config from
 }
 
 bool ContainerAgent::addPreprocessor(uint8_t totalNumInstances) {
