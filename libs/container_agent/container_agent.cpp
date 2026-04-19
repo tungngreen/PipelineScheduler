@@ -747,7 +747,7 @@ void ContainerAgent::initiateMicroservices(const json &configs) {
                 }
                 numSenders++;
                 if (numSenders == 1){
-                    cont_baseSender = pipeConfig; // Assuming at least one sender exists initially to copy config from
+                    cont_baseSender = pipeConfig;
                 }
             } else {
                 spdlog::get("container_agent")->error("Unknown microservice type: {0:d}", msvc_type);
@@ -762,6 +762,7 @@ void ContainerAgent::initiateMicroservices(const json &configs) {
             }
         }
     }
+    addMicroservice(msvcsList);
 }
 
 bool ContainerAgent::addPreprocessor(uint8_t totalNumInstances) {
@@ -1579,7 +1580,7 @@ void ContainerAgent::updateSenderInBatch(const std::string &msg) {
 
     for (const auto& request : requests) {
         std::string link = absl::StrFormat("%s:%d", request.ip(), request.port());
-        spdlog::get("container_agent")->trace("Processing {} to {} with link {} and {} producers.", request.mode(), request.name(), link, request.allowed_producers().size());
+         spdlog::get("container_agent")->trace("Processing {} to {} with link {} and {} producers.", request.mode(), request.name(), link, request.allowed_producers().size());
         /**
          * @brief Handle the offloading duration by sleeping until the start time of the offloading if the request is received early, 
          * or skipping the request if it's received too late. This ensures that the adjustments are made within the specified time window 
@@ -1615,6 +1616,7 @@ void ContainerAgent::updateSenderInBatch(const std::string &msg) {
             if (already_exists) continue;
 
             json config = cont_baseSender;
+            //spdlog::get("container_agent")->trace("Using Sender Config: {0:s}", to_string(config));
             config["msvc_name"] = absl::StrFormat("sender%s", request.name());
             config["msvc_dnstreamMicroservices"][0]["nb_name"] = request.name();
             config["msvc_dnstreamMicroservices"][0]["nb_classOfInterest"] = request.class_of_interest();
@@ -1628,15 +1630,16 @@ void ContainerAgent::updateSenderInBatch(const std::string &msg) {
             }
             config["msvc_dnstreamMicroservices"][0]["nb_allowedProducerList"] = allowedProducers;
             config["msvc_dnstreamMicroservices"][0]["nb_link"] = {link};
-            config["msvc_dnstreamMicroservices"][0]["nb_portions"] = {};
-            
+            config["msvc_dnstreamMicroservices"][0]["nb_portions"] = std::vector<int>();
+            spdlog::get("container_agent")->trace("Updated Sender Config: {0:s}", to_string(config));
+
             Microservice* new_sender = new RemoteCPUSender(config);
             cont_msvcsGroups["sender"].msvcList.push_back(new_sender);
 
             json neighborconfig = cont_msvcsGroups["postprocessor"].msvcList[0]->msvc_configs["msvc_dnstreamMicroservices"][0];
             neighborconfig["nb_name"] = new_sender->msvc_name;
             neighborconfig["nb_classOfInterest"] = request.class_of_interest();
-            neighborconfig["nb_portions"] = {};
+            neighborconfig["nb_portions"] = std::vector<int>();
             
             for (auto *postprocessor : cont_msvcsGroups["postprocessor"].msvcList) {
                 postprocessor->msvc_configs["msvc_dnstreamMicroservices"].push_back(neighborconfig);
