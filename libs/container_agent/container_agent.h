@@ -141,31 +141,6 @@ public:
 
     std::vector<Microservice *> getAllMicroservices();
 
-    void addMicroservice(Microservice *msvc) {
-        MicroserviceType type = msvc->msvc_type;
-        if (type >= MicroserviceType::Receiver && type < MicroserviceType::Preprocessor) {
-            cont_msvcsGroups["receiver"].msvcList.push_back(msvc);
-        } else if (type >= MicroserviceType::Preprocessor && type < MicroserviceType::TRTInferencer) {
-            cont_msvcsGroups["preprocessor"].msvcList.push_back(msvc);
-        } else if (type >= MicroserviceType::Batcher && type < MicroserviceType::TRTInferencer) {
-            cont_msvcsGroups["batcher"].msvcList.push_back(msvc);
-        } else if (type >= MicroserviceType::TRTInferencer && type < MicroserviceType::Postprocessor) {
-            cont_msvcsGroups["inference"].msvcList.push_back(msvc);
-        } else if (type >= MicroserviceType::Postprocessor && type < MicroserviceType::Sender) {
-            cont_msvcsGroups["postprocessor"].msvcList.push_back(msvc);
-        } else if (type >= MicroserviceType::Sender) {
-            cont_msvcsGroups["sender"].msvcList.push_back(msvc);
-        } else {
-            throw std::runtime_error("Unknown microservice type: " + std::to_string((int)type));
-        }
-    }
-
-    void addMicroservice(std::vector<Microservice *> msvcs) {
-        for (auto &msvc: msvcs) {
-            addMicroservice(msvc);
-        }
-    }
-
     void dispatchMicroservices() {
         for (auto &group: cont_msvcsGroups) {
             for (auto &msvc: group.second.msvcList) {

@@ -678,6 +678,8 @@ void ContainerAgent::initiateMicroservices(const json &configs) {
         std::string groupName = pipeConfig.at("msvc_name");
         if (groupName == "data_reader") {
             groupName = "receiver";
+        } else if (groupName.find("sender") != std::string::npos) {
+            groupName = "sender";
         }
         uint8_t numInstances = pipeConfig.at("msvc_numInstances");
         for (uint8_t i = 0; i < numInstances; i++) {
@@ -762,7 +764,6 @@ void ContainerAgent::initiateMicroservices(const json &configs) {
             }
         }
     }
-    addMicroservice(msvcsList);
 }
 
 bool ContainerAgent::addPreprocessor(uint8_t totalNumInstances) {
