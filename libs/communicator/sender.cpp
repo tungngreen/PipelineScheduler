@@ -62,7 +62,7 @@ Sender::Sender(const json &jsonConfigs) : Microservice(jsonConfigs) {
 
 void Sender::Process() {
     msvc_logFile.open(msvc_microserviceLogPath, std::ios::out);
-    while (READY) {
+    while (true) {
         if (STOP_THREADS) {
             spdlog::get("container_agent")->info("{0:s} STOPS.", msvc_name);
             break;
@@ -118,7 +118,7 @@ GPUSender::GPUSender(const json &jsonConfigs) : Sender(jsonConfigs) {
 
 void GPUSender::Process() {
     msvc_logFile.open(msvc_microserviceLogPath, std::ios::out);
-    while (READY) {
+    while (true) {
         if (STOP_THREADS) {
             spdlog::get("container_agent")->info("{0:s} STOPS.", msvc_name);
             break;

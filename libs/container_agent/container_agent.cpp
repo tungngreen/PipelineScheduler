@@ -2195,7 +2195,7 @@ bool ContainerAgent::checkReady(std::vector<Microservice *> msvcs) {
  * 
  */
 void ContainerAgent::waitReady(bool init) {
-    if (!init) reportStart();
+    if (init) reportStart();
     bool ready = false;
     while (!ready) {
         ready = true;

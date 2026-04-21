@@ -1104,7 +1104,6 @@ public:
 
     void pauseThread() {
         PAUSE_THREADS = true;
-        READY = false;
     }
 
     void unpauseThread() {
