@@ -97,8 +97,8 @@ public:
 
     [[nodiscard]] bool running() const { return CONT_RUN; }
 
-    void START() {
-        this->waitReady();
+    void START(bool init = true) {
+        this->waitReady(init);
         for (auto msvcGroup: cont_msvcsGroups) {
             for (auto msvc: msvcGroup.second.msvcList) {
                 msvc->unpauseThread();
@@ -131,7 +131,7 @@ public:
 
     bool checkReady(std::vector<Microservice *> msvcs);
 
-    void waitReady();
+    void waitReady(bool init);
 
     bool checkPause(std::vector<Microservice *> msvcs);
 

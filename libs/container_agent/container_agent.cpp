@@ -647,7 +647,7 @@ ContainerAgent::ContainerAgent(const json& configs) {
     initiateMicroservices(configs);
 
     hasDataReader = cont_msvcsGroups["receiver"].msvcList[0]->msvc_type == MicroserviceType::DataReader;
-    isDataSource = hasDataReader && (cont_msvcsGroups["inference"].msvcList.size() == 0);
+    isDataSource = hasDataReader && cont_msvcsGroups["inference"].msvcList.empty();
     if (hasDataReader && !isDataSource) for (auto &reader : cont_msvcsGroups["receiver"].msvcList) {
             reader->msvc_dataShape = {{-1, -1, -1}};
     }
@@ -1575,7 +1575,7 @@ void ContainerAgent::updateSenderInBatch(const std::string &msg) {
     }
     /****************************************************************************************************************************************/
 
-    auto senders = &cont_msvcsGroups["sender"].msvcList;
+    auto* senders = &cont_msvcsGroups["sender"].msvcList;
 
     spdlog::get("container_agent")->trace("Received {} requests to update {} existing senders.", requests.size(), senders->size());
 
@@ -1637,16 +1637,20 @@ void ContainerAgent::updateSenderInBatch(const std::string &msg) {
             Microservice* new_sender = new RemoteCPUSender(config);
             cont_msvcsGroups["sender"].msvcList.push_back(new_sender);
 
-            json neighborconfig = cont_msvcsGroups["postprocessor"].msvcList[0]->msvc_configs["msvc_dnstreamMicroservices"][0];
-            neighborconfig["nb_name"] = new_sender->msvc_name;
+            std::string upstreamNeighbor = "postprocessor";
+            if (isDataSource) {
+                upstreamNeighbor = "receiver";
+            }
+            json neighborconfig = cont_msvcsGroups[upstreamNeighbor].msvcList[0]->msvc_configs["msvc_dnstreamMicroservices"][0];
+            neighborconfig["nb_name"] = config["msvc_name"];
             neighborconfig["nb_classOfInterest"] = request.class_of_interest();
             neighborconfig["nb_portions"] = std::vector<int>();
             
-            for (auto *postprocessor : cont_msvcsGroups["postprocessor"].msvcList) {
+            for (auto *postprocessor : cont_msvcsGroups[upstreamNeighbor].msvcList) {
                 postprocessor->msvc_configs["msvc_dnstreamMicroservices"].push_back(neighborconfig);
                 postprocessor->reloadDnstreams();
             }
-            new_sender->SetInQueue({cont_msvcsGroups["postprocessor"].outQueue.back()});
+            new_sender->SetInQueue({cont_msvcsGroups[upstreamNeighbor].outQueue.back()});
             static_cast<Sender*>(new_sender)->dispatchThread();
             spdlog::get("container_agent")->info("Sender for downstream {0:s} started as {1:s}", request.name(), new_sender->msvc_name);
             continue;
@@ -1688,10 +1692,13 @@ void ContainerAgent::updateSenderInBatch(const std::string &msg) {
                     postprocessor->reloadDnstreams();
                 }
                 sender->stopThread();
-                senders->erase(it);
+                delete *it;
+                it = senders->erase(it);
                 found = true;
                 spdlog::get("container_agent")->info("Sender for downstream {0:s} succesfully deleted.", request.name());
-                break; 
+                break;
+                Microservice *msvc = cont_msvcsGroups["preprocessor"].msvcList.back();
+                msvc->stopThread();
             }
             if (!found) {
                 spdlog::get("container_agent")->error("Sender for downstream {0:s} not found for deletion.", request.name());
@@ -1856,7 +1863,7 @@ void ContainerAgent::updateSenderInBatch(const std::string &msg) {
     }
 
     // 5. Resume all threads ONCE
-    START();
+    START(false);
 }
 
 void ContainerAgent::updateSender(const std::string &msg) {
@@ -1874,7 +1881,7 @@ void ContainerAgent::updateSender(const std::string &msg) {
             std::this_thread::sleep_for(start - now);
         } else if (now > start + std::chrono::seconds(request.offloading_duration())) {
             spdlog::get("container_agent")->error("Received Offloading Request for {0:s} too late", request.name());
-            START();
+            START(false);
             return;
         }
     }
@@ -1893,7 +1900,7 @@ void ContainerAgent::updateSender(const std::string &msg) {
         for (auto sender: *senders) {
             if (sender->dnstreamMicroserviceList[0].name != request.name()) continue;
             spdlog::get("container_agent")->error("Sender for downstream {0:s} already existing as: {1:s}", request.name(), sender->msvc_name);
-            START();
+            START(false);
             return;
         }
         json config = senders[0][0]->msvc_configs;
@@ -1916,7 +1923,7 @@ void ContainerAgent::updateSender(const std::string &msg) {
         }
         new_sender->SetInQueue({cont_msvcsGroups["postprocessor"].outQueue.back()});
         static_cast<Sender*>(new_sender)->dispatchThread();
-        START();
+        START(false);
         return;
     }
     if (request.mode() == AdjustMode::Stop) {
@@ -1943,11 +1950,11 @@ void ContainerAgent::updateSender(const std::string &msg) {
             cont_msvcsGroups["sender"].msvcList.erase(
                     std::remove_if(cont_msvcsGroups["sender"].msvcList.begin(), cont_msvcsGroups["sender"].msvcList.end(),
                                    [&](Microservice* msvc) { return msvc == sender; }), cont_msvcsGroups["sender"].msvcList.end());
-            START();
+            START(false);
             return;
         }
         spdlog::get("container_agent")->error("Sender for downstream {0:s} not found for deletion.", request.name());
-        START();
+        START(false);
         return;
     }
     json *config;
@@ -1975,7 +1982,7 @@ void ContainerAgent::updateSender(const std::string &msg) {
                 auto it = std::find(nb_links.begin(), nb_links.end(), request.old_link());
                 if (it == nb_links.end()) {
                     spdlog::get("container_agent")->error("Link {0:s} not found in {1:s}", request.old_link(), sender->msvc_name);
-                    START();
+                    START(false);
                     return;
                 }
                 int index = std::distance(nb_links.begin(), it);
@@ -2008,14 +2015,14 @@ void ContainerAgent::updateSender(const std::string &msg) {
                         spdlog::get("container_agent")->trace("Added link {0:s} to {1:s}", link, sender->msvc_name);
                     } else {
                         spdlog::get("container_agent")->error("Link {0:s} already exists in {1:s}", link, sender->msvc_name);
-                        START();
+                        START(false);
                         return;
                     }
             } else {
                 auto it = std::find(nb_links.begin(), nb_links.end(), link);
                 if (it == nb_links.end()) {
                     spdlog::get("container_agent")->error("Link {0:s} not found in {1:s}", link, sender->msvc_name);
-                    START();
+                    START(false);
                     return;
                 }
                 int index = std::distance(nb_links.begin(), it);
@@ -2039,18 +2046,18 @@ void ContainerAgent::updateSender(const std::string &msg) {
                         postprocessor->portions[index] = request.data_portion();
                     }
                     spdlog::get("container_agent")->trace("Modified link {0:s} for {1:s} to portion {2:.2f}", link, sender->msvc_name, request.data_portion());
-                    START();
+                    START(false);
                     return;
                 }
             }
             static_cast<Sender*>(sender)->reloadDnstreams();
             static_cast<Sender*>(sender)->dispatchThread();
-            START();
+            START(false);
             return;
         }
     }
     spdlog::get("container_agent")->error("Could not find sender to {0:s} in current configuration, please use Start to create a new sender or Stop to remove one.", request.name());
-    START();
+    START(false);
 }
 
 
@@ -2187,8 +2194,8 @@ bool ContainerAgent::checkReady(std::vector<Microservice *> msvcs) {
  * @brief Wait for all the microservices to be ready
  * 
  */
-void ContainerAgent::waitReady() {
-    reportStart();
+void ContainerAgent::waitReady(bool init) {
+    if (!init) reportStart();
     bool ready = false;
     while (!ready) {
         ready = true;
