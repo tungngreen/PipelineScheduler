@@ -1631,7 +1631,6 @@ void ContainerAgent::updateSenderInBatch(const std::string &msg) {
             config["msvc_dnstreamMicroservices"][0]["nb_allowedProducerList"] = allowedProducers;
             config["msvc_dnstreamMicroservices"][0]["nb_link"] = {link};
             config["msvc_dnstreamMicroservices"][0]["nb_portions"] = std::vector<int>();
-            spdlog::get("container_agent")->trace("Updated Sender Config: {0:s}", to_string(config));
 
             Microservice* new_sender = new RemoteCPUSender(config);
             cont_msvcsGroups["sender"].msvcList.push_back(new_sender);
@@ -1644,12 +1643,14 @@ void ContainerAgent::updateSenderInBatch(const std::string &msg) {
             neighborconfig["nb_name"] = config["msvc_name"];
             neighborconfig["nb_classOfInterest"] = request.class_of_interest();
             neighborconfig["nb_portions"] = std::vector<int>();
-            
+
+            // TODO: This needs to be revisited for multiple readers / postprocessors, currently queues will be duplicated
             for (auto *prevNeighbor : cont_msvcsGroups[upstreamNeighbor].msvcList) {
                 prevNeighbor->msvc_configs["msvc_dnstreamMicroservices"].push_back(neighborconfig);
                 prevNeighbor->reloadDnstreams();
             }
-            new_sender->SetInQueue({cont_msvcsGroups[upstreamNeighbor].outQueue.back()});
+            new_sender->SetInQueue({cont_msvcsGroups[upstreamNeighbor].msvcList[0]->msvc_OutQueue.back()});
+            cont_msvcsGroups[upstreamNeighbor].outQueue.push_back(new_sender->GetInQueue()[0]);
             static_cast<Sender*>(new_sender)->dispatchThread();
             spdlog::get("container_agent")->info("Sender for downstream {0:s} started as {1:s} with InQueue {2:s}", request.name(), new_sender->msvc_name, new_sender->GetInQueue()[0]->getName());
             continue;

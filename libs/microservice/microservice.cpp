@@ -156,7 +156,6 @@ void Microservice::loadConfigs(const json &jsonConfigs, bool isConstructing) {
 }
 
 void Microservice::reloadDnstreams() {
-    spdlog::get("container_agent")->trace("{0:s} starts reloading downstream microservices: {1:s}", msvc_name, to_string(msvc_configs["msvc_dnstreamMicroservices"]));
     BaseMicroserviceConfigs configs = msvc_configs.get<BaseMicroserviceConfigs>();
     std::unordered_set<size_t> indicesToKeep;
 
@@ -188,7 +187,6 @@ void Microservice::reloadDnstreams() {
             spdlog::get("container_agent")->trace("{0:s} downstream microservice {1:s} is updated.", msvc_name, dnStreamMsvc.name);
             continue;
         }
-
 
         msvc_OutQueue.emplace_back(new ThreadSafeFixSizedDoubleQueue(configs.msvc_maxQueueSize, 
                                                                      it->classOfInterest, 
