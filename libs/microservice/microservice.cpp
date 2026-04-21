@@ -156,6 +156,7 @@ void Microservice::loadConfigs(const json &jsonConfigs, bool isConstructing) {
 }
 
 void Microservice::reloadDnstreams() {
+    spdlog::get("container_agent")->trace("{0:s} starts reloading downstream microservices: {1:s}", msvc_name, to_string(msvc_configs["msvc_dnstreamMicroservices"]));
     BaseMicroserviceConfigs configs = msvc_configs.get<BaseMicroserviceConfigs>();
     std::unordered_set<size_t> indicesToKeep;
 
@@ -184,8 +185,10 @@ void Microservice::reloadDnstreams() {
                 msvc_OutQueue[index]->setEncoded(it->commMethod == CommMethod::encodedCPU);
             }
             dnstreamMicroserviceList[index] = dnStreamMsvc;
+            spdlog::get("container_agent")->trace("{0:s} downstream microservice {1:s} is updated.", msvc_name, dnStreamMsvc.name);
             continue;
         }
+
 
         msvc_OutQueue.emplace_back(new ThreadSafeFixSizedDoubleQueue(configs.msvc_maxQueueSize, 
                                                                      it->classOfInterest, 
@@ -202,14 +205,16 @@ void Microservice::reloadDnstreams() {
             msvc_activeOutQueueIndex.emplace_back(1);
             msvc_OutQueue.back()->setEncoded(it->commMethod == CommMethod::encodedCPU);
         }
+        spdlog::get("container_agent")->trace("{0:s} downstream microservice {1:s} is added.", msvc_name, dnStreamMsvc.name);
     }
-    for (int i = dnstreamMicroserviceList.size() - 1; i >= 0; --i) {
+    for (size_t i = dnstreamMicroserviceList.size() - 1; i >= 0; --i) {
         if (indicesToKeep.find(i) == indicesToKeep.end()) {
             delete msvc_OutQueue[i];
             msvc_OutQueue.erase(msvc_OutQueue.begin() + i);
             dnstreamMicroserviceList.erase(dnstreamMicroserviceList.begin() + i);
             msvc_outReqShape.erase(msvc_outReqShape.begin() + i);
             msvc_activeOutQueueIndex.erase(msvc_activeOutQueueIndex.begin() + i);
+            spdlog::get("container_agent")->trace("{0:s} downstream microservice at index {1:d} is removed.", msvc_name, i);
         }
     }
     classToDnstreamMap = {};

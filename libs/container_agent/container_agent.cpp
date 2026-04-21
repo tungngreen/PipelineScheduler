@@ -1617,7 +1617,6 @@ void ContainerAgent::updateSenderInBatch(const std::string &msg) {
             if (already_exists) continue;
 
             json config = cont_baseSender;
-            //spdlog::get("container_agent")->trace("Using Sender Config: {0:s}", to_string(config));
             config["msvc_name"] = absl::StrFormat("sender%s", request.name());
             config["msvc_dnstreamMicroservices"][0]["nb_name"] = request.name();
             config["msvc_dnstreamMicroservices"][0]["nb_classOfInterest"] = request.class_of_interest();
@@ -1646,13 +1645,13 @@ void ContainerAgent::updateSenderInBatch(const std::string &msg) {
             neighborconfig["nb_classOfInterest"] = request.class_of_interest();
             neighborconfig["nb_portions"] = std::vector<int>();
             
-            for (auto *postprocessor : cont_msvcsGroups[upstreamNeighbor].msvcList) {
-                postprocessor->msvc_configs["msvc_dnstreamMicroservices"].push_back(neighborconfig);
-                postprocessor->reloadDnstreams();
+            for (auto *prevNeighbor : cont_msvcsGroups[upstreamNeighbor].msvcList) {
+                prevNeighbor->msvc_configs["msvc_dnstreamMicroservices"].push_back(neighborconfig);
+                prevNeighbor->reloadDnstreams();
             }
             new_sender->SetInQueue({cont_msvcsGroups[upstreamNeighbor].outQueue.back()});
             static_cast<Sender*>(new_sender)->dispatchThread();
-            spdlog::get("container_agent")->info("Sender for downstream {0:s} started as {1:s}", request.name(), new_sender->msvc_name);
+            spdlog::get("container_agent")->info("Sender for downstream {0:s} started as {1:s} with InQueue {2:s}", request.name(), new_sender->msvc_name, new_sender->GetInQueue()[0]->getName());
             continue;
         }
         /****************************************************************************************************************************************/
