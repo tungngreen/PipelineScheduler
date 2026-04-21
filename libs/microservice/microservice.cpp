@@ -205,7 +205,7 @@ void Microservice::reloadDnstreams() {
         }
         spdlog::get("container_agent")->trace("{0:s} downstream microservice {1:s} is added.", msvc_name, dnStreamMsvc.name);
     }
-    for (size_t i = dnstreamMicroserviceList.size() - 1; i >= 0; --i) {
+    for (int i = (int) dnstreamMicroserviceList.size() - 1; i >= 0; --i) {
         if (indicesToKeep.find(i) == indicesToKeep.end()) {
             delete msvc_OutQueue[i];
             msvc_OutQueue.erase(msvc_OutQueue.begin() + i);
