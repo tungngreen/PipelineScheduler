@@ -44,7 +44,7 @@ public:
         sock->set(zmq::sockopt::linger, slo);
         sock->set(zmq::sockopt::sndtimeo, slo);
         sock->set(zmq::sockopt::rcvtimeo, slo);
-        sock->connect(link);
+        sock->connect("tcp://" + link);
         stubs.push_back(std::move(sock));
     }
 

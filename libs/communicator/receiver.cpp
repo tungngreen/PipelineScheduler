@@ -19,7 +19,7 @@ void Receiver::loadConfigs(const json &jsonConfigs, bool isConstructing) {
     } else if (msvc_RUNMODE == RUNMODE::DEPLOYMENT || msvc_RUNMODE == RUNMODE::PROFILING) {
         comm_ctx = context_t(1);
         socket = socket_t(comm_ctx, ZMQ_REP);
-        socket.bind(upstreamMicroserviceList.front().link[0]);
+        socket.bind("tcp://" + upstreamMicroserviceList.front().link[0]);
         msvc_OutQueue[0]->setActiveQueueIndex(msvc_activeOutQueueIndex[0]);
     }
     msvc_toReloadConfigs = false;
