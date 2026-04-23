@@ -172,10 +172,12 @@ DeviceAgent::DeviceAgent() {
     device_socket = socket_t(device_msg_ctx, ZMQ_REP);
     device_socket.bind(server_address);
     device_socket.set(zmq::sockopt::rcvtimeo, 1000);
+    device_socket.set(zmq::sockopt::linger, 1000);
     server_address = absl::StrFormat("tcp://*:%d", DEVICE_MESSAGE_QUEUE_PORT + dev_system_port_offset);
     device_message_queue = socket_t(device_msg_ctx, ZMQ_PUB);
     device_message_queue.bind(server_address);
     device_message_queue.set(zmq::sockopt::sndtimeo, 100);
+    device_message_queue.set(zmq::sockopt::linger, 100);
 
     // finish startup
     running = true;
@@ -662,6 +664,7 @@ void DeviceAgent::ConnectController() {
     controller_message_queue.setsockopt(ZMQ_SUBSCRIBE, (dev_name + "|").c_str(), dev_name.size() + 1);
     controller_message_queue.connect(server_address);
     controller_message_queue.set(zmq::sockopt::rcvtimeo, 1000);
+    controller_message_queue.set(zmq::sockopt::linger, 1000);
 }
 
 void DeviceAgent::HandleDeviceMessages() {

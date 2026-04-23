@@ -6,10 +6,10 @@ option objc_class_prefix = "HLW";
 
 package pipelinescheduler;
 
-service DataTransferService {
-  rpc GpuPointerTransfer (ImageDataPayload) returns (google.protobuf.Empty) {}
-  rpc SharedMemTransfer (ImageDataPayload) returns (google.protobuf.Empty) {}
-  rpc SerializedDataTransfer (ImageDataPayload) returns (google.protobuf.Empty) {}
+enum TRANSFER_TYPE {
+  REMOTE = 0;
+  MEMORY = 1;
+  GPU = 2;
 }
 
 message ImageData {

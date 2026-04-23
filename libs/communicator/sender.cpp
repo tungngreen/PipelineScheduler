@@ -16,10 +16,8 @@ void Sender::loadConfigs(const json &jsonConfigs, bool isConstructing) {
 
     //stubs = std::vector<std::unique_ptr<DataTransferService::Stub>>();
     stubs = StubVector();
-    for (auto &link: dnstreamMicroserviceList.front().link) {
-        stubs.push_back(
-                DataTransferService::NewStub(
-                        grpc::CreateChannel(link, grpc::InsecureChannelCredentials())));
+    for (auto &link : dnstreamMicroserviceList.front().link) {
+        stubs.emplace_back(comm_ctx, link, (int) ((msvc_pipelineSLO - msvc_contSLO) / 1000));
     }
 
     if (stubs.size() > 1) {
@@ -39,9 +37,7 @@ void Sender::reloadDnstreams() {
     Microservice::reloadDnstreams();
     stubs = StubVector();
     for (auto &link: dnstreamMicroserviceList.front().link) {
-        stubs.push_back(
-                DataTransferService::NewStub(
-                        grpc::CreateChannel(link, grpc::InsecureChannelCredentials())));
+        stubs.emplace_back(comm_ctx, link, (int) ((msvc_pipelineSLO - msvc_contSLO) / 1000));
     }
     if (stubs.size() > 1) {
         multipleStubs = true;
@@ -55,6 +51,7 @@ void Sender::reloadDnstreams() {
 }
 
 Sender::Sender(const json &jsonConfigs) : Microservice(jsonConfigs) {
+    comm_ctx = context_t(1);
     loadConfigs(jsonConfigs, true);
     msvc_toReloadConfigs = false;
     spdlog::get("container_agent")->info("{0:s} is created.", msvc_name);
@@ -109,6 +106,37 @@ void Sender::Process() {
     }
     msvc_logFile.close();
     STOPPED = true;
+}
+
+std::string Sender::completeSending(message_t &zmq_msg) {
+    socket_t *sock;
+    if (!multipleStubs) {
+        sock = stubs.first();
+    } else if (dnstreamMicroserviceList.front().portions[0] == 1.0f) {
+        sock = stubs.random();
+    } else {
+        sock = stubs.next();
+    }
+
+    // Check if peer is available immediately via polling
+    zmq::pollitem_t items[] = { { sock->handle(), 0, ZMQ_POLLOUT, 0 } };
+    zmq::poll(&items[0], 1, std::chrono::milliseconds(0));
+    if (!(items[0].revents & ZMQ_POLLOUT)) {
+        spdlog::get("container_agent")->error("{0:s} can not send to {1:s}, because Receiver is unavailable.", msvc_name, sock->get(zmq::sockopt::last_endpoint));
+        return "RPC failed";
+    }
+
+    if (!sock->send(zmq_msg, send_flags::none)) {
+        spdlog::get("container_agent")->error("{0:s} failed to send data to {1:s}, because of Send Timeout ({2:d}).", msvc_name, sock->get(zmq::sockopt::last_endpoint), sock->get(zmq::sockopt::sndtimeo));
+        return "RPC failed";
+    }
+
+    message_t reply;
+    if (!sock->recv(reply, recv_flags::none)) {
+        spdlog::get("container_agent")->error("{0:s} failed to send data to {1:s}, because of Recv Timeout ({2:d}).", msvc_name, sock->get(zmq::sockopt::last_endpoint), sock->get(zmq::sockopt::rcvtimeo));
+        return "RPC failed";
+    }
+    return reply.to_string();
 }
 
 GPUSender::GPUSender(const json &jsonConfigs) : Sender(jsonConfigs) {
@@ -168,7 +196,7 @@ void GPUSender::Process() {
     STOPPED = true;
 }
 
-std::string GPUSender::SendData(std::vector<RequestData<LocalGPUReqDataType>> &elements, std::vector<RequestTimeType> &timestamp,
+void GPUSender::SendData(std::vector<RequestData<LocalGPUReqDataType>> &elements, std::vector<RequestTimeType> &timestamp,
                                 std::vector<std::string> &path, RequestSLOType &slo) {
     CompletionQueue cq;
 
@@ -196,33 +224,10 @@ std::string GPUSender::SendData(std::vector<RequestData<LocalGPUReqDataType>> &e
     }
 
     if (request.elements_size() == 0) {
-        return "No elements to send";
+        return;
     }
-    EmptyMessage reply;
-    ClientContext context;
-    Status status;
-
-    std::unique_ptr<ClientAsyncResponseReader<EmptyMessage>> rpc;
-    if (!multipleStubs) {
-        rpc = (stubs.first()->AsyncGpuPointerTransfer(&context, request, &cq));
-    } else if (dnstreamMicroserviceList.front().portions[0] == 1.0) {
-        rpc = (stubs.random()->AsyncGpuPointerTransfer(&context, request, &cq));
-    } else {
-        rpc = (stubs.next()->AsyncGpuPointerTransfer(&context, request, &cq));
-    }
-
-    rpc->Finish(&reply, &status, (void *) 1);
-    void *got_tag;
-    bool ok = false;
-    GPR_ASSERT(cq.Next(&got_tag, &ok));
-    GPR_ASSERT(ok);
-
-    if (status.ok()) {
-        return "Complete";
-    } else {
-        std::cout << status.error_code() << ": " << status.error_message() << std::endl;
-        return "RPC failed";
-    }
+    message_t zmq_msg(std::to_string(pipelinescheduler::GPU) + " " + request.SerializeAsString());
+    completeSending(zmq_msg);
 }
 
 LocalCPUSender::LocalCPUSender(const json &jsonConfigs) : Sender(jsonConfigs) {
@@ -230,7 +235,7 @@ LocalCPUSender::LocalCPUSender(const json &jsonConfigs) : Sender(jsonConfigs) {
     spdlog::get("container_agent")->trace("{0:s} LocalCPUSender is created.", msvc_name);
 }
 
-std::string LocalCPUSender::SendData(std::vector<RequestData<LocalCPUReqDataType>> &elements, std::vector<RequestTimeType> &timestamp,
+void LocalCPUSender::SendData(std::vector<RequestData<LocalCPUReqDataType>> &elements, std::vector<RequestTimeType> &timestamp,
                                      std::vector<std::string> &path, RequestSLOType &slo) {
     CompletionQueue cq;
     ImageDataPayload request;
@@ -253,31 +258,11 @@ std::string LocalCPUSender::SendData(std::vector<RequestData<LocalCPUReqDataType
         ref->set_path(path[i]);
         ref->set_slo(slo[i]);
     }
-    EmptyMessage reply;
-    ClientContext context;
-    Status status;
-
-    std::unique_ptr<ClientAsyncResponseReader<EmptyMessage>> rpc;
-    if (!multipleStubs) {
-        rpc = (stubs.first()->AsyncSharedMemTransfer(&context, request, &cq));
-    } else if (dnstreamMicroserviceList.front().portions[0] == 1.0) {
-        rpc = (stubs.random()->AsyncSharedMemTransfer(&context, request, &cq));
-    } else {
-        rpc = (stubs.next()->AsyncSharedMemTransfer(&context, request, &cq));
+    if (request.elements_size() == 0) {
+        return;
     }
-
-    rpc->Finish(&reply, &status, (void *) 1);
-    void *got_tag;
-    bool ok = false;
-    GPR_ASSERT(cq.Next(&got_tag, &ok));
-    GPR_ASSERT(ok);
-
-    if (status.ok()) {
-        return "Complete";
-    } else {
-        std::cout << status.error_code() << ": " << status.error_message() << std::endl;
-        return "RPC failed";
-    }
+    message_t zmq_msg(std::to_string(pipelinescheduler::MEMORY) + " " + request.SerializeAsString());
+    completeSending(zmq_msg);
 }
 
 RemoteCPUSender::RemoteCPUSender(const json &jsonConfigs) : Sender(jsonConfigs) {
@@ -285,7 +270,7 @@ RemoteCPUSender::RemoteCPUSender(const json &jsonConfigs) : Sender(jsonConfigs) 
     spdlog::get("container_agent")->trace("{0:s} RemoteCPUSender is created.", msvc_name);
 }
 
-std::string RemoteCPUSender::SendData(std::vector<RequestData<LocalCPUReqDataType>> &elements, std::vector<RequestTimeType> &timestamp,
+void RemoteCPUSender::SendData(std::vector<RequestData<LocalCPUReqDataType>> &elements, std::vector<RequestTimeType> &timestamp,
                                      std::vector<std::string> &path, RequestSLOType &slo) {
     CompletionQueue cq;
     ImageDataPayload request;
@@ -304,29 +289,10 @@ std::string RemoteCPUSender::SendData(std::vector<RequestData<LocalCPUReqDataTyp
         ref->set_slo(slo[i]);
         ref->set_datalen(elements[i].data.total() * elements[i].data.elemSize());
     }
-    EmptyMessage reply;
-    ClientContext context;
-    Status status;
 
-    std::unique_ptr<ClientAsyncResponseReader<EmptyMessage>> rpc;
-    if (!multipleStubs) {
-        rpc = (stubs.first()->AsyncSerializedDataTransfer(&context, request, &cq));
-    } else if (dnstreamMicroserviceList.front().portions[0] == 1.0f) {
-        rpc = (stubs.random()->AsyncSerializedDataTransfer(&context, request, &cq));
-    } else {
-        rpc = (stubs.next()->AsyncSerializedDataTransfer(&context, request, &cq));
+    if (request.elements_size() == 0) {
+        return;
     }
-
-    rpc->Finish(&reply, &status, (void *) 1);
-    void *got_tag;
-    bool ok = false;
-    GPR_ASSERT(cq.Next(&got_tag, &ok));
-    GPR_ASSERT(ok);
-
-    if (status.ok()) {
-        return "Complete";
-    } else {
-        spdlog::get("container_agent")->error("{0:s} error {1:d}: {2:s}", msvc_name, status.error_code(), status.error_message());
-        return "RPC failed";
-    }
+    message_t zmq_msg(std::to_string(pipelinescheduler::REMOTE) + " " + request.SerializeAsString());
+    completeSending(zmq_msg);
 }

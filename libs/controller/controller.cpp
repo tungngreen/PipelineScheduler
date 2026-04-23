@@ -814,12 +814,14 @@ Controller::Controller(int argc, char **argv) {
     api_socket = socket_t(api_ctx, ZMQ_REP);
     api_socket.bind(server_address);
     api_socket.set(zmq::sockopt::rcvtimeo, 1000);
+    api_socket.set(zmq::sockopt::linger, 1000);
 
     server_address = absl::StrFormat("tcp://*:%d", CONTROLLER_RECEIVE_PORT + ctrl_port_offset);
     system_ctx = context_t(2);
     server_socket = socket_t(system_ctx, ZMQ_REP);
     server_socket.bind(server_address);
     server_socket.set(zmq::sockopt::rcvtimeo, 1000);
+    server_socket.set(zmq::sockopt::linger, 1000);
     system_handlers = {
         {MSG_TYPE[DEVICE_ADVERTISEMENT], std::bind(&Controller::handleDeviseAdvertisement, this, std::placeholders::_1)},
         {MSG_TYPE[DUMMY_DATA], std::bind(&Controller::handleDummyDataRequest, this, std::placeholders::_1)},
@@ -831,6 +833,7 @@ Controller::Controller(int argc, char **argv) {
     message_queue = socket_t(system_ctx, ZMQ_PUB);
     message_queue.bind(server_address);
     message_queue.set(zmq::sockopt::sndtimeo, 100);
+    message_queue.set(zmq::sockopt::linger, 100);
 
     if (ctrl_systemName == "fcpo" || ctrl_systemName== "apis") {
         // FIX: Use make_unique for the unique_ptr allocation
@@ -905,7 +908,7 @@ void Controller::AddDevice(const std::string name) {
     socket_t socket(ctx, ZMQ_REQ);
     socket.set(zmq::sockopt::sndtimeo, 100);
     socket.set(zmq::sockopt::rcvtimeo, 100);
-    socket.set(zmq::sockopt::linger, 0);
+    socket.set(zmq::sockopt::linger, 100);
     std::string address = absl::StrFormat("tcp://%s:%d", ip, port);
     socket.connect(address);
     if (!socket.send(zmq_msg)) {

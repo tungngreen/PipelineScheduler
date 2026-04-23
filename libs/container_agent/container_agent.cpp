@@ -2102,6 +2102,10 @@ void ContainerAgent::updateTimeKeeping(const std::string &msg) {
         spdlog::get("container_agent")->error("Failed to parse updateTimeKeeping request: {0:s}", msg);
         return;
     }
+    if (cont_msvcsGroups.find("batcher") == cont_msvcsGroups.end()) {
+        spdlog::get("container_agent")->warn("No `batcher` group found for updateTimeKeeping.");
+        return;
+    }
     for (auto &batcher : cont_msvcsGroups.at("batcher").msvcList) {
         batcher->msvc_pipelineSLO = request.slo();
         batcher->msvc_timeBudgetLeft = request.time_budget();
@@ -2123,6 +2127,7 @@ void ContainerAgent::transferFrameID(const std::string &msg) {
     socket_t message_queue_pub = socket_t(messaging_ctx, ZMQ_PUB);
     message_queue_pub.connect(url);
     message_queue_pub.set(zmq::sockopt::sndtimeo, 100);
+    message_queue_pub.set(zmq::sockopt::linger, 100);
 
     cont_msvcsGroups["receiver"].msvcList[0]->pauseThread();
 

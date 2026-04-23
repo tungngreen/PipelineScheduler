@@ -5,9 +5,6 @@
 #include <fstream>
 #include <random>
 
-using grpc::ServerBuilder;
-using grpc::ServerContext;
-using grpc::ServerCompletionQueue;
 using boost::interprocess::read_only;
 using boost::interprocess::open_only;
 using json = nlohmann::ordered_json;
@@ -23,8 +20,6 @@ public:
 
     ~Receiver() override {
         waitStop();
-        server->Shutdown();
-        cq->Shutdown();
         spdlog::get("container_agent")->info("{0:s} has stopped", msvc_name);
     }
 
@@ -38,18 +33,26 @@ public:
 
     ReceiverConfigs loadConfigsFromJson(const json &jsonConfigs);
 
-    void loadConfigs(const json &jsonConfigs, bool isConstructing = true);
+    void loadConfigs(const json &jsonConfigs, bool isConstructing = true) override;
 
     ClockType msvc_lastReqTime;
     std::atomic<int64_t> msvc_interReqTimeRunningMean = 0;
     std::atomic<int64_t> msvc_interReqTimeRunningVar = 0;
 
+    virtual PerSecondArrivalRecord getPerSecondArrivalRecord() override {
+        auto reqCount = msvc_totalReqCount.exchange(0);
+        MsvcSLOType mean = msvc_interReqTimeRunningMean.exchange(0);
+        MsvcSLOType var = msvc_interReqTimeRunningVar.exchange(0);
+        return {reqCount, mean, var};
+    }
+    
+private:
     /**
      * @brief update the statistics of the receiver including the inter-request time mean/std, total request count
-     * All the statistics except overallTotalReqCount are reset after each second by ContainerAgent's calling 
+     * All the statistics except overallTotalReqCount are reset after each second by ContainerAgent's calling
      * `getPerSecondArrivalRecord()` method, which clears out msvc_totalReqCount
-     * 
-     * @param receiveTime 
+     *
+     * @param receiveTime
      */
     inline void updateStats(ClockType &receiveTime) {
         msvc_overallTotalReqCount++;
@@ -78,116 +81,44 @@ public:
         // std::cout << "totalReqCount: " << msvc_totalReqCount.load() << " interReqTime: " << interReqTime << " mean: " << mean << " var: " << var << std::endl;
     }
 
-    virtual PerSecondArrivalRecord getPerSecondArrivalRecord() override {
-        auto reqCount = msvc_totalReqCount.exchange(0);
-        MsvcSLOType mean = msvc_interReqTimeRunningMean.exchange(0);
-        MsvcSLOType var = msvc_interReqTimeRunningVar.exchange(0);
-        return {reqCount, mean, var};
-    }
-    
-private:
-    class RequestHandler {
-    public:
-        RequestHandler(DataTransferService::AsyncService *service, ServerCompletionQueue *cq,
-                       ThreadSafeFixSizedDoubleQueue *out, uint64_t &msvc_inReqCount, Receiver *receiver)
-                : service(service), msvc_inReqCount(msvc_inReqCount), cq(cq), OutQueue(out), status(CREATE), receiverInstance(receiver) {};
-
-        virtual ~RequestHandler() = default;
-
-        virtual void Proceed() = 0;
-
-    protected:
-        enum CallStatus {
-            CREATE, PROCESS, FINISH
-        };
-
-        std::string containerName;
-        DataTransferService::AsyncService *service;
-        uint64_t &msvc_inReqCount;
-        ServerCompletionQueue *cq;
-        ServerContext ctx;
-        ThreadSafeFixSizedDoubleQueue *OutQueue;
-        CallStatus status;
-        Receiver *receiverInstance;
-
-        /**
-         * @brief Check if this request is still valid or its too old and should be discarded
-         * 
-         * @param timestamps 
-         * @return true
-         * @return false
-         */
-        inline bool validateReq(ClockType originalGenTime, const std::string &path) {
-            auto now = std::chrono::high_resolution_clock::now();
-            uint64_t diff = std::chrono::duration_cast<TimePrecisionType>(now - originalGenTime).count();
-            if (receiverInstance->msvc_RUNMODE == RUNMODE::PROFILING) {
-                if (receiverInstance->checkProfileEnd(path)) {
-                    receiverInstance->STOP_THREADS = true;
-                    return false;
-                };
-                return true;
-            }
-            if (diff > receiverInstance->msvc_pipelineSLO - receiverInstance->msvc_timeBudgetLeft &&
-                receiverInstance->msvc_DROP_MODE == DROP_MODE::LAZY) {
-                receiverInstance->msvc_droppedReqCount++;
-                spdlog::get("container_agent")->trace("{0:s} drops a request with time {1:d}", containerName, diff);
+    /**
+     * @brief Check if this request is still valid or its too old and should be discarded
+     *
+     * @param timestamps
+     * @return true
+     * @return false
+     */
+    inline bool validateReq(ClockType originalGenTime, const std::string &path) {
+        auto now = std::chrono::high_resolution_clock::now();
+        uint64_t diff = std::chrono::duration_cast<TimePrecisionType>(now - originalGenTime).count();
+        if (msvc_RUNMODE == RUNMODE::PROFILING) {
+            if (checkProfileEnd(path)) {
+                STOP_THREADS = true;
                 return false;
-            } else if (receiverInstance->msvc_DROP_MODE == DROP_MODE::NO_DROP) {
-                return true;
-            }
+            };
             return true;
         }
-    };
-
-    class GpuPointerRequestHandler : public RequestHandler {
-    public:
-        GpuPointerRequestHandler(DataTransferService::AsyncService *service, ServerCompletionQueue *cq,
-                       ThreadSafeFixSizedDoubleQueue *out, uint64_t &msvc_inReqCount, Receiver *receiver);
-
-        void Proceed() final;
-
-    private:
-        ImageDataPayload request;
-        EmptyMessage reply;
-        grpc::ServerAsyncResponseWriter<EmptyMessage> responder;
-    };
-
-    class SharedMemoryRequestHandler : public RequestHandler {
-    public:
-        SharedMemoryRequestHandler(DataTransferService::AsyncService *service, ServerCompletionQueue *cq,
-                       ThreadSafeFixSizedDoubleQueue *out, uint64_t &msvc_inReqCount, Receiver *receiver);
-
-        void Proceed() final;
-
-        void test() {
-            ImageDataPayload request;
+        if (diff > msvc_pipelineSLO - msvc_timeBudgetLeft &&
+            msvc_DROP_MODE == DROP_MODE::LAZY) {
+            msvc_droppedReqCount++;
+            spdlog::get("container_agent")->trace("{0:s} drops a request with time {1:d}", containerName, diff);
+            return false;
+        } else if (msvc_DROP_MODE == DROP_MODE::NO_DROP) {
+            return true;
         }
+        return true;
+    }
 
-    private:
-        ImageDataPayload request;
-        EmptyMessage reply;
-        grpc::ServerAsyncResponseWriter<EmptyMessage> responder;
-    };
-
-    class SerializedDataRequestHandler : public RequestHandler {
-    public:
-        SerializedDataRequestHandler(DataTransferService::AsyncService *service, ServerCompletionQueue *cq,
-                       ThreadSafeFixSizedDoubleQueue *out, uint64_t &msvc_inReqCount, Receiver *receiver);
-
-        void Proceed() final;
-
-    private:
-        ImageDataPayload request;
-        EmptyMessage reply;
-        grpc::ServerAsyncResponseWriter<EmptyMessage> responder;
-    };
-
-    // This can be run in multiple threads if needed.
     void HandleRpcs();
+    void SerializedDataRequestHandler(const std::string &msg);
+    void SharedMemoryRequestHandler(const std::string &msg);
+    void GpuPointerRequestHandler(const std::string &msg);
 
-    std::unique_ptr<ServerCompletionQueue> cq;
-    DataTransferService::AsyncService service;
-    std::unique_ptr<grpc::Server> server;
+    context_t comm_ctx;
+    socket_t socket;
+    std::unordered_map<std::string, std::function<void(const std::string&)>> msg_handlers;
+
+    std::string containerName;
 };
 
 #endif //PIPEPLUSPLUS_RECEIVER_H
