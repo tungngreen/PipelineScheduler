@@ -787,16 +787,21 @@ Controller::Controller(int argc, char **argv) {
     std::string sql = "SELECT schema_name FROM information_schema.schemata WHERE schema_name = '" + ctrl_metricsServerConfigs.schema + "';";
     pqxx::result res = pullSQL(*ctrl_metricsServerConn, sql);
     if (res.empty()) {
+        // Create Schema and set Ownership
         sql = "CREATE SCHEMA IF NOT EXISTS " + ctrl_metricsServerConfigs.schema + ";";
         pushSQL(*ctrl_metricsServerConn, sql);
         sql = "ALTER DEFAULT PRIVILEGES IN SCHEMA " + ctrl_metricsServerConfigs.schema + 
-              " GRANT ALL PRIVILEGES ON TABLES TO controller;";
+            " GRANT ALL PRIVILEGES ON TABLES TO controller;";
         pushSQL(*ctrl_metricsServerConn, sql);
-        sql = "GRANT SELECT, INSERT ON ALL TABLES IN SCHEMA " + ctrl_metricsServerConfigs.schema + " TO device_agent, container_agent;";
-        pushSQL(*ctrl_metricsServerConn, sql);
-        sql = "ALTER DEFAULT PRIVILEGES IN SCHEMA " + ctrl_metricsServerConfigs.schema + " GRANT SELECT, INSERT ON TABLES TO device_agent, container_agent;";
-        pushSQL(*ctrl_metricsServerConn, sql);
+
+        // Setup Agents (Restricted Access)
+        // Granting USAGE allows them to see the schema, CREATE allows them to make temp tables if needed
         sql = "GRANT USAGE, CREATE ON SCHEMA " + ctrl_metricsServerConfigs.schema + " TO device_agent, container_agent;";
+        pushSQL(*ctrl_metricsServerConn, sql);
+
+        // Grant permissions on future tables
+        sql = "ALTER DEFAULT PRIVILEGES IN SCHEMA " + ctrl_metricsServerConfigs.schema + 
+            " GRANT SELECT, INSERT ON TABLES TO device_agent, container_agent;";
         pushSQL(*ctrl_metricsServerConn, sql);
     }
 

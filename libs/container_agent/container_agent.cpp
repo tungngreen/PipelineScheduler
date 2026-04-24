@@ -455,6 +455,9 @@ ContainerAgent::ContainerAgent(const json& configs) {
             sql_statement = "SELECT create_hypertable('" + cont_networkTableName + "', 'timestamps', if_not_exists => TRUE);";
             pushSQL(*cont_metricsServerConn, sql_statement);
 
+            sql_statement = "SELECT set_chunk_time_interval('" + cont_networkTableName + "', 86400000000);";
+            pushSQL(*cont_metricsServerConn, sql_statement);
+
             sql_statement = "CREATE INDEX ON " + cont_networkTableName + " (timestamps);";
             pushSQL(*cont_metricsServerConn, sql_statement);
 
@@ -490,6 +493,9 @@ ContainerAgent::ContainerAgent(const json& configs) {
             pushSQL(*cont_metricsServerConn, sql_statement);
 
             sql_statement = "SELECT create_hypertable('" + cont_arrivalTableName + "', 'timestamps', if_not_exists => TRUE);";
+            pushSQL(*cont_metricsServerConn, sql_statement);
+
+            sql_statement = "SELECT set_chunk_time_interval('" + cont_arrivalTableName + "', 86400000000);";
             pushSQL(*cont_metricsServerConn, sql_statement);
 
             sql_statement = "CREATE INDEX ON " + cont_arrivalTableName + " (timestamps);";
@@ -536,6 +542,9 @@ ContainerAgent::ContainerAgent(const json& configs) {
             sql_statement = "SELECT create_hypertable('" + cont_processTableName + "', 'timestamps', if_not_exists => TRUE);";
             pushSQL(*cont_metricsServerConn, sql_statement);
 
+            sql_statement = "SELECT set_chunk_time_interval('" + cont_processTableName + "', 86400000000);";
+            pushSQL(*cont_metricsServerConn, sql_statement);
+
             sql_statement = "CREATE INDEX ON " + cont_processTableName + " (timestamps);";
             pushSQL(*cont_metricsServerConn, sql_statement);
 
@@ -566,6 +575,10 @@ ContainerAgent::ContainerAgent(const json& configs) {
             sql_statement = "SELECT create_hypertable('" + cont_batchInferTableName + "', 'timestamps', if_not_exists => TRUE);";
             pushSQL(*cont_metricsServerConn, sql_statement);
 
+            sql_statement = "SELECT set_chunk_time_interval('" + cont_batchInferTableName + "', 86400000000);";
+            pushSQL(*cont_metricsServerConn, sql_statement);
+
+
             sql_statement = "CREATE INDEX ON " + cont_batchInferTableName + " (timestamps);";
             pushSQL(*cont_metricsServerConn, sql_statement);
 
@@ -595,6 +608,9 @@ ContainerAgent::ContainerAgent(const json& configs) {
 
                 sql_statement = "SELECT create_hypertable('" + cont_hwMetricsTableName +
                                 "', 'timestamps', if_not_exists => TRUE);";
+                pushSQL(*cont_metricsServerConn, sql_statement);
+
+                sql_statement = "SELECT set_chunk_time_interval('" + cont_hwMetricsTableName + "', 86400000000);";
                 pushSQL(*cont_metricsServerConn, sql_statement);
 
                 sql_statement = "CREATE INDEX ON " + cont_hwMetricsTableName + " (timestamps);";

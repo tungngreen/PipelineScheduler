@@ -223,6 +223,10 @@ void DeviceAgent::StartExperiment(const SystemInfo &info) {
         sql = "SELECT create_hypertable('" + dev_networkTableName + "', 'timestamps', if_not_exists => TRUE);";
         pushSQL(*dev_metricsServerConn, sql);
 
+        // Explicitly set the 1-day interval (86.4 billion microseconds)
+        sql = "SELECT set_chunk_time_interval('" + dev_networkTableName + "', 86400000000);";
+        pushSQL(*dev_metricsServerConn, sql);
+
         sql = "CREATE INDEX ON " + dev_networkTableName + " (timestamps);";
         pushSQL(*dev_metricsServerConn, sql);
 
@@ -247,6 +251,10 @@ void DeviceAgent::StartExperiment(const SystemInfo &info) {
         pushSQL(*dev_metricsServerConn, sql);
 
         sql = "SELECT create_hypertable('" + dev_hwMetricsTableName + "', 'timestamps', if_not_exists => TRUE);";
+        pushSQL(*dev_metricsServerConn, sql);
+
+        // Explicitly set the 1-day interval (86.4 billion microseconds)
+        sql = "SELECT set_chunk_time_interval('" + dev_hwMetricsTableName + "', 86400000000);";
         pushSQL(*dev_metricsServerConn, sql);
 
         sql = "CREATE INDEX ON " + dev_hwMetricsTableName + " (timestamps);";
