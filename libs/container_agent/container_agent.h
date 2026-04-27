@@ -203,6 +203,7 @@ protected:
     std::string cont_hostDeviceType;
     std::string cont_inferModel;
     json cont_baseSender;
+    json cont_basePostprocCfg;
     std::atomic<bool> hasDataReader;
     std::atomic<bool> isDataSource;
     RUNMODE cont_RUNMODE;

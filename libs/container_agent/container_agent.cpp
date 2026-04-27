@@ -707,6 +707,7 @@ void ContainerAgent::initiateMicroservices(const json &configs) {
                 json runConfig = pipeConfig;
                 runConfig["msvc_upstreamMicroservices"][0]["nb_link"] = {sources[i]};
                 msvcsList.push_back(new DataReader(runConfig));
+                cont_basePostprocCfg = pipeConfig;
             } else if (msvc_type == MicroserviceType::Receiver) {
                 msvcsList.push_back(new Receiver(pipeConfig));
             } else if (msvc_type >= MicroserviceType::Preprocessor &&
@@ -747,6 +748,7 @@ void ContainerAgent::initiateMicroservices(const json &configs) {
                         break;
                 }
                 msvcsList.back()->SetInQueue(cont_msvcsGroups["inference"].outQueue);
+                cont_basePostprocCfg = pipeConfig;
             } else if (msvc_type >= MicroserviceType::Sender) {
                 if (pipeConfig.at("msvc_dnstreamMicroservices")[0].at("nb_commMethod") == CommMethod::localGPU) {
                     msvcsList.push_back(new GPUSender(pipeConfig));
@@ -1506,8 +1508,28 @@ void ContainerAgent::updateProcessRecords(ProcessRecordType processRecords, Batc
 }
 
 void ContainerAgent::HandleControlMessages() {
+    ClockType firstTime = std::chrono::high_resolution_clock::time_point::min();
     while (running()) {
         message_t message;
+        // if (firstTime == std::chrono::high_resolution_clock::time_point::min()) {
+        //     firstTime = std::chrono::high_resolution_clock::now();
+        // }
+        // if (std::chrono::high_resolution_clock::now() - firstTime > std::chrono::seconds(10)) {
+        //     BatchedConnections batchedRequests;
+        //     Connection simMsg;
+        //     simMsg.set_mode(AdjustMode::Start);
+        //     simMsg.set_name("traffic_retiana1face");
+        //     simMsg.set_ip("0.0.0.0");
+        //     simMsg.set_port(55008);
+        //     simMsg.add_allowed_producers("../data/short/traffic4.mp4");
+        //     batchedRequests.add_connections()->CopyFrom(simMsg);
+        //     batchedRequests.set_batch_size(1);
+
+        //     std::string payload = batchedRequests.SerializeAsString();
+        //     handlers[MSG_TYPE[UPDATE_SENDER_IN_BATCH]](payload);
+        //     firstTime = std::chrono::high_resolution_clock::now() + std::chrono::seconds(1000);
+        // }
+
         if (device_message_queue.recv(message, recv_flags::none)) {
             std::string raw = message.to_string();
             std::istringstream iss(raw);
@@ -1655,7 +1677,7 @@ void ContainerAgent::updateSenderInBatch(const std::string &msg) {
             if (isDataSource) {
                 upstreamNeighbor = "receiver";
             }
-            json neighborconfig = cont_msvcsGroups[upstreamNeighbor].msvcList[0]->msvc_configs["msvc_dnstreamMicroservices"][0];
+            json neighborconfig = cont_basePostprocCfg.at("msvc_dnstreamMicroservices")[0];
             neighborconfig["nb_name"] = config["msvc_name"];
             neighborconfig["nb_classOfInterest"] = request.class_of_interest();
             neighborconfig["nb_portions"] = std::vector<int>();
@@ -1680,19 +1702,33 @@ void ContainerAgent::updateSenderInBatch(const std::string &msg) {
          */
         if (request.mode() == AdjustMode::Stop) {
             bool found = false;
-            // Safe iteration and removal of sender while ensuring postprocessors are updated accordingly
-            for (auto it = senders->begin(); it != senders->end(); ++it) {
-                auto* sender = *it;
-                if (sender->dnstreamMicroserviceList[0].name != request.name()) {
-                    continue;
-                }
+            Microservice* senderToDelete = nullptr;
+            std::string senderNameToStop;
 
+            auto it = senders->begin();
+            while (it != senders->end()) {
+                if ((*it)->dnstreamMicroserviceList[0].name == request.name()) {
+                    senderToDelete = *it; // Capture the pointer
+                    senderNameToStop = senderToDelete->msvc_name;
+                    
+                    senderToDelete->stopThread(); // Signal thread to stop
+                    it = senders->erase(it);      // Remove from vector
+                    found = true;
+                    break; // Assuming one sender per name
+                } else {
+                    ++it;
+                }
+            }
+
+                
+            if (found) {
+                delete senderToDelete; // Clean up memory
                 // Once we have found the sender to stop, we need to remove its references from all postprocessors before stopping it
                 for (auto *postprocessor : cont_msvcsGroups["postprocessor"].msvcList) {
                     std::vector<msvcconfigs::NeighborMicroservice *> old_dnstreams;
                     // Collect pointers to the dnstreams that match the sender's downstream name for removal
                     for (auto &dnstream : postprocessor->dnstreamMicroserviceList) {
-                        if (sender->msvc_name.find(dnstream.name) == std::string::npos) {
+                        if (senderNameToStop.find(dnstream.name) == std::string::npos) {
                             continue;
                         }
                         old_dnstreams.push_back(&dnstream);
@@ -1705,18 +1741,19 @@ void ContainerAgent::updateSenderInBatch(const std::string &msg) {
                             dnstreams_json.end()
                         );
                     }
+                    // Remove all the outqueue that's associated with the sender from postprocessor group's outqueue list to prevent dangling references
+                    // Because this queue will be deleted in reloadDnstreams
+                    cont_msvcsGroups["postprocessor"].outQueue.erase(
+                        std::remove_if(cont_msvcsGroups["postprocessor"].outQueue.begin(), cont_msvcsGroups["postprocessor"].outQueue.end(),
+                                        [&](ThreadSafeFixSizedDoubleQueue* q) { return senderNameToStop.find(q->getName()) != std::string::npos; }),
+                        cont_msvcsGroups["postprocessor"].outQueue.end()
+                    );
+
                     postprocessor->reloadDnstreams();
                 }
-                sender->stopThread();
-                delete *it;
-                it = senders->erase(it);
                 found = true;
                 spdlog::get("container_agent")->info("Sender for downstream {0:s} succesfully deleted.", request.name());
-                break;
-                Microservice *msvc = cont_msvcsGroups["preprocessor"].msvcList.back();
-                msvc->stopThread();
-            }
-            if (!found) {
+            } else {
                 spdlog::get("container_agent")->error("Sender for downstream {0:s} not found for deletion.", request.name());
             }
             continue;

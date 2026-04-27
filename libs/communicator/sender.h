@@ -41,7 +41,7 @@ public:
         sock->set(zmq::sockopt::req_relaxed, 1);
         sock->set(zmq::sockopt::req_correlate, 1);
         sock->set(zmq::sockopt::immediate, 1);
-        sock->set(zmq::sockopt::linger, slo);
+        sock->set(zmq::sockopt::linger, 0);
         sock->set(zmq::sockopt::sndtimeo, slo);
         sock->set(zmq::sockopt::rcvtimeo, slo);
         sock->connect("tcp://" + link);
@@ -50,6 +50,18 @@ public:
 
     [[nodiscard]] size_t size() const {
         return stubs.size();
+    }
+
+    void clear() {
+        for (auto& sock : stubs) {
+            if (sock) {
+                // Force linger again just to be safe
+                int linger = 0;
+                sock->set(zmq::sockopt::linger, 0);
+                sock->close();
+            }
+        }
+        stubs.clear();
     }
 
 private:
@@ -79,6 +91,7 @@ public:
 
     ~Sender() {
         waitStop();
+        stubs.clear();
         spdlog::get("container_agent")->info("{0:s} has stopped", msvc_name);
     }
 
