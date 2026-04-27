@@ -1603,11 +1603,6 @@ void ContainerAgent::updateSenderInBatch(const std::string &msg) {
     for (auto& group : cont_msvcsGroups) {
         for (auto* msvc : group.second.msvcList) {
             // Safe check: Ensure list isn't empty before accessing index 0
-            // If the first downstream microservice is in the target names, skip pausing to let it clear its queue.
-            if (!msvc->dnstreamMicroserviceList.empty() && 
-                target_names.count(msvc->dnstreamMicroserviceList[0].name)) {
-                continue;
-            }
             msvc->pauseThread();
         }
     }
@@ -1710,7 +1705,7 @@ void ContainerAgent::updateSenderInBatch(const std::string &msg) {
                 if ((*it)->dnstreamMicroserviceList[0].name == request.name()) {
                     senderToDelete = *it; // Capture the pointer
                     senderNameToStop = senderToDelete->msvc_name;
-                    
+
                     senderToDelete->stopThread(); // Signal thread to stop
                     it = senders->erase(it);      // Remove from vector
                     found = true;
@@ -1720,7 +1715,7 @@ void ContainerAgent::updateSenderInBatch(const std::string &msg) {
                 }
             }
 
-                
+
             if (found) {
                 delete senderToDelete; // Clean up memory
                 // Once we have found the sender to stop, we need to remove its references from all postprocessors before stopping it
@@ -1884,7 +1879,7 @@ void ContainerAgent::updateSenderInBatch(const std::string &msg) {
                     nb_links.erase(std::remove(nb_links.begin(), nb_links.end(), link), nb_links.end());
                     // Important: assign the modified vector back to the json object
                     config->at("msvc_dnstreamMicroservices")[0]["nb_link"] = nb_links;
-                    if (index != 0) {
+                    if (index != 0 && !config->at("msvc_dnstreamMicroservices")[0]["nb_portions"].empty()) {
                         config->at("msvc_dnstreamMicroservices")[0]["nb_portions"].erase(
                                 config->at("msvc_dnstreamMicroservices")[0]["nb_portions"].begin() + index - 1);
                         for (auto* postprocessor: postprocessor_dnstreams) {

@@ -969,7 +969,7 @@ public:
         spdlog::get("container_agent")->info("{0:s}::{1:s} has stopped", typeid(*this).name(), msvc_name);
     }
 
-    void waitStop () {
+    void waitStop() {
         uint8_t attempts = 0;
         const uint8_t maxAttempts = 100;
 
@@ -1171,11 +1171,11 @@ public:
 
     virtual void updateCycleTiming() {};
 
-    bool RELOADING = true;
+    std::atomic<bool> RELOADING = true;
 
     std::ofstream msvc_logFile;
 
-    bool PAUSE_THREADS = false;
+    std::atomic<bool> PAUSE_THREADS = false;
 
     virtual std::string getModelName() {return "model";}
 
@@ -1189,9 +1189,9 @@ protected:
     std::vector<uint8_t> msvc_activeInQueueIndex = {}, msvc_activeOutQueueIndex = {};
 
     // Used to signal to thread when not to run and to bring thread to a natural end.
-    bool STOP_THREADS = false;
-    bool STOPPED = false;
-    bool READY = false;
+    std::atomic<bool> STOP_THREADS = false;
+    std::atomic<bool> STOPPED = false;
+    std::atomic<bool> READY = false;
 
     json msvc_configs;
     bool msvc_toReloadConfigs = true;
