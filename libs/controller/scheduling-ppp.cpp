@@ -189,6 +189,7 @@ void Controller::Scheduling() {
 
         ctrl_controlTimings.nextRescalingTime = ctrl_controlTimings.currSchedulingTime + std::chrono::seconds(ctrl_controlTimings.rescalingIntervalSec);
         schedulingSW.stop();
+        spdlog::get("container_agent")->error("Scheduling took {}ns", schedulingSW.elapsed_microseconds()/1000);
         ClockType nextTime = std::min(ctrl_controlTimings.nextSchedulingTime, ctrl_controlTimings.nextRescalingTime);
         uint64_t sleepTime = std::chrono::duration_cast<TimePrecisionType>(nextTime - std::chrono::system_clock::now()).count();
         if (startTime == std::chrono::system_clock::time_point()) startTime = std::chrono::system_clock::now();
