@@ -10,6 +10,6 @@ COPY ./cmake /app/cmake
 COPY ./libs /app/libs
 COPY ./CMakeLists.txt /app/CMakeLists.txt
 WORKDIR /app/build
-RUN cmake -DON_HOST=OFF -DDEVICE_ARCH=amd64 -DSYSTEM_NAME=FCPO -DCMAKE_BUILD_TYPE=VERSION ..
+RUN cmake -DON_HOST=OFF -DDEVICE_ARCH=amd64 -DSYSTEM_NAME=CHEIS -DCMAKE_BUILD_TYPE=VERSION ..
 RUN make -j$(nproc)
 COPY ./jsons /app/jsons

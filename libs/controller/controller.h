@@ -8,7 +8,7 @@
 #include "absl/flags/parse.h"
 #include "absl/flags/flag.h"
 #include <random>
-#include "fcpo_learning.h"
+#include "local_optimization.h"
 #include "bandwidth_predictor/bandwidth_predictor.h"
 
 using controlmessages::LoopRange;
@@ -180,7 +180,7 @@ struct ContainerHandle {
     bool mergable;
     std::vector<int> dimensions;
     uint64_t pipelineSLO;
-    json fcpo_conf = "";
+    json cheis_conf = "";
 
     float arrival_rate;
 
@@ -850,7 +850,7 @@ public:
         std::lock_guard<std::mutex> lock(containersMutex);
         std::vector<std::tuple<std::string, std::string, nlohmann::json>> elements;
         for (auto &c: list) {
-            elements.push_back(std::make_tuple(c.first, c.second->device_agent->name, c.second->fcpo_conf));
+            elements.push_back(std::make_tuple(c.first, c.second->device_agent->name, c.second->cheis_conf));
         }
         return elements;
     }
@@ -1057,9 +1057,9 @@ private:
     std::map<std::string, NetworkEntryType> ctrl_inDeviceNetworkEntries;
     std::map<std::string, std::map<std::string, float>> ctrl_initialRequestRates;
 
-    // FCPO
-    FCPOServer *ctrl_fcpo_server;
-    json ctrl_fcpo_config;
+    // CHEIS
+    CHEISServer *ctrl_cheis_server;
+    json ctrl_cheis_config;
 
     BandwidthPredictor ctrl_bandwidth_predictor;
 };

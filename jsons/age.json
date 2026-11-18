@@ -1,7 +1,7 @@
 {
     "container": {
         "cont_experimentName": "prof",
-        "cont_systemName": "fcpo",
+        "cont_systemName": "cheis",
         "cont_pipeName": "pedestrian",
         "cont_taskName": "age",
         "cont_hostDevice": "server",
@@ -378,7 +378,7 @@
         "profile_numProfileBatches": 100,
         "profile_numProfileReqs": 1800
     },
-    "fcpo": {
+    "cheis": {
         "state_size": 5,
         "resolution_size": 1,
         "batch_size": 64,

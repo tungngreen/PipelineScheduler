@@ -541,7 +541,7 @@ ContainerAgent::ContainerAgent(const json& configs) {
         spdlog::get("container_agent")->info("{0:s} created arrival table and process table.", cont_name);
     }
 
-    if (cont_systemName == "fcpo" || cont_systemName == "bce") {
+    if (cont_systemName == "cheis" || cont_systemName == "bce") {
         cont_localOptimizationIntervalMillisec = 1000;
     } else if (cont_systemName == "edvi") {
         cont_localOptimizationIntervalMillisec = 200;
@@ -580,9 +580,9 @@ ContainerAgent::ContainerAgent(const json& configs) {
     if (hasDataReader && !isDataSource) for (auto &reader : cont_msvcsGroups["receiver"].msvcList) {
             reader->msvc_dataShape = {{-1, -1, -1}};
     }
-    if (cont_systemName == "fcpo" && !isDataSource) {
-        nlohmann::json rl_conf = configs["fcpo"];
-        cont_fcpo_agent = new FCPOAgent(cont_name, rl_conf["state_size"], rl_conf["timeout_size"],
+    if (cont_systemName == "cheis" && !isDataSource) {
+        nlohmann::json rl_conf = configs["cheis"];
+        cont_cheis_agent = new CHEISAgent(cont_name, rl_conf["state_size"], rl_conf["timeout_size"],
                                         rl_conf["batch_size"], rl_conf["threads_size"], &sending_socket,
                                         cont_batchInferProfileList,
                                         cont_msvcsGroups["batcher"].msvcList[0]->msvc_idealBatchSize,
@@ -591,7 +591,7 @@ ContainerAgent::ContainerAgent(const json& configs) {
                                         rl_conf["federated_steps"], rl_conf["lambda"], rl_conf["gamma"],
                                         rl_conf["clip_epsilon"], rl_conf["penalty_weight"], rl_conf["theta"],
                                         rl_conf["sigma"] ,rl_conf["phi"], rl_conf["rho"] , rl_conf["seed"]);
-        handlers.emplace(MSG_TYPE[RETURN_FL], std::bind(&FCPOAgent::federatedUpdateCallback, cont_fcpo_agent, std::placeholders::_1));
+        handlers.emplace(MSG_TYPE[RETURN_FL], std::bind(&CHEISAgent::federatedUpdateCallback, cont_cheis_agent, std::placeholders::_1));
     }
 
     std::thread receiver(&ContainerAgent::HandleControlMessages, this);
@@ -1013,7 +1013,7 @@ void ContainerAgent::collectRuntimeMetrics() {
         }
 
         if (timePointCastMillisecond(startTime) >= timePointCastMillisecond(cont_nextOptimizationMetricsTime)) {
-            if (cont_systemName == "fcpo") {
+            if (cont_systemName == "cheis") {
                 tmp_lateCount = 0;
                 for (auto &recv: cont_msvcsGroups["receiver"].msvcList) tmp_lateCount += recv->GetDroppedReqCount();
                 cont_late_drops += tmp_lateCount;
@@ -1031,13 +1031,13 @@ void ContainerAgent::collectRuntimeMetrics() {
                 double batch_size = cont_msvcsGroups["batcher"].msvcList[0]->msvc_idealBatchSize;
 
                 if (cont_request_arrival_rate == 0 || std::isnan(cont_request_arrival_rate)) {
-                    cont_fcpo_agent->rewardCallback(0.0, 0.0,
+                    cont_cheis_agent->rewardCallback(0.0, 0.0,
                                                     (double) batch_size / 10.0,
                                                     (double) cont_batchInferProfileList[batch_size].gpuMemUsage / 1000.0);
                     cont_request_arrival_rate = 0;
                 } else {
                     cont_request_arrival_rate = std::max(0.1, cont_request_arrival_rate); // prevent negative values in the case of many drops or no requests
-                    cont_fcpo_agent->rewardCallback((double) aggExecutedBatchSize / cont_request_arrival_rate,
+                    cont_cheis_agent->rewardCallback((double) aggExecutedBatchSize / cont_request_arrival_rate,
                                                     (double) cont_ewma_latency / TIME_PRECISION_TO_SEC,
                                                     batch_size / cont_request_arrival_rate,
                                                     (double) cont_batchInferProfileList[batch_size].gpuMemUsage / 1000.0);
@@ -1045,7 +1045,7 @@ void ContainerAgent::collectRuntimeMetrics() {
                 spdlog::get("container_agent")->info(
                         "RL Decision Input: {0:d} miniBatches, {1:f} request rate, {2:f} latency, {3:f} aggExecutedBatchSize",
                         miniBatchCount, cont_request_arrival_rate, (double) cont_ewma_latency / TIME_PRECISION_TO_SEC, aggExecutedBatchSize);
-                cont_fcpo_agent->setState(cont_msvcsGroups["preprocessor"].msvcList[0]->msvc_concat.numImgs,
+                cont_cheis_agent->setState(cont_msvcsGroups["preprocessor"].msvcList[0]->msvc_concat.numImgs,
                                           batch_size,
                                           cont_threadingAction,
                                           cont_request_arrival_rate / 250.0,
@@ -1054,7 +1054,7 @@ void ContainerAgent::collectRuntimeMetrics() {
                                           cont_msvcsGroups["inference"].msvcList[0]->msvc_OutQueue[0]->size(),
                                           cont_modelSLO,
                                           (double) cont_batchInferProfileList[batch_size].gpuMemUsage);
-                auto [targetTO, newBS, scaling] = cont_fcpo_agent->runStep();
+                auto [targetTO, newBS, scaling] = cont_cheis_agent->runStep();
                 spdlog::get("container_agent")->info(
                         "RL Decision Output: Timout: {0:d}, Batch Size: {1:d}, Scaling: {2:d}", targetTO, newBS, scaling);
                 applyBatchingTimeout(targetTO);

@@ -17,7 +17,7 @@ Here's a breakdown of the key fields:
 |---------------|----------------------------------------------------------------|
 | `expName`     | A name for the experiment (used for logging and output files). |
 | `system_fps`  | Frames per second that should be read from the video files.    |
-| `systemName`  | The system to use, [FCPO, PPP, DIS, JLF, RIM, BCE].            |
+| `systemName`  | The system to use, [CHEIS, PPP, DIS, JLF, RIM, BCE].            |
 | `runtime`     | Duration of the experiment in minutes.                         |
 | `port_offset` | Optional port number offset (e.g., for development setups).    |
 | `sink_ip`     | IP address of the result SinkAgent.                            |
@@ -69,9 +69,9 @@ The `initial_pipelines` field defines a list of video processing pipelines. Each
 }
 ```
 
-## FCPO Hyperparameters
+## CHEIS Hyperparameters
 
-This is only required for FCPO and can be omitted for other systems.
+This is only required for CHEIS and can be omitted for other systems.
 
 | Parameter               | Description                                          |
 |-------------------------|------------------------------------------------------|

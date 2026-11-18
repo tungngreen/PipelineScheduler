@@ -47,16 +47,16 @@ if(SYSTEM_NAME STREQUAL "PPP")
                 ${SOURCE_FILES}
                 scheduling-ppp.cpp
         )
-elseif (SYSTEM_NAME STREQUAL "FCPO")
+elseif (SYSTEM_NAME STREQUAL "CHEIS")
         set(HEADER_FILES
                 ${HEADER_FILES}
-                scheduling-fcpo.h
+                scheduling-cheis.h
         )
 
         # All source files and private header files go here.
         set(SOURCE_FILES
                 ${SOURCE_FILES}
-                scheduling-fcpo.cpp
+                scheduling-cheis.cpp
         )
 elseif (SYSTEM_NAME STREQUAL "JLF")
         set(HEADER_FILES
@@ -123,8 +123,8 @@ target_compile_features(controller
 # we can have multiple versions installed at the same time.
 set(PROJECT_PREFIX controller)
 
-set(fcpo_learning_DIR "${CMAKE_CURRENT_BINARY_DIR}/../fcpo_learning")
-find_package(fcpo_learning CONFIG REQUIRED)
+set(local_optimization_DIR "${CMAKE_CURRENT_BINARY_DIR}/../local_optimization")
+find_package(local_optimization CONFIG REQUIRED)
 
 set(microservice_DIR "${CMAKE_CURRENT_BINARY_DIR}/../microservice")
 find_package(microservice CONFIG REQUIRED)
@@ -154,7 +154,7 @@ target_link_libraries(controller
         ${_REFLECTION}
         ${_PROTOBUF_LIBPROTOBUF}
         ${CMAKE_THREAD_LIBS_INIT}
-        fcpo_learning
+        local_optimization
         microservice
         # ${LIGHTGBM_LIBRARY}
 )

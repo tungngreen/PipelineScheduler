@@ -1257,6 +1257,7 @@ bool confirmIntention(const std::string &message, const std::string &magicPhrase
 }
 
 std::map<std::string, std::string> keywordAbbrs = {
+    {"cheis", "cheis"},
     {"batch", "batch"},
     {"server", "serv"},
     {"onprem", "onp"},

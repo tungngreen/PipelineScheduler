@@ -1,7 +1,7 @@
 {
   "expName": "camp",
   "system_fps": 15,
-  "systemName": "fcpo",
+  "systemName": "cheis",
   "runtime": 125,
   "port_offset": 0,
   "sink_ip": "143.248.55.76",
@@ -100,7 +100,7 @@
       "pipeline_source_device": "nxavier4"
     }
   ],
-  "fcpo_parameters": {
+  "cheis_parameters": {
     "lambda": 0.1,
     "gamma": 0.1,
     "clip_epsilon": 0.9,

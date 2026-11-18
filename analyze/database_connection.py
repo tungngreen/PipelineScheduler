@@ -106,7 +106,7 @@ def avg_memory(exp, algos=['ppp', 'dis', 'jlf', 'rim'], edge_device_count=0):
     print(memories)
     return memories
 
-def avg_edge_power(exp, algos=['fcpo', 'bce', 'ppp']):
+def avg_edge_power(exp, algos=['cheis', 'bce', 'ppp']):
     engine = create_engine(conn_str)
     powers = {}
     df = pd.DataFrame()

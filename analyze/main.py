@@ -135,15 +135,15 @@ if __name__ == '__main__':
         objectcount(args, files)
     elif args.mode == 'full':
         full_analysis(args, files)
-    elif args.mode == 'fcpo':
+    elif args.mode == 'cheis':
         if not os.path.exists(os.path.join(args.directory, 'processed_logs')):
             os.makedirs(os.path.join(args.directory, 'processed_logs'))
         reward_plot(args.directory)
-        overall_performance_timeseries(args.directory, 'fcpo_main', ['FCPO', 'BCE', 'Tutti', 'OInf'])
+        overall_performance_timeseries(args.directory, 'cheis_main', ['CHEIS', 'BCE', 'Tutti', 'OInf'])
         continual_learning_performance(args.directory)
         warm_start_performance(args.directory)
         reduced_slo(args.directory)
-        system_overhead(os.path.join(args.directory, 'fcpo_overhead'))
+        system_overhead(os.path.join(args.directory, 'cheis_overhead'))
         hyperparameter_sensitivity(args.directory)
         logSystemMetrics(args.directory)
 

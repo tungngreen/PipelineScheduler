@@ -121,8 +121,8 @@ int main(int argc, char **argv) {
             delete bcedge;
         }
 
-    } else if (algorithm == "fcpo") { // only used for testing the training
-        auto *fcpo = new FCPOAgent(algorithm, 7, 2, 16, 2, nullptr, {}, 1, torch::kF32, steps,
+    } else if (algorithm == "cheis") { // only used for testing the training
+        auto *cheis = new CHEISAgent(algorithm, 7, 2, 16, 2, nullptr, {}, 1, torch::kF32, steps,
                                         0, epochs + 2, .95, .99, .75, .15);
         for (int i = 0; i < epochs; i++) {
             int last_resolution = 0, last_batch_size = 0, last_threading = 0;
@@ -130,14 +130,14 @@ int main(int argc, char **argv) {
                 double arrival = 30.0;
                 auto device = deviceTypes[rand() % deviceTypes.size()];
                 auto model = modelNames[device][0];
-                fcpo->setState(last_resolution, last_batch_size, last_threading, arrival, 0.0, 0.0, 0.0, slo,
+                cheis->setState(last_resolution, last_batch_size, last_threading, arrival, 0.0, 0.0, 0.0, slo,
                                profiles[device][model.first].batchInfer[last_batch_size].gpuMemUsage);
-                std::tie(last_resolution, last_batch_size, last_threading) = fcpo->runStep();
+                std::tie(last_resolution, last_batch_size, last_threading) = cheis->runStep();
                 double avg_latency = (double) (profiles[device][model.first].batchInfer[last_batch_size].p95prepLat +
                                                profiles[device][model.first].batchInfer[last_batch_size].p95inferLat * last_batch_size +
                                                profiles[device][model.first].batchInfer[last_batch_size].p95postLat +
                                                ((rand() % 500) - 250.0) + 0.1);
-                fcpo->rewardCallback(std::max(arrival, (double) TIME_PRECISION_TO_SEC / avg_latency), 0.0, avg_latency / TIME_PRECISION_TO_SEC, last_batch_size / arrival);
+                cheis->rewardCallback(std::max(arrival, (double) TIME_PRECISION_TO_SEC / avg_latency), 0.0, avg_latency / TIME_PRECISION_TO_SEC, last_batch_size / arrival);
             }
         }
 
