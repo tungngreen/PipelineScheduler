@@ -6,7 +6,7 @@ project(local_optimization)
 set(
         HEADER_FILES
         local_optimization.h
-        fcpo_learning.h
+        cheis_learning.h
         bcedge.h
         edgevision.h
 )
@@ -14,8 +14,8 @@ set(
 # All source files and private header files go here.
 set(
         SOURCE_FILES
-        fcpo_learning.cpp
-#        fcpo_learning_ippo.cpp
+        cheis_learning.cpp
+#        cheis_learning_ippo.cpp
         bcedge.cpp
         edgevision.cpp
 )

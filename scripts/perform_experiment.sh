@@ -22,7 +22,7 @@ for i in "${!agx[@]}"; do
   host="${agx[$i]}"
   echo "Starting DeviceAgent on $name@$host"
   cmd="./DeviceAgent --name $name --device_type agxavier --controller_url 143.248.57.94 --dev_port_offset 0 --dev_verbose 1"
-  ssh -t "root@$host" -i ~/.ssh/testbed "rm -r ~/pipe/models/fcpo_learning/hs* ; cd /home/cdsn/FCPO/build_host && $cmd" &
+  ssh -t "root@$host" -i ~/.ssh/testbed "rm -r ~/pipe/models/cheis_learning/hs* ; cd /home/cdsn/CHEIS/build_host && $cmd" &
 done
 
 for i in "${!nx[@]}"; do
@@ -30,7 +30,7 @@ for i in "${!nx[@]}"; do
   host="${nx[$i]}"
   echo "Starting DeviceAgent on $name@$host"
   cmd="./DeviceAgent --name $name --device_type nxavier --controller_url 143.248.57.94 --dev_port_offset 0 --dev_verbose 1"
-  ssh -t "root@$host" -i ~/.ssh/testbed "rm -r ~/pipe/models/fcpo_learning/hs* ; cd /home/cdsn/FCPO/build_host && $cmd" &
+  ssh -t "root@$host" -i ~/.ssh/testbed "rm -r ~/pipe/models/cheis_learning/hs* ; cd /home/cdsn/CHEIS/build_host && $cmd" &
 done
 
 for i in "${!orn[@]}"; do
@@ -38,13 +38,13 @@ for i in "${!orn[@]}"; do
   host="${orn[$i]}"
   echo "Starting DeviceAgent on $name@$host"
   cmd="./DeviceAgent --name $name --device_type orinano --controller_url 143.248.57.94 --dev_port_offset 0 --dev_verbose 1"
-  ssh -t "root@$host" -i ~/.ssh/testbed "rm -r ~/pipe/models/fcpo_learning/hs* ; cd /home/cdsn/FCPO/build_host && $cmd" &
+  ssh -t "root@$host" -i ~/.ssh/testbed "rm -r ~/pipe/models/cheis_learning/hs* ; cd /home/cdsn/CHEIS/build_host && $cmd" &
 done
 
 host="143.248.57.73"
 echo "Starting DeviceAgent on onprem1@$host"
 cmd="./DeviceAgent --name onprem1 --device_type onprem --controller_url 143.248.57.94 --dev_port_offset 0 --dev_verbose 1"
-ssh -t "root@$host" -i ~/.ssh/testbed "rm -r /ssd0/tung/PipePlusPlus/models/fcpo_learning/hs* ; cd /FCPO/build && $cmd" &
+ssh -t "root@$host" -i ~/.ssh/testbed "rm -r /ssd0/tung/PipePlusPlus/models/cheis_learning/hs* ; cd /CHEIS/build && $cmd" &
 
 echo "Starting local DeviceAgent..."
 ../build/DeviceAgent --name server --device_type server --controller_url localhost --dev_port_offset 0 --dev_verbose 1 &
@@ -62,5 +62,5 @@ if [ -z "$3" ]; then
 fi
 
 echo "Storing Experiment"
-ssh -t "root@143.248.55.76" -i ~/.ssh/testbed "mv /ssd0/tung/PipePlusPlus/logs/hs*/fcpo/*  /ssd0/tung/PipePlusPlus/logs/$3"
+ssh -t "root@143.248.55.76" -i ~/.ssh/testbed "mv /ssd0/tung/PipePlusPlus/logs/hs*/cheis/*  /ssd0/tung/PipePlusPlus/logs/$3"
 echo "Experiment complete."

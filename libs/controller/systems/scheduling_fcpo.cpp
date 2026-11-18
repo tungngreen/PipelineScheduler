@@ -1,4 +1,4 @@
-#include "scheduling_fcpo.h"
+#include "scheduling_cheis.h"
 
 // ==================================================================Scheduling==================================================================
 // ==============================================================================================================================================
@@ -171,13 +171,14 @@ void Controller::Scheduling() {
         ctrl_scheduledPipelines = ctrl_mergedPipelines;
         ApplyScheduling();
 
-        if (ctrl_systemName == "fcpo" || ctrl_systemName== "apis") {
-            ctrl_fcpo_server->updateCluster(ctrl_clusterID, containers.getFLConnections());
+        if (ctrl_systemName == "cheis" || ctrl_systemName== "apis") {
+            ctrl_cheis_server->updateCluster(ctrl_clusterID, containers.getFLConnections());
         }
         ctrl_clusterID = (ctrl_clusterID + 1) % ctrl_clusterCount;
 
         ctrl_controlTimings.nextRescalingTime = ctrl_controlTimings.currSchedulingTime + std::chrono::seconds(ctrl_controlTimings.rescalingIntervalSec);
         schedulingSW.stop();
+        spdlog::get("container_agent")->error("Scheduling took {}ns", schedulingSW.elapsed_microseconds()/1000);
         uint64_t sleepTime = std::chrono::duration_cast<TimePrecisionType>(ctrl_controlTimings.nextSchedulingTime - std::chrono::system_clock::now()).count();
         if (startTime == std::chrono::system_clock::time_point()) startTime = std::chrono::system_clock::now();
         if (std::chrono::duration_cast<std::chrono::minutes>(std::chrono::system_clock::now() - startTime).count() > ctrl_runtime) {

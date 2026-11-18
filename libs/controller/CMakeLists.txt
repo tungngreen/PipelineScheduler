@@ -47,15 +47,15 @@ if(SYSTEM_NAME STREQUAL "PPP")
                 ${SOURCE_FILES}
                 systems/scheduling_ppp.cpp
         )
-elseif (SYSTEM_NAME STREQUAL "FCPO")
+elseif (SYSTEM_NAME STREQUAL "CHEIS")
         set(HEADER_FILES
                 ${HEADER_FILES}
-                systems/scheduling_fcpo.h
+                scheduling-cheis.h
         )
 
         set(SOURCE_FILES
                 ${SOURCE_FILES}
-                systems/scheduling_fcpo.cpp
+                scheduling-cheis.cpp
         )
 elseif (SYSTEM_NAME STREQUAL "JLF")
         set(HEADER_FILES

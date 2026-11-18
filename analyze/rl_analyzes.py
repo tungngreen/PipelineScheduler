@@ -36,30 +36,30 @@ def read_rl_logs(directory, agents, rewards, loss):
 
 def reward_plot(base_directory):
     if not os.path.exists(os.path.join(base_directory, 'processed_logs', 'reward-loss.pkl')):
-        fcpo = os.path.join(base_directory, 'fcpo_logs')
-        fcpo_rewards = {}
-        fcpo_loss = {}
-        read_rl_logs(fcpo, natsorted(os.listdir(fcpo)), fcpo_rewards, fcpo_loss)
+        cheis = os.path.join(base_directory, 'cheis_logs')
+        cheis_rewards = {}
+        cheis_loss = {}
+        read_rl_logs(cheis, natsorted(os.listdir(cheis)), cheis_rewards, cheis_loss)
 
-        fcpo_reduced = os.path.join(base_directory, 'fcpo_reduced_logs')
-        fcpor_rewards = {}
-        fcpor_loss = {}
-        read_rl_logs(fcpo_reduced, natsorted(os.listdir(fcpo_reduced)), fcpor_rewards, fcpor_loss)
+        cheis_reduced = os.path.join(base_directory, 'cheis_reduced_logs')
+        cheisr_rewards = {}
+        cheisr_loss = {}
+        read_rl_logs(cheis_reduced, natsorted(os.listdir(cheis_reduced)), cheisr_rewards, cheisr_loss)
 
-        fcpo_global = os.path.join(base_directory, 'fcpo_global_logs')
-        fcpog_rewards = {}
-        fcpog_loss = {}
-        read_rl_logs(fcpo_global, natsorted(os.listdir(fcpo_global)), fcpog_rewards, fcpog_loss)
+        cheis_global = os.path.join(base_directory, 'cheis_global_logs')
+        cheisg_rewards = {}
+        cheisg_loss = {}
+        read_rl_logs(cheis_global, natsorted(os.listdir(cheis_global)), cheisg_rewards, cheisg_loss)
 
-        fcpo_fed = os.path.join(base_directory, 'federated_experiment')
-        fcpof_rewards = {}
-        fcpof_loss = {}
-        read_rl_logs(fcpo_fed, natsorted(os.listdir(fcpo_fed)), fcpof_rewards, fcpof_loss)
+        cheis_fed = os.path.join(base_directory, 'federated_experiment')
+        cheisf_rewards = {}
+        cheisf_loss = {}
+        read_rl_logs(cheis_fed, natsorted(os.listdir(cheis_fed)), cheisf_rewards, cheisf_loss)
 
-        fcpo_w_tutti = os.path.join(base_directory, 'fcpo_logs_with_tutti')
-        fcpowt_rewards = {}
-        fcpowt_loss = {}
-        read_rl_logs(fcpo_w_tutti, natsorted(os.listdir(fcpo_w_tutti)), fcpowt_rewards, fcpowt_loss)
+        cheis_w_tutti = os.path.join(base_directory, 'cheis_logs_with_tutti')
+        cheiswt_rewards = {}
+        cheiswt_loss = {}
+        read_rl_logs(cheis_w_tutti, natsorted(os.listdir(cheis_w_tutti)), cheiswt_rewards, cheiswt_loss)
 
         bce = os.path.join(base_directory, 'bce_logs')
         bce_rewards = {}
@@ -73,9 +73,9 @@ def reward_plot(base_directory):
 
         rewards = {}
         loss = {}
-        for algo, data in {'FCPO': [fcpo_rewards, fcpo_loss], 'BCE': [bce_rewards, bce_loss],
-                           'FCPO-tutti': [fcpowt_rewards, fcpowt_loss], 'BCE-tutti': [bcewt_rewards, bcewt_loss],
-                           'FCPO-reduced': [fcpor_rewards, fcpor_loss], 'without local optimization': [fcpog_rewards, fcpog_loss]}.items():
+        for algo, data in {'CHEIS': [cheis_rewards, cheis_loss], 'BCE': [bce_rewards, bce_loss],
+                           'FCPO-tutti': [cheiswt_rewards, cheiswt_loss], 'BCE-tutti': [bcewt_rewards, bcewt_loss],
+                           'CHEIS-reduced': [cheisr_rewards, cheisr_loss], 'without local optimization': [cheisg_rewards, cheisg_loss]}.items():
             rewards[algo] = []
             loss[algo] = []
             for agent in data[0]:
@@ -90,13 +90,13 @@ def reward_plot(base_directory):
                 rewards[algo][i] = rewards[algo][i] / len(data[0])
                 loss[algo][i] = loss[algo][i] / len(data[0])
             with open(os.path.join(base_directory, 'processed_logs', 'reward-loss.pkl'), 'wb') as f:
-                pickle.dump([rewards, loss, fcpo_rewards, fcpo_loss, bce_rewards, bce_loss, fcpof_rewards, fcpof_loss, fcpor_rewards, fcpor_loss, fcpog_rewards, fcpog_loss], f)
+                pickle.dump([rewards, loss, cheis_rewards, cheis_loss, bce_rewards, bce_loss, cheisf_rewards, cheisf_loss, cheisr_rewards, cheisr_loss, cheisg_rewards, cheisg_loss], f)
     else:
         with open(os.path.join(base_directory, 'processed_logs', 'reward-loss.pkl'), 'rb') as f:
-            rewards, loss, fcpo_rewards, fcpo_loss, bce_rewards, bce_loss, fcpof_rewards, fcpof_loss, fcpor_rewards, fcpor_loss, fcpog_rewards, fcpog_loss = pickle.load(f)
+            rewards, loss, cheis_rewards, cheis_loss, bce_rewards, bce_loss, cheisf_rewards, cheisf_loss, cheisr_rewards, cheisr_loss, cheisg_rewards, cheisg_loss = pickle.load(f)
 
     # plot the results
-    learning_algos=['FCPO', 'BCE', 'FCPO-reduced', 'FCPO-tutti', 'BCE-tutti', 'without local optimization']
+    learning_algos=['CHEIS', 'BCE', 'CHEIS-reduced', 'FCPO-tutti', 'BCE-tutti', 'without local optimization']
     for j, algo in enumerate(learning_algos):
         if j % 3 == 1:
             fig1, ax1 = plt.subplots(1, 1, figsize=(2, 1.3), gridspec_kw={'height_ratios': [1], 'width_ratios': [1]})
@@ -137,7 +137,7 @@ def reward_plot(base_directory):
 
     fig1, ax1 = plt.subplots(1, 1, figsize=(2, 2), gridspec_kw={'height_ratios': [1], 'width_ratios': [1]})
     fig2, ax2 = plt.subplots(1, 1, figsize=(2, 2), gridspec_kw={'height_ratios': [1], 'width_ratios': [1]})
-    for j, algo in enumerate(['FCPO', 'FCPO-reduced', 'without local optimization']):
+    for j, algo in enumerate(['CHEIS', 'CHEIS-reduced', 'without local optimization']):
         ax1.plot(rewards[algo], styles[j], label=algo, color=colors[j], linewidth=1, markevery=0.2)
         ax2.plot(loss[algo], styles[j], label=algo, color=colors[j], linewidth=1, markevery=0.2)
     ax1.set_xlabel('Episodes', size=12)
@@ -157,8 +157,8 @@ def reward_plot(base_directory):
     fig2.savefig("ablation-loss.pdf")
     fig2.show()
 
-    for algo, data in {'FCPO-rewards': fcpo_rewards, 'BCE-rewards': bce_rewards, 'FCPO-loss': fcpo_loss,
-                       'BCE-loss': bce_loss, 'federated-rewards': fcpof_rewards, 'federated-loss': fcpof_loss}.items():
+    for algo, data in {'CHEIS-rewards': cheis_rewards, 'BCE-rewards': bce_rewards, 'CHEIS-loss': cheis_loss,
+                       'BCE-loss': bce_loss, 'federated-rewards': cheisf_rewards, 'federated-loss': cheisf_loss}.items():
         if 'federated' in algo:
             fig, ax1 = plt.subplots(1, 1, figsize=(4, 2), gridspec_kw={'height_ratios': [1], 'width_ratios': [1]})
         else:

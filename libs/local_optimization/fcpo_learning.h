@@ -3,11 +3,11 @@
 #ifndef PIPEPLUSPLUS_BATCH_LEARNING_H
 #define PIPEPLUSPLUS_BATCH_LEARNING_H
 
-class FCPO_ExperienceBuffer : public ExperienceBuffer {
+class CHEIS_ExperienceBuffer : public ExperienceBuffer {
 public:
-    FCPO_ExperienceBuffer() = default;
+    CHEIS_ExperienceBuffer() = default;
 
-    FCPO_ExperienceBuffer(size_t capacity)
+    CHEIS_ExperienceBuffer(size_t capacity)
         : ExperienceBuffer(capacity), timeouts(capacity), batchings(capacity), scalings(capacity) {}
 
     void add(const T& state, const T& log_prob, const T& value,
@@ -86,16 +86,16 @@ struct MultiPolicyNet: torch::nn::Module {
     torch::nn::Linear policy_head3{nullptr};
 };
 
-class FCPOAgent {
+class CHEISAgent {
 public:
-    FCPOAgent(std::string& cont_name, std::string& dev_name, uint state_size, uint timeout_size, uint max_batch,
+    CHEISAgent(std::string& cont_name, std::string& dev_name, uint state_size, uint timeout_size, uint max_batch,
               uint scaling_size, socket_t *socket, BatchInferProfileListType profile, int base_batch,
               torch::Dtype precision = torch::kF64, uint update_steps = 60, uint update_steps_inc = 5,
               uint federated_steps = 5, double lambda = 0.95, double gamma = 0.99, double clip_epsilon = 0.2,
               double penalty_weight = 0.1, double theta = 1.0, double sigma = 10.0, double phi = 2.0, double rho = 1.0,
               int seed = 42);
 
-    ~FCPOAgent() {
+    ~CHEISAgent() {
         torch::save(model, path + "/latest_model.pt");
         out.close();
     }
@@ -166,11 +166,11 @@ private:
     ClockType  federatedStartTime;
 };
 
-class FCPOServer {
+class CHEISServer {
 public:
-    FCPOServer(std::string run_name, nlohmann::json parameters, uint16_t clusterCount, socket_t *mq, uint state_size = 9,
+    CHEISServer(std::string run_name, nlohmann::json parameters, uint16_t clusterCount, socket_t *mq, uint state_size = 9,
                torch::Dtype precision = torch::kF32);
-    ~FCPOServer() {
+    ~CHEISServer() {
         int i = 0;
         for (auto model: models) {
             torch::save(model, path + "/latest_model" + std::to_string(i++) + ".pt");

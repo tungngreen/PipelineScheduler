@@ -506,7 +506,7 @@ void Controller::readConfigFile(const std::string &path) {
         }
     }
 
-    if (ctrl_systemName == "fcpo" || ctrl_systemName== "apis") ctrl_fcpo_config = j["fcpo_parameters"];
+    if (ctrl_systemName == "cheis" || ctrl_systemName== "apis") ctrl_cheis_config = j["cheis_parameters"];
 }
 
 void TaskDescription::from_json(const nlohmann::json &j, TaskDescription::TaskStruct &val) {
@@ -625,7 +625,7 @@ Controller::Controller(int argc, char **argv) {
     }
 
 
-    if (ctrl_systemName != "fcpo" && ctrl_systemName != "bce") {
+    if (ctrl_systemName != "cheis" && ctrl_systemName != "bce") {
         std::thread networkCheckThread(&Controller::checkNetworkConditions, this);
         networkCheckThread.detach();
     }
@@ -656,8 +656,8 @@ Controller::Controller(int argc, char **argv) {
     message_queue.bind(server_address);
     message_queue.set(zmq::sockopt::sndtimeo, 100);
 
-    if (ctrl_systemName == "fcpo" || ctrl_systemName== "apis") {
-        ctrl_fcpo_server = new FCPOServer(ctrl_systemName + "_" + ctrl_experimentName, ctrl_fcpo_config, ctrl_clusterCount, &message_queue);
+    if (ctrl_systemName == "cheis" || ctrl_systemName== "apis") {
+        ctrl_cheis_server = new CHEISServer(ctrl_systemName + "_" + ctrl_experimentName, ctrl_cheis_config, ctrl_clusterCount, &message_queue);
     }
 
     ctrl_nextSchedulingTime = std::chrono::system_clock::now();
@@ -665,7 +665,7 @@ Controller::Controller(int argc, char **argv) {
 
 Controller::~Controller() {
     running = false;
-    if (ctrl_systemName == "fcpo" || ctrl_systemName== "apis") ctrl_fcpo_server->stop();
+    if (ctrl_systemName == "cheis" || ctrl_systemName== "apis") ctrl_cheis_server->stop();
     for (auto msvc: containers.getList()) {
         StopContainer(msvc, msvc->device_agent, true);
     }
@@ -984,7 +984,7 @@ void Controller::ApplyScheduling() {
         }
     }
 
-    if (ctrl_systemName != "ppp" && ctrl_systemName != "fcpo" && ctrl_systemName != "bce") {
+    if (ctrl_systemName != "ppp" && ctrl_systemName != "cheis" && ctrl_systemName != "bce") {
         basicGPUScheduling(new_containers);
     } else {
         colocationTemporalScheduling();
@@ -1052,7 +1052,7 @@ ContainerHandle *Controller::TranslateToContainer(PipelineModel *model, NodeHand
     if (getDeviceTypeName(device->type) == "virtual")
         containerTypeName = modelName + "_server";
 
-    if (ctrl_systemName == "ppp" || ctrl_systemName == "fcpo" || ctrl_systemName== "apis" || ctrl_systemName == "bce") {
+    if (ctrl_systemName == "ppp" || ctrl_systemName == "cheis" || ctrl_systemName== "apis" || ctrl_systemName == "bce") {
         if (model->batchSize < model->datasourceName.size()) model->batchSize = model->datasourceName.size();
     } // ensure minimum global batch size setting for these configurations for a good comparison
 
@@ -1169,7 +1169,7 @@ void Controller::StartContainer(ContainerHandle *container, bool easy_allocation
         if (ctrl_systemName == "ppp" || ctrl_systemName == "bce") {
             //TODO: set back to 2 after OURs working again with batcher
             start_config["container"]["cont_batchMode"] = 0;
-        } if (ctrl_systemName == "fcpo" || ctrl_systemName== "apis") {
+        } if (ctrl_systemName == "cheis" || ctrl_systemName== "apis") {
             start_config["container"]["cont_batchMode"] = 1;
         } if (ctrl_systemName == "ppp" || ctrl_systemName == "jlf") {
             start_config["container"]["cont_dropMode"] = 1;
@@ -1194,8 +1194,8 @@ void Controller::StartContainer(ContainerHandle *container, bool easy_allocation
                 spdlog::get("container_agent")->warn("Model profile not found for container: {0:s}", container->name);
             }
             start_config["container"]["cont_modelProfile"] = modelProfile;
-            if (ctrl_systemName == "fcpo" || ctrl_systemName== "apis") {
-                ctrl_fcpo_server->incrementClientCounter();
+            if (ctrl_systemName == "cheis" || ctrl_systemName== "apis") {
+                ctrl_cheis_server->incrementClientCounter();
             }
         }
 
@@ -1282,19 +1282,19 @@ void Controller::StartContainer(ContainerHandle *container, bool easy_allocation
 
             postprocessor->at("msvc_dnstreamMicroservices").push_back(post_down);
             base_config.push_back(sender);
-            if (ctrl_systemName == "fcpo" || ctrl_systemName== "apis") {
-                start_config["fcpo"] = ctrl_fcpo_server->getConfig();
+            if (ctrl_systemName == "cheis" || ctrl_systemName== "apis") {
+                start_config["cheis"] = ctrl_cheis_server->getConfig();
                 std::string deviceTypeName = getDeviceTypeName(container->device_agent->type);
-                start_config["fcpo"]["timeout_size"] = (deviceTypeName == "server") ? 3 : 2;
-                start_config["fcpo"]["batch_size"] = container->pipelineModel->processProfiles[deviceTypeName].maxBatchSize;
-                start_config["fcpo"]["threads_size"] = (deviceTypeName == "server") ? 4 : 2;
+                start_config["cheis"]["timeout_size"] = (deviceTypeName == "server") ? 3 : 2;
+                start_config["cheis"]["batch_size"] = container->pipelineModel->processProfiles[deviceTypeName].maxBatchSize;
+                start_config["cheis"]["threads_size"] = (deviceTypeName == "server") ? 4 : 2;
             }
         }
 
         start_config["container"]["cont_pipeline"] = base_config;
         control_port = container->recv_port - 5000;
     }
-    container->fcpo_conf = start_config["fcpo"];
+    container->cheis_conf = start_config["cheis"];
 
     request.set_name(container->name);
     std::string docker_tag = "lucasliebe/pipeplusplus:";
@@ -1445,8 +1445,8 @@ void Controller::StopContainer(ContainerHandle *container, NodeHandle *device, b
 
     if (container->gpuHandle != nullptr)
         container->gpuHandle->removeContainer(container);
-    if ((ctrl_systemName == "fcpo" || ctrl_systemName== "apis") && container->model != DataSource && container->model != Sink) {
-        ctrl_fcpo_server->decrementClientCounter();
+    if ((ctrl_systemName == "cheis" || ctrl_systemName== "apis") && container->model != DataSource && container->model != Sink) {
+        ctrl_cheis_server->decrementClientCounter();
     }
     if (!forced) { //not forced means the container is stopped during scheduling and should be removed
         containers.removeContainer(container->name);
@@ -1596,16 +1596,16 @@ void Controller::handleDummyDataRequest(const std::string& msg) {
 void Controller::handleForwardFLRequest(const std::string& msg) {
     FlData request;
     if (!request.ParseFromString(msg)){
-        spdlog::get("container_agent")->error("Failed adding FCPO client with msg: {}", msg);
+        spdlog::get("container_agent")->error("Failed adding CHEIS client with msg: {}", msg);
         return;
     }
     for (auto &dev: devices.getMap()) {
         if (dev.first == request.device_name()) {
-            if (ctrl_fcpo_server->addClient(request)) {
-                spdlog::get("container_agent")->info("Successfully added client {} to FCPO Aggregation.", request.device_name());
+            if (ctrl_cheis_server->addClient(request)) {
+                spdlog::get("container_agent")->info("Successfully added client {} to CHEIS Aggregation.", request.device_name());
                 server_socket.send(message_t("success"), send_flags::dontwait);
             } else {
-                spdlog::get("container_agent")->error("Failed adding client {} to FCPO Aggregation.", request.device_name());
+                spdlog::get("container_agent")->error("Failed adding client {} to CHEIS Aggregation.", request.device_name());
                 server_socket.send(message_t("error"), send_flags::dontwait);
             }
             break;

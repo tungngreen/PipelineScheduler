@@ -403,7 +403,7 @@
         "profile_numProfileBatches": 100,
         "profile_numProfileReqs": 1800
     },
-    "fcpo": {
+    "cheis": {
         "state_size": 5,
         "resolution_size": 1,
         "batch_size": 64,

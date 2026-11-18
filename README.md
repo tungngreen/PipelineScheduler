@@ -6,18 +6,17 @@ PipelineScheduler is a system which enables the highest performance in terms of 
 It can find the **optimal workload distribution** to split the pipelines between the server and the Edge devices, and apply **local optimization** of runtime parameters like **inference batch size**.
 The control components ensure the best throughput and latency against challenges such as *content dynamics* and *network instability*.
 PipelineScheduler also considers *resource contention* and is equipped with **inference spatiotemporal scheduling** to mitigate the adverse effects of *co-location interference*. 
-The research works behind our design have been published at [PerCom](https://percom.org/2025/) and [ArXiv](https://www.arxiv.org/abs/2507.18047) titled ***Workload-Aware Inference Serving for Edge Video Analytics*** and ***FCPO: Federated Continual Policy Optimization for Real-Time High-Throughput Edge Video Analytics***.
+The research works behind our design have been published at [PerCom'25](https://percom.org/2025/) and [SEC'26](https://acm-ieee-sec.org/2026/) titled ***Workload-Aware Inference Serving for Edge Video Analytics*** and ***CHEIS: Distributed Pipeline Optimization in Real-Time Inference Serving at the Edge***.
 Architectural diagram:
 
 ![overall-arch](/assets/overall-arch.png)
 
 
-We also incorporate learning-based workload prediction, a real-time video analytics scheduling system for distributed camera networks.
+We incorporate learning-based workload prediction and a real-time video analytics scheduling system for distributed camera networks.
 By learning and predicting fine-grained spatiotemporal workload dynamics, PipelineScheduler can proactively generate efficient task-offloading strategies that adapt to rapidly changing video streams and heterogeneous device conditions.
 This predictive capability enables the system not only to react to runtime variations but also to anticipate them, further improving resilience and efficiency in distributed inference pipelines.
-Our paper on this topic will appear in [ICSOC](https://icsoc2025.hit.edu.cn/) 2025 titled ***OctoCross: Workload-Aware Request Offloading Scheduling in Cross-Camera Collaboration***
-Currently, this feature is only available in branch [OctoCross-ICSOC2025](https://github.com/tungngreen/PipelineScheduler/tree/OctoCross-ICSOC2025) but will be merged into the *master* branch soon.
-
+Our paper on this topic appeared in [ICSOC'25](https://icsoc2025.hit.edu.cn/) titled ***OctoCross: Workload-Aware Request Offloading Scheduling in Cross-Camera Collaboration***
+Currently, this feature is only available in branch [OctoCross-ICSOC2025](https://github.com/tungngreen/PipelineScheduler/tree/OctoCross-ICSOC2025).
 
 This repo is contributed and maintained by Thanh-Tung Nguyen, Lucas Liebe (equally), and other colleges at [CDSN Lab](http://cds.kaist.ac.kr) at KAIST.
 
@@ -31,7 +30,7 @@ When using our Code please cite our works at the end of this [README](#citing-ou
    * [Device Agent](#device-agent)
    * [Inference Container](#inference-container)  
      * [Container Agent](#container-agent)
-     * [Local Optimizations (FCPO)](#local-optimizations-fcpo)
+     * [Workload Optimizations (CHEIS)](#local-optimizations-cheis)
      * [Configurations](#configurations)  
    * [Knowledge Base](#knowledge-base)  
 3. [Running ***PipelineScheduler***](#running-pipelinescheduler)  
@@ -39,30 +38,18 @@ When using our Code please cite our works at the end of this [README](#citing-ou
      * [Prerequisites](#prerequisites)  
      * [Inference Platform](#inference-platform)  
      * [Build & Compile](#build--compile)  
-       * [Controller](#the-controller)  
-       * [Device Agent](#the-device-agent)  
-       * [Microservices Inside Each Container](#the-microservices-inside-each-container)  
    * [Preparing Data](#preparing-data)  
    * [Preparing Models](#preparing-models)  
-     * [Build](#build)  
-     * [Run Conversion](#run-conversion)  
-     * [Edit Model Configuration Templates](#edit-model-configuration-templates)  
-     * [Running Model Profiling](#running-model-profiling)  
-   * [Running](#running)  
-     * [Step 1: Running the Controller](#step-1-running-the-controller)  
-     * [Step 2: Running the Device Agent](#step-2-once-the-controller-is-running-run-a-device-agent-on-each-device)  
-4. [Extending ***PipelineScheduler***](#extending-pipelinescheduler)  
-   * [Adding Models](#adding-models)  
-   * [Connecting with Kubernetes](#connecting-with-kubernetes)
-5. [Misc](#misc)  
-6. [Citing Our Works](#citing-our-works)
+   * [Running](#running)
+4. [Misc](#misc)  
+5. [Citing Our Works](#citing-our-works)
 
 # Implementation Architecture
 PipelineScheduler is composed of 4 main components:
 
 ## Controller
 The **Controller** is run as a separate C++ process to oversee the whole system.
-It queries operational statistics from the Knowledge Base via the PostGreSQL API and issues commands to the **Device Agents** via custom gRPC APIs.
+It queries operational statistics from the Knowledge Base via the PostGreSQL API and issues commands to the **Device Agents** via custom APIs.
 
 ## Device Agent
 Each workload handling device (including the Edge server) runs a **Device Agent** as a separate C++ process to manage and monitor the containers using Docker and other APIs (e.g., NVIDIA Driver API).
@@ -72,40 +59,41 @@ EVA pipelines are organized into DAGs with each node is a container, which packa
 Particularly, each container is its own pipeline of microservices which typically follows a structure of `[Receiver -> Preprocessor -> Batcher -> Inferencer -> Postprocessor -> Sender]`. Each microservice runs as a thread to ensure high parallelism.
 
 The `Preprocessor` and `Postprocessor` can be cloned (or *horizontally scaled up*), as well as the batch size of `Inferencer` can be dynamically set to ensure the highest throghput while maintain strict service-level objective (i.e., end-to-end latency) compliance.
-
-This design allows microservice to be replaced easily in a plug-and-place manner. For instane, if a TensorRT inferencer (the current version) is not suitable for the hardware, a new inferencer (e.g., ONNX-based) can be whipped up with minimal adaptation.
-
+This design allows microservice to be replaced easily in a plug-and-place manner. 
+For instane, if a TensorRT inferencer (the current version) is not suitable for the hardware, a new inferencer (e.g., ONNX-based) can be whipped up with minimal adaptation.
 But other designs (e.g., monolithic) works as well as long as the endpoints for sending/receiving data are specific correctly.
 
 ### Container Agent
 The **Container Agent** is a light-weight thread in charge of creating/deleting the microservices according to the instructions of the **Device Agent** and **Controller**.
 It also collects operational stats inside the container and published them to designated metrics endpoints.
 
-### Local Optimizations (FCPO)
-When compiling and running the system with the `FCPO` option, the **Inference Container** will be equipped with an iAgent.
-As presented in [FCPO](https://www.arxiv.org/abs/2507.18047), the iAgent is a local optimization agent which runs attached to each container to optimize the inference batch size and other parameters at a high frequency.
+### Workload Optimizations (CHEIS)
+When compiling and running the system with the `CHEIS` option, the **Inference Container** will be equipped with an iAgent.
+As presented in CHEIS, the iAgent is a local optimization agent which runs attached to each container to optimize the inference batch size and other parameters at a high frequency.
 This is beneficial for the system to adapt to the dynamic environment, such as changing network bandwidth and varying content dynamics, in a more responsive way than the global optimization of the **Controller**.
-The iAgent is implemented as a C++ thread running inside the **Inference Container** and is implemented [here](/libs/fcpo_learning).
-Every iAgent is trained through FCRL, where models are locally trained using Continual Reinforcement Learning (CRL) and aggregated at the **Controller**.
-The Hyperparameters can be configured in the [experiment jsons](/jsons/experiments/README.md) provided to the **Controller** or in the [container configuration](#configurations).
+The iAgent is implemented as a C++ thread running inside the **Inference Container** and is implemented [here](/libs/local_optimization).
+Every iAgent can be trained through additional Federated Learning, where models are locally trained using Continual Reinforcement Learning and aggregated at the **Controller**.
+The Hyperparameters can be configured in the [experiment jsons](/jsons/experiments/README.md) provided to the **Controller** or in the [container configuration](#configurations) when running individually.
 
-### Configurations
+### Workload Definitions
 The **Container Agent** relies on a json configuration file specifying the details of microservices inside each container.
-The current container configurations are store [here](/jsons).
+The current container configurations are stored [here](/jsons).
 It is worth taking a look at their structures before proceeding to the next part.
 
 Besides general metadata like:
 ```json
+{
     "cont_experimentName": "prof",
     "cont_systemName": "ppp",
     "cont_pipeName": "traffic",
     "cont_taskName": "retina1face",
     "cont_hostDevice": "server",
     "cont_hostDeviceType": "server",
-    "cont_name": "retinaface_0",
+    "cont_name": "retinaface_0"
+}
 ```
 
-The microservice details are defined under `"cont_pipeline"`. This is what the example of the `Preprocessor` for model Retina Face.
+The microservice details are defined under `"cont_pipeline"`. This is what the example of the `Preprocessor` for the model "Retina Face".
 ```json
 {
     "msvc_name": "preprocessor",
@@ -174,7 +162,7 @@ The microservice details are defined under `"cont_pipeline"`. This is what the e
 }
 ```
 
-When running [FCPO](https://www.arxiv.org/abs/2507.18047), which enable local optimization, the config should also contain an fcpo section with hyperparameterts.
+When running CHEIS, which enable local optimization, the config should also contain a cheis section with hyperparameters.
 
 ```json
 {
@@ -199,30 +187,36 @@ When running [FCPO](https://www.arxiv.org/abs/2507.18047), which enable local op
 
 Details on how to set the configurations can be found [here](/jsons/README).
 However, when running the whole system, the configurations are automatically modified by the **Controller** based on the model and experiment configurations.
+Full pipelines are defined in [pipelines.cpp](/libs/controller/pipelines.cpp)
 
 ## Knowledge Base
 The Knowledge Base is a PostgreSQL (14) database which contains all the operational statistics.
 
 # Running ***PipelineScheduler***
 ## Installation
-### Prerequisites
+### Prerequisites & Libraries
 To run the system, this following software must be installed on the host machines.
-* CMake (or newer)
+* CMake
 * Docker
 * OpenCV
-* gRPC
 * Protobuf
 * PostgreSQL.
 
 Inside the container, it is also necessary to install inference software platforms (e.g., TensorRT, ONNX).
-
-The specific software versions and commands for installation can be found taken from the [dockerfiles](/dockerfiles/), which are written to build inference container images. 
+The specific software versions and commands for installation can be found in the [dockerfiles](/dockerfiles/), which are written to build inference container images. 
 Since the current version is run on NVIDIA hardware (i.e., GPU and Jetson devices), most of the images are built upon NVIDIA container images published [here](https://catalog.ngc.nvidia.com/containers).
 
-The build instructions can be found [here](dockerfiles/README) and base containers without data or models are available [here](https://hub.docker.com/r/lucasliebe/pipeplusplus/tags).
+The build instructions can be found [here](dockerfiles/README) and various pre-build base containers without data or models are available [here](https://hub.docker.com/r/lucasliebe/pipeplusplus).
+
+### Setting up the Source Code
+After installing the prerequisites, please use git to clone the source code.
+There are some paths that need to be adjusted for your installation.
+Please configure the `docker-compose.server.yml` in the [dockerfiles](/dockerfiles/) and adjust volume mounts to where your models, logs, and input data is stored.
+For *Jetsons* we assume these are stored next to the sourcecode, but you can define them in  `docker-compose.jetson.yml` similar to the *server* configuration.
 
 ### Inference Platform
-The current versions of `Preprocessors, Postprocessors and Inferencer` are written for NVIDIA hardware, especially the `Inferencer`. But custom microservices can be written based on these with minimal adaptation.
+The current versions of `Preprocessors, Postprocessors and Inferencer` are written for NVIDIA hardware with TensorRT, especially the `Inferencer`. 
+But custom microservices can be written based on these with minimal adaptation of these components.
 
 The system is designed to be deployed on a Edge cluster, but can also be run on a single machine.
 The first step is to build the source code, here you can use multiple options for instance to change the scheduling system.
@@ -231,33 +225,29 @@ The first step is to build the source code, here you can use multiple options fo
 * The **Controller**
     ```bash
     mkdir build_host && cd build_host
-    cmake -DSYSTEM_NAME=[FCPO, PPP, DIS, JLF, RIM, BCE] -DON_HOST=True -DDEVICE_ARCH=platform_name
-    # Ours are FCPO and PPP (standing for PipePlusPlus ~ OctopInf)
-    # Platform name is amd64, orin, or xavier.
-    make -j 64 Controller
+    cmake -DSYSTEM_NAME=[CHEIS, PPP, DIS, JLF, RIM, BCE] -DON_HOST=[ON, BOTH] -DDEVICE_ARCH=[amd64, xavier, orin]
+    # Ours are CHEIS and PPP (standing for PipePlusPlus ~ OctopInf)
+    make -j$(nproc) Controller
     ```
 
 * The **Device Agent** 
     ```bash
     mkdir build_host && cd build_host
-    cmake -DSYSTEM_NAME=[FCPO, PPP, DIS, JLF, RIM, BCE] -DON_HOST=True -DDEVICE_ARCH=platform_name
-    # Ours are FCPO and PPP (standing for PipePlusPlus ~ OctopInf)
-    # Platform name is amd64, orin, or xavier.
-    make -j 64 Device_Agent
+    cmake -DSYSTEM_NAME=[CHEIS, PPP, DIS, JLF, RIM, BCE] -DON_HOST=ON -DDEVICE_ARCH=[amd64, xavier, orin]
+    # Ours are CHEIS and PPP (standing for PipePlusPlus ~ OctopInf)
+    make -j$(nproc) Device_Agent
     ```
 
-* The microservices **inside each container**
+* The **Container Agents** with VA workloads *inside the container*. (The amd64 container comes with pre-compiled code on the latest master branch, while the code has to be re-compiled on the edge nodes for faster debugging after the first time.)
     ```bash
     mkdir build && cd build
-    cmake -DSYSTEM_NAME=[FCPO, PPP, DIS, JLF, RIM, BCE] -DON_HOST=False -DDEVICE_ARCH=platform_name
-    # Ours are FCPO and PPP (standing for PipePlusPlus ~ OctopInf)
-    # Platform name is amd64, orin, or xavier.
-    make -j 64 Container_[name]
-    # Name of the model. YoloV5 for instance.
+    cmake -DSYSTEM_NAME=[CHEIS, PPP, DIS, JLF, RIM, BCE] -DON_HOST=OFF -DDEVICE_ARCH=[amd64, xavier, orin]
+    # Building with CHEIS is usually enough to evaluate all systems, as the workload code remains identical. The binaries can be slightly smaller with other options.
+    make -j$(nproc)
     ```
 
 ## Preparing Data
-The data is collected from publicly available streams on website like [www.earthcam.com](https://www.earthcam.com). 
+Real-World video data is collected from publicly available streams on website like [www.earthcam.com](https://www.earthcam.com). 
 The script for pulling the data can be found [here](/scripts/collect_dataset.sh) and requires python3 with venv to run.
 
 ## Preparing Models
@@ -266,8 +256,8 @@ Models need to be prepared accordingly to fit the current hardware and software 
 * Build
     ```bash
     mkdir build && cd build
-    cmake -DSYSTEM_NAME=[FCPO, PPP, DIS, JLF, RIM, BCE] -DON_HOST=False -DDEVICE_ARCH=platform_name
-    # Ours are FCPO and PPP (standing for PipePlusPlus ~ OctopInf)
+    cmake -DSYSTEM_NAME=[CHEIS, PPP, DIS, JLF, RIM, BCE] -DON_HOST=False -DDEVICE_ARCH=platform_name
+    # Ours are CHEIS and PPP (standing for PipePlusPlus ~ OctopInf)
     # Platform name is amd64, orin, or xavier.
     make -j 64 convert_onnx2trt
     ```
@@ -280,40 +270,38 @@ Models need to be prepared accordingly to fit the current hardware and software 
 
 * Edit Model Configuration Templates
 * Running Model Profiling
-    * This is only necessary for scheduling, the inference works without profiling.
+    * This is only necessary for initial workload distribution & OctopInf scheduling, the inference works without profiling.
 
-## Running
-* Step 1: Running the **Controller**.
-    ```bash
-    ./Controller --ctrl_configPath ../jsons/experiments/full-run-fcpo.json
-    ```
-    * The guideline to set configurations for controller run is available [here](/jsons/experiments/README.md).
-* Step 2: Once the **Controller** is running, run a **Device Agent** on each device.
-    ```bash    
-    ./DeviceAgent --name [device_name] --device_type [server, agx, nx, orinano] --controller_url [controller_ip_address] --dev_port_offset 0 --dev_verbose 1 --deploy_mode 1
-    ```
-
-# Extending ***PipelineScheduler***
-## Adding Models
+### Adding New Models
 New models can be easily introduced to the system using one of the following ways:
-1. Blackbox Container
-    * This doesn't work with scheduling since it requires a [**Container Agent**](#container-agent), but as long as endpoints are correctly specified and data types are correctly aligned, pipeline inference should still work perfectly.
+1. Blackbox Containers
+    * These will not work with scheduling since it requires a [**Container Agent**](#container-agent), but as long as endpoints are correctly specified and data types are correctly aligned, pipeline inference should still work perfectly.
 2. Adding new code
     * New code for new types of `Inferencer`, `Preprocessor`, `Postprocessor` can be easily added by modifying the current code.
     * Instructions can be found [here](/libs/workloads/README)
 
-## Connecting with Kubernetes
-TBA
+## Running
+* **Step 1:** Running the *Controller*.
+    ```bash
+    ./Controller --ctrl_configPath ../jsons/experiments/full-run-cheis.json
+    ```
+    * The guideline to set configurations for controller run is available [here](/jsons/experiments/README.md).
+* **Step 2:** Once the *Controller* is running, run a *Device Agent* on each device.
+    ```bash    
+    ./DeviceAgent --name [device_name] --device_type [server, agx, nx, orinano] --controller_url [controller_ip_address] --dev_port_offset 0 --dev_verbose 1 --deploy_mode 1
+    ```
+* **Step 3:** Follow the CLI provided by the *Controller* to start the experiments mentioned in the json config.
+  If everything has been compiled and data has been provided, the experiment will execute and stop automatically.
 
 # Misc
 * The main source code can be found within the `libs/` folder.
-* Configurations for models and experiments can be found in `jsons/` while the directories `cmake`, `scripts/`, and `dockerfiles` show deployment related code and helpers.
-* For analyzing the results we provide python scripts in `analyze`.
+* Configurations for models and experiments can be found in `jsons/` while the directories `cmake/`, `scripts/`, and `dockerfiles/` show deployment related code and helpers.
+* For analyzing the results we provide python scripts in `analyze/`.
 
 ## Useful Scripts
 ### Bandwidth setting
 For the purpose of running the experiments with real-world 5G traces, this [script](/scripts/set_bandwidth.sh) is provided, which is invoked from the Device Agent to set the network bandwidth using Linux's *Traffic Control* (tc).
-The required json configurations can be found [here](/jsons/) or created from the original dataset using this [script](/scripts/create_json_from_5g_dataset.py). 
+Example json configurations can be found [here](/jsons/) or created from the used 5G dataset using this [script](/scripts/create_json_from_5g_dataset.py). 
 
 ### Stop all containers with a keyword
 * If the experiment is not running as expected, we may want to force fully stop them.
@@ -321,9 +309,6 @@ The required json configurations can be found [here](/jsons/) or created from th
 ```bash
 ./stop_containers_with_keywords.sh KEY_WORD
 ```
-
-### Change names/Delete of PostgreSQL tables en masse.
-* If an experiment is not running as expected and we want to wipe out the old statistics table for a clean slate.
 
 # Citing our works
 If you find the repo useful, please cite the following works which have encompassed the development of this repo.
@@ -341,14 +326,15 @@ If you find the repo useful, please cite the following works which have encompas
     ```
 
 
-* **FCPO: Federated Continual Policy Optimization for Real-Time High-Throughput Edge Video Analytics** 
+* **CHEIS: Distributed Pipeline Optimization in Real-Time Inference Serving at the Edge** 
     ```
-    @inproceedings{liebe2025fcpo,
-        author={Lucas Liebe and Thanh-Tung Nguyen and Dongman Lee}
-        title = {{FCPO: Federated Continual Policy Optimization for Real-Time High-Throughput Edge Video Analytics}},
-        booktitle = {arXiv},
-        year = {2025},
-        month = july,
+    @inproceedings{liebe2026cheis,
+        author={Lucas Liebe and Thanh-Tung Nguyen and Nhat-Quang Tau and Dongman Lee}
+        title = {{CHEIS: Distributed Pipeline Optimization in Real-Time Inference Serving at the Edge}},
+        booktitle = {Proceedings of the Tenth ACM/IEEE Symposium on Edge Computing (SEC)},
+        publisher = {ACM/IEEE},
+        year = {2026},
+        month = october,
     }
     ```
 

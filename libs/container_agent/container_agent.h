@@ -17,7 +17,7 @@
 #include "sender.h"
 #include "data_reader.h"
 #include "controller.h"
-#include "fcpo_learning.h"
+#include "local_optimization.h"
 #include "baseprocessor.h"
 
 ABSL_DECLARE_FLAG(std::optional<std::string>, json);
@@ -267,7 +267,7 @@ protected:
     std::shared_ptr<spdlog::logger> cont_logger;
 
     // LOCAL OPTIMIZATION
-    FCPOAgent *cont_fcpo_agent;
+    CHEISAgent *cont_cheis_agent;
     uint64_t cont_localOptimizationIntervalMillisec;
     ClockType cont_nextOptimizationMetricsTime = std::chrono::high_resolution_clock ::now();
 };

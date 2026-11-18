@@ -1,6 +1,6 @@
-#include "fcpo_learning.h"
+#include "cheis_learning.h"
 
-FCPOAgent::FCPOAgent(std::string& cont_name, std::string& dev_name, uint state_size, uint timeout_size, uint max_batch,
+CHEISAgent::CHEISAgent(std::string& cont_name, std::string& dev_name, uint state_size, uint timeout_size, uint max_batch,
                      uint scaling_size, socket_t *socket, BatchInferProfileListType profile, int base_batch,
                      torch::Dtype precision, uint update_steps, uint update_steps_inc, uint federated_steps,
                      double lambda, double gamma, double clip_epsilon, double penalty_weight, double theta,
@@ -10,7 +10,7 @@ FCPOAgent::FCPOAgent(std::string& cont_name, std::string& dev_name, uint state_s
         theta(theta), sigma(sigma), phi(phi), rho(rho), state_size(state_size), timeout_size(timeout_size),
         max_batch(max_batch), base_batch(base_batch), scaling_size(scaling_size), update_steps(update_steps),
         update_steps_inc(update_steps_inc), federated_steps(federated_steps) {
-    path = "../models/fcpo_learning/" + cont_name;
+    path = "../models/local_optimization/" + cont_name;
     std::filesystem::create_directories(std::filesystem::path(path));
     out.open(path + "/latest_log_" + getTimestampString() + ".csv");
 
@@ -37,10 +37,10 @@ FCPOAgent::FCPOAgent(std::string& cont_name, std::string& dev_name, uint state_s
     last_batching = 0;
     last_slo = 0.0;
     steps_counter = 0;
-    experiences = FCPO_ExperienceBuffer(200);
+    experiences = CHEIS_ExperienceBuffer(200);
 }
 
-void FCPOAgent::update() {
+void CHEISAgent::update() {
     steps_counter = 0;
     if (federated_steps_counter == 0) {
         experiences.clear();
@@ -109,7 +109,7 @@ void FCPOAgent::update() {
     reset();
 }
 
-void FCPOAgent::federatedUpdate(const double loss) {
+void CHEISAgent::federatedUpdate(const double loss) {
     FlData request;
     // save model information in uchar* pointer and then reload it from that information
     std::ostringstream oss;
@@ -141,7 +141,7 @@ void FCPOAgent::federatedUpdate(const double loss) {
     }
 }
 
-void FCPOAgent::federatedUpdateCallback(const std::string &msg) {
+void CHEISAgent::federatedUpdateCallback(const std::string &msg) {
     FlData response;
     if (!response.ParseFromString(msg)) {
         spdlog::get("container_agent")->error("Failed to parse federated update response: {}", msg);
@@ -214,7 +214,7 @@ void FCPOAgent::federatedUpdateCallback(const std::string &msg) {
         reset();
 }
 
-void FCPOAgent::updateUtilityWeights(const std::string &msg) {
+void CHEISAgent::updateUtilityWeights(const std::string &msg) {
     CrlUtilityWeights response;
     if (!response.ParseFromString(msg)) {
         spdlog::get("container_agent")->error("Failed to parse utility weight update: {}", msg);
@@ -230,7 +230,7 @@ void FCPOAgent::updateUtilityWeights(const std::string &msg) {
     reset();
 }
 
-void FCPOAgent::rewardCallback(double throughput, double latency, double oversize, double memory_use) {
+void CHEISAgent::rewardCallback(double throughput, double latency, double oversize, double memory_use) {
     if (update_steps > 0 ) {
         if (first) { // First reward is not valid and needs to be discarded
             first = false;
@@ -248,7 +248,7 @@ void FCPOAgent::rewardCallback(double throughput, double latency, double oversiz
     }
 }
 
-void FCPOAgent::setState(double curr_timeout, double curr_batch, double curr_scaling,  double arrival,
+void CHEISAgent::setState(double curr_timeout, double curr_batch, double curr_scaling,  double arrival,
                          double pre_queue_size, double inf_queue_size, double post_queue_size, double slo,
                          double memory_use) {
     last_slo = slo;
@@ -265,7 +265,7 @@ void FCPOAgent::setState(double curr_timeout, double curr_batch, double curr_sca
                            memory_use / maxMemory}, precision);
 }
 
-void FCPOAgent::selectAction() {
+void CHEISAgent::selectAction() {
     std::unique_lock<std::mutex> lock(model_mutex);
     auto [policy1, policy2, policy3, val] = model->forward(state);
     T action_dist = torch::multinomial(policy1, 1);
@@ -288,7 +288,7 @@ void FCPOAgent::selectAction() {
     }
 }
 
-T FCPOAgent::computeCumuRewards() const {
+T CHEISAgent::computeCumuRewards() const {
     std::vector<double> discounted_rewards, rewards = experiences.get_rewards();
     double cumulative = 0.0;
     for (auto it = rewards.rbegin(); it != rewards.rend(); ++it) {
@@ -298,7 +298,7 @@ T FCPOAgent::computeCumuRewards() const {
     return torch::tensor(discounted_rewards).to(precision);
 }
 
-T FCPOAgent::computeGae() const {
+T CHEISAgent::computeGae() const {
     std::vector<double> advantages, rewards = experiences.get_rewards();
     std::vector<T> values = experiences.get_values();
     double gae = 0.0;
@@ -312,7 +312,7 @@ T FCPOAgent::computeGae() const {
     return torch::tensor(advantages).to(precision);
 }
 
-std::tuple<int, int, int> FCPOAgent::runStep() {
+std::tuple<int, int, int> CHEISAgent::runStep() {
     Stopwatch sw;
     sw.start();
     selectAction();
@@ -330,16 +330,16 @@ std::tuple<int, int, int> FCPOAgent::runStep() {
 }
 
 
-// ============================================================= FCPO SERVER ============================================================== //
+// ============================================================= CHEIS SERVER ============================================================== //
 // ======================================================================================================================================== //
 // ======================================================================================================================================== //
 // ======================================================================================================================================== //
 
 
-FCPOServer::FCPOServer(std::string run_name, nlohmann::json parameters, uint16_t clusterCount, socket_t *mq, uint state_size,
+CHEISServer::CHEISServer(std::string run_name, nlohmann::json parameters, uint16_t clusterCount, socket_t *mq, uint state_size,
                        torch::Dtype precision)
         : precision(precision), message_queue(mq), state_size(state_size) {
-    path = "../models/fcpo_learning/" + run_name;
+    path = "../models/local_optimization/" + run_name;
     std::filesystem::create_directories(std::filesystem::path(path));
     out.open(path + "/latest_log.csv");
 
@@ -371,11 +371,11 @@ FCPOServer::FCPOServer(std::string run_name, nlohmann::json parameters, uint16_t
     federated_clients = {};
     run = true;
     clusterID = 0;
-    std::thread t(&FCPOServer::proceed, this);
+    std::thread t(&CHEISServer::proceed, this);
     t.detach();
 }
 
-bool FCPOServer::addClient(FlData &request) {
+bool CHEISServer::addClient(FlData &request) {
     std::istringstream iss(request.network());
     federated_clients.push_back({request,
                                  std::make_shared<MultiPolicyNet>(request.state_size(), request.timeout_size(),
@@ -391,7 +391,7 @@ bool FCPOServer::addClient(FlData &request) {
     return true;
 }
 
-void FCPOServer::updateCluster(uint16_t id, std::vector<std::tuple<std::string, std::string, nlohmann::json>> agents) {
+void CHEISServer::updateCluster(uint16_t id, std::vector<std::tuple<std::string, std::string, nlohmann::json>> agents) {
     if (id >= models.size()) {
         spdlog::get("container_agent")->error("Server received invalid cluster ID: {}", id);
         return;
@@ -405,7 +405,7 @@ void FCPOServer::updateCluster(uint16_t id, std::vector<std::tuple<std::string, 
     }
 }
 
-void FCPOServer::proceed() {
+void CHEISServer::proceed() {
     while (run) {
         if (client_counter == 0 || federated_clients.size() < (client_counter / 2)) {
             std::this_thread::sleep_for(std::chrono::seconds(1));
@@ -416,7 +416,7 @@ void FCPOServer::proceed() {
             std::this_thread::sleep_for(std::chrono::seconds(1)); // add some wait to potentially receive more clients
         }
 
-        spdlog::get("container_agent")->info("Starting Federated Aggregation of FCPO Agents!");
+        spdlog::get("container_agent")->info("Starting Federated Aggregation of iAgents!");
         auto participants = federated_clients;
         federated_clients.clear();
 
@@ -468,7 +468,7 @@ void FCPOServer::proceed() {
     }
 }
 
-void FCPOServer::sendClusterModel(std::string name, std::string queue, nlohmann::json conf) {
+void CHEISServer::sendClusterModel(std::string name, std::string queue, nlohmann::json conf) {
     FlData request;
     std::ostringstream oss;
     auto tmp_model = std::make_shared<MultiPolicyNet>(state_size, conf["batch_size"], conf["timeout_size"],
@@ -496,7 +496,7 @@ void FCPOServer::sendClusterModel(std::string name, std::string queue, nlohmann:
     message_queue->send(zmq_msg, send_flags::none);
 }
 
-void FCPOServer::returnFLModel(ClientModel &client) {
+void CHEISServer::returnFLModel(ClientModel &client) {
     FlData request;
     std::ostringstream oss;
     torch::save(client.model, oss);

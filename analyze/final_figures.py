@@ -78,7 +78,7 @@ def base_plot(data, ax, title, sum_throughput=False, labels=algorithm_names, use
                 ax.text(x[0] + j * bar_width, traffic_intime, f'{traffic_intime:.0f}', ha='center', va='bottom', size=10)
                 ax.text(x[1] + j * bar_width, people_intime, f'{people_intime:.0f}', ha='center', va='bottom', size=10)
 
-        if a == 'OURS' or a == 'FCPO':
+        if a == 'OURS' or a == 'CHEIS':
             striped_patch = mpatches.Patch(facecolor='grey', alpha=0.5, hatch='//', edgecolor='white', label='Thrpt')
             solid_patch = mpatches.Patch(facecolor='grey', label='Effect. Thrpt')
             line_patch = Line2D([0], [0], color='red', linestyle='--', linewidth=2, label='Workload')
@@ -415,7 +415,7 @@ def overall_performance_timeseries(directory, experiment, xticks=None):
     directory = os.path.join(directory, experiment)
     systems = natsorted(os.listdir(directory))
     if 'main' in experiment:
-        systems = ['FCPO', 'Tutti', 'OctopInf', 'BCEdge']
+        systems = ['CHEIS', 'Tutti', 'OctopInf', 'BCEdge']
         fig1, ax1 = plt.subplots(1, 1, figsize=(4, 2.75), gridspec_kw={'height_ratios': [1], 'width_ratios': [1]})
         fig2, ax2 = plt.subplots(1, 1, figsize=(4, 2.75), gridspec_kw={'height_ratios': [1], 'width_ratios': [1]})
     else:
@@ -556,7 +556,7 @@ def overall_performance_timeseries(directory, experiment, xticks=None):
 
 
 def perPipeline_performance(directory):
-    directory = os.path.join(directory, 'fcpo_results')
+    directory = os.path.join(directory, 'cheis_results')
     fig, ax1 = plt.subplots(1, 1, figsize=(8, 3), gridspec_kw={'height_ratios': [1], 'width_ratios': [1]})
     labels = ['Traffic', 'Surveillance', 'Indoor']
     for j, d in enumerate(natsorted(os.listdir(directory))):
@@ -605,8 +605,8 @@ def warm_start_performance(directory):
     directory = os.path.join(directory, 'warm_start')
     fig1, ax1 = plt.subplots(1, 1, figsize=(6.75, 1.8), gridspec_kw={'height_ratios': [1], 'width_ratios': [1]})
     data = {}
-    algorithms = ['fcpo', 'ippo', 'bce', 'fcpo_cold']
-    labels = ['FCPO', 'IPPO', 'BCE', 'FCPO (Cold)']
+    algorithms = ['cheis', 'ippo', 'bce', 'cheis_no_fl', 'cheis_cold']
+    labels = ['CHEIS', 'IPPO', 'BCE', 'CHEIS w/o FL', 'CHEIS (Cold Start)']
     for j, d in enumerate(algorithms):
         if not os.path.exists(os.path.join(directory, d, 'df.csv')):
             data[d] = []
@@ -649,7 +649,7 @@ def warm_start_performance(directory):
 
 
 def continual_learning_performance(base_directory):
-    directory = os.path.join(base_directory, 'fcpo_continual')
+    directory = os.path.join(base_directory, 'cheis_continual')
     fig1, ax1 = plt.subplots(1, 1, figsize=(6, 1.8), gridspec_kw={'height_ratios': [1], 'width_ratios': [1]})
     data = {}
     # add a grey vertical line every 5 minutes
@@ -685,7 +685,7 @@ def continual_learning_performance(base_directory):
             df.to_csv(os.path.join(directory, d, 'df.csv'), index=False)
         else:
             df = pd.read_csv(os.path.join(directory, d, 'df.csv'))
-        if d == 'FCPO':
+        if d == 'CHEIS':
             workload_index, workload = load_data(os.path.join(directory, 'workload.csv'))
             # 3 data sources in experiment
             ax1.plot(workload_index, [w * 3 for w in workload], label='Workload', color='black', linestyle='-.', linewidth=1)
@@ -708,8 +708,8 @@ def continual_learning_performance(base_directory):
 def reduced_slo(base_directory):
     base_directory = os.path.join(base_directory, 'reduced_slo')
     fig1, ax1 = plt.subplots(1, 1, figsize=(6, 2), gridspec_kw={'height_ratios': [1], 'width_ratios': [1]})
-    algorithm_names = ['fcpo', 'tuti', 'ppp', 'bce']
-    label_map = {'fcpo': 'FCPO', 'bce': 'BCE', 'tuti': 'Tutti', 'ppp': 'OInf'}
+    algorithm_names = ['cheis', 'tuti', 'ppp', 'bce']
+    label_map = {'cheis': 'CHEIS', 'bce': 'BCE', 'tuti': 'Tutti', 'ppp': 'OInf'}
     slos = []
     data = {}
     for i, slo in enumerate(natsorted(os.listdir(base_directory))):
@@ -754,8 +754,8 @@ def reduced_slo(base_directory):
 
 def system_overhead(directory):
     # Memory
-    systems = ['fcpo', 'ippo', 'bce', 'ppp']
-    labels = ['FCPO', 'IPPO', 'BCE', 'Rule']
+    systems = ['cheis', 'ippo', 'bce', 'ppp']
+    labels = ['CHEIS', 'IPPO', 'BCE', 'Rule']
     fig1, ax1 = plt.subplots(1, 1, figsize=(2.75, 2.3), gridspec_kw={'height_ratios': [1], 'width_ratios': [1]})
     fig2, ax2 = plt.subplots(1, 1, figsize=(2.75, 2.3), gridspec_kw={'height_ratios': [1], 'width_ratios': [1]})
     fig3, ax3 = plt.subplots(1, 1, figsize=(2.75, 2.3), gridspec_kw={'height_ratios': [1], 'width_ratios': [1]})
