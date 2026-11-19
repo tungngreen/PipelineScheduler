@@ -143,16 +143,16 @@ int main(int argc, char **argv) {
         }
 
     } else if (algorithm == "MOMAPPO") {
-        // Instantiate FCPOAgent with MOMAPPO constructor
+        // Instantiate CHEISAgent with MOMAPPO constructor
         // NO Federated Learning args, NO Socket
         // Args: name, state, timeout, max_batch, scaling, profile(empty), base_batch, precision,
         //       update_steps, inc, lambda, gamma, clip, penalty, theta, sigma, phi, rho, seed
 
-        auto *fcpo = new FCPOAgent(algorithm, algorithm, 7, 2, 16, 2, nullptr, {}, 1, torch::kF32, steps, 0, 0,
+        auto *cheis = new CHEISAgent(algorithm, algorithm, 7, 2, 16, 2, nullptr, {}, 1, torch::kF32, steps, 0, 0,
                                    0.95, 0.99, 0.2, 0.1,
                                    1.0, 0.5, 0.5, 0.1, 42); // Weights: theta=1, sigma=0.5, phi=0.5, rho=0.1
 
-        std::cout << "Starting FCPO (MOMAPPO) Training..." << std::endl;
+        std::cout << "Starting CHEIS (MOMAPPO) Training..." << std::endl;
 
         for (int i = 0; i < epochs; i++) {
             int last_resolution = 0, last_batch_size = 1, last_threading = 0;
@@ -165,10 +165,10 @@ int main(int argc, char **argv) {
 
                 // Set State
                 double mem_usage = profiles[device][model.first].batchInfer[last_batch_size].gpuMemUsage;
-                fcpo->setState(last_resolution, last_batch_size, last_threading, arrival, 0.0, 0.0, 0.0, slo, mem_usage);
+                cheis->setState(last_resolution, last_batch_size, last_threading, arrival, 0.0, 0.0, 0.0, slo, mem_usage);
 
                 // Run Step
-                std::tie(last_resolution, last_batch_size, last_threading) = fcpo->runStep();
+                std::tie(last_resolution, last_batch_size, last_threading) = cheis->runStep();
 
                 // Avoid 0 batch size for simulation
                 if (last_batch_size < 1) last_batch_size = 1;
@@ -186,7 +186,7 @@ int main(int argc, char **argv) {
                 // Time precision assumed to be 1e6 (microseconds) for consistency with previous vars
                 double time_precision = 1000000.0;
 
-                fcpo->rewardCallback(std::max(arrival, time_precision / avg_latency), // Throughput
+                cheis->rewardCallback(std::max(arrival, time_precision / avg_latency), // Throughput
                                      0.0, // Latency Penalty (handled in reward calc via sigma)
                                      avg_latency / time_precision, // Oversize/Latency raw
                                      (double)last_batch_size / arrival); // Memory/Load

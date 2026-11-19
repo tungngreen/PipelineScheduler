@@ -127,7 +127,7 @@ private:
     T state, log_prob;
     double last_slo;
     int timeout, batching, last_batching, scaling;
-    FCPO_ExperienceBuffer experiences;
+    CHEIS_ExperienceBuffer experiences;
 
     bool first = true;
     bool penalty = true;

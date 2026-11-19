@@ -1,10 +1,10 @@
-#include "fcpo_learning.h"
+#include "cheis_learning.h"
 
 // -------------------------------------------------------------------------
-// FCPO Agent Implementation (MOMAPPO Style, No FL)
+// CHEIS Agent Implementation (MOMAPPO Style, No FL)
 // -------------------------------------------------------------------------
 
-FCPOAgent::FCPOAgent(std::string& cont_name, uint state_size, uint timeout_size, uint max_batch,  uint scaling_size,
+CHEISAgent::CHEISAgent(std::string& cont_name, uint state_size, uint timeout_size, uint max_batch,  uint scaling_size,
                      socket_t *socket, BatchInferProfileListType profile, int base_batch, torch::Dtype precision,
                      uint update_steps, uint update_steps_inc, uint federated_steps, double lambda, double gamma,
                      double clip_epsilon, double penalty_weight, double theta, double sigma, double phi, double rho,
@@ -15,7 +15,7 @@ FCPOAgent::FCPOAgent(std::string& cont_name, uint state_size, uint timeout_size,
           base_batch(base_batch), scaling_size(scaling_size), update_steps(update_steps),
           update_steps_inc(update_steps_inc) {
 
-    path = "../models/momappo_fcpo_learning/" + cont_name;
+    path = "../models/momappo_cheis_learning/" + cont_name;
     std::filesystem::create_directories(std::filesystem::path(path));
     out.open(path + "/latest_log.csv");
 
@@ -41,10 +41,10 @@ FCPOAgent::FCPOAgent(std::string& cont_name, uint state_size, uint timeout_size,
     last_batching = 0;
     last_slo = 0.0;
     steps_counter = 0;
-    experiences = FCPO_ExperienceBuffer(200);
+    experiences = CHEIS_ExperienceBuffer(200);
 }
 
-void FCPOAgent::update() {
+void CHEISAgent::update() {
     steps_counter = 0;
 
     // 1. Prepare Data
@@ -131,7 +131,7 @@ void FCPOAgent::update() {
     reset();
 }
 
-void FCPOAgent::rewardCallback(double throughput, double latency, double oversize, double memory_use) {
+void CHEISAgent::rewardCallback(double throughput, double latency, double oversize, double memory_use) {
     if (update_steps > 0 ) {
         if (first) {
             first = false;
@@ -162,7 +162,7 @@ void FCPOAgent::rewardCallback(double throughput, double latency, double oversiz
     }
 }
 
-void FCPOAgent::setState(double curr_timeout, double curr_batch, double curr_scaling,  double arrival,
+void CHEISAgent::setState(double curr_timeout, double curr_batch, double curr_scaling,  double arrival,
                          double pre_queue_size, double inf_queue_size, double post_queue_size, double slo,
                          double memory_use) {
     last_slo = slo;
@@ -178,7 +178,7 @@ void FCPOAgent::setState(double curr_timeout, double curr_batch, double curr_sca
                            memory_use / maxMemory}, precision);
 }
 
-void FCPOAgent::selectAction() {
+void CHEISAgent::selectAction() {
     std::unique_lock<std::mutex> lock(model_mutex);
     auto [policy1, policy2, policy3, val] = model->forward(state);
 
@@ -204,7 +204,7 @@ void FCPOAgent::selectAction() {
     }
 }
 
-T FCPOAgent::computeCumuRewards() const {
+T CHEISAgent::computeCumuRewards() const {
     std::vector<double> discounted_rewards, rewards = experiences.get_rewards();
     double cumulative = 0.0;
     for (auto it = rewards.rbegin(); it != rewards.rend(); ++it) {
@@ -214,7 +214,7 @@ T FCPOAgent::computeCumuRewards() const {
     return torch::tensor(discounted_rewards).to(precision);
 }
 
-T FCPOAgent::computeGae() const {
+T CHEISAgent::computeGae() const {
     std::vector<double> advantages, rewards = experiences.get_rewards();
     std::vector<T> values = experiences.get_values();
     double gae = 0.0;
@@ -228,7 +228,7 @@ T FCPOAgent::computeGae() const {
     return torch::tensor(advantages).to(precision);
 }
 
-std::tuple<int, int, int> FCPOAgent::runStep() {
+std::tuple<int, int, int> CHEISAgent::runStep() {
     selectAction();
 
     if (update_steps > 0 ) steps_counter++;

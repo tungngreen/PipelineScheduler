@@ -597,7 +597,7 @@ ContainerAgent::ContainerAgent(const json& configs) {
                                         rl_conf["clip_epsilon"], rl_conf["penalty_weight"], rl_conf["theta"],
                                         rl_conf["sigma"] ,rl_conf["phi"], rl_conf["rho"] , rl_conf["seed"]);
         handlers.emplace(MSG_TYPE[RETURN_FL], std::bind(&CHEISAgent::federatedUpdateCallback, cont_cheis_agent, std::placeholders::_1));
-        handlers.emplace(MSG_TYPE[CRL_WEIGHTS], std::bind(&FCPOAgent::updateUtilityWeights, cont_fcpo_agent, std::placeholders::_1));
+        handlers.emplace(MSG_TYPE[CRL_WEIGHTS], std::bind(&CHEISAgent::updateUtilityWeights, cont_cheis_agent, std::placeholders::_1));
     }
 
     std::thread receiver(&ContainerAgent::HandleControlMessages, this);

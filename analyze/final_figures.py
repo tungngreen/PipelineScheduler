@@ -178,14 +178,14 @@ def closest_index(array, value):
         return before
 
 
-def fcpoMainFigure(base_directory):
+def cheisMainFigure(base_directory):
     cases = ['centralized', 'distributed']
     case_labels = ['i-Centralized', 'ii-Distributed']
     scenarios = ['camp', 'fcty']
     scenario_labels = ['Urban Surveillance', 'Smart Factory']
     latencies = ['100', '200', '250']
-    systems = ['fcpo', 'base', 'rule', 'bce', 'ippo']
-    system_labels = ['FCPO', 'Base', 'Rule', 'BCEdge', 'IPPO']
+    systems = ['cheis', 'base', 'rule', 'bce', 'ippo']
+    system_labels = ['CHEIS', 'Base', 'Rule', 'BCEdge', 'IPPO']
 
     # create 4 barplots, two for each case
     total = {}
@@ -246,7 +246,7 @@ def fcpoMainFigure(base_directory):
                     axs.bar(x_base, goodput_rate,
                             bar_width, label=system_labels[i] if k == 0 and j == 0 else "",
                             color=colors[i], hatch=markers[i], edgecolor='white', linewidth=0.5, hatch_linewidth=0.5)
-                    if sys == 'fcpo':
+                    if sys == 'cheis':
                         axs.text(x_base, goodput_rate, f'{goodput_rate:.0f}',
                                  ha='center', va='bottom', size=12)
 
@@ -278,7 +278,7 @@ def fcpoMainFigure(base_directory):
                 fig = fig2
 
             fig.tight_layout()
-            fig.savefig(f'fcpo-{case}-{exp}-throughput-comparison.pdf')
+            fig.savefig(f'cheis-{case}-{exp}-throughput-comparison.pdf')
             fig.show()
 
     fig, axs = plt.subplots(1, 1, figsize=(6.5, 2.2), gridspec_kw={'height_ratios': [1], 'width_ratios': [1]})
@@ -320,7 +320,7 @@ def fcpoMainFigure(base_directory):
     axs.set_ylim(5, 1000)
     axs.legend(fontsize=13, ncol=5, loc='lower center', bbox_to_anchor=(0.5, -0.1), columnspacing=1.0, labelspacing=0.2, handlelength=1.5)
     plt.tight_layout()
-    plt.savefig(f'fcpo-latency-boxplot.png', dpi=900)
+    plt.savefig(f'cheis-latency-boxplot.png', dpi=900)
     plt.show()
 
 

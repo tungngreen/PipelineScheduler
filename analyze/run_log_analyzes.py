@@ -331,7 +331,7 @@ def logSystemMetrics(base_directory, experiments = ['main'], running_seconds = 1
             with open(os.path.join(directory, 'processed_logs.pkl'), 'rb') as f:
                 results[exp] = pickle.load(f)
 
-    memory = avg_memory('apis', ['apis', 'fcpo', 'ippo'], 1)
+    memory = avg_memory('apis', ['apis', 'cheis', 'ippo'], 1)
     print(memory)
 
     with open('systemMetrics.txt', 'wb') as f:

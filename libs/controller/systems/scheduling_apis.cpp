@@ -189,7 +189,7 @@ void Controller::Scheduling() {
                 for (auto &container: subTaskPair.second) {
                     if (localCRLAgents.find(container->name) == localCRLAgents.end())
                         localCRLAgents[container->name] = {container->position_in_pipeline, container->name,
-                                                           ctrl_fcpo_server->getUtilityWeights()};
+                                                           ctrl_cheis_server->getUtilityWeights()};
                     // Assign Reward
                     if (task->tk_lastThroughput == 0.0)
                         ApisRL->rewardCallback(0.0, 0.0, 0.0);
@@ -231,8 +231,8 @@ void Controller::Scheduling() {
         ApisRL->finish_step();
         // --------------- APIS RL INTEGRATION CODE END ------------------
 
-        if (ctrl_systemName == "fcpo" || ctrl_systemName== "apis") {
-            ctrl_fcpo_server->updateCluster(ctrl_clusterID, containers.getFLConnections());
+        if (ctrl_systemName == "cheis" || ctrl_systemName== "apis") {
+            ctrl_cheis_server->updateCluster(ctrl_clusterID, containers.getFLConnections());
         }
         ctrl_clusterID = (ctrl_clusterID + 1) % ctrl_clusterCount;
 

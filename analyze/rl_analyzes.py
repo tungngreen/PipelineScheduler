@@ -74,7 +74,7 @@ def reward_plot(base_directory):
         rewards = {}
         loss = {}
         for algo, data in {'CHEIS': [cheis_rewards, cheis_loss], 'BCE': [bce_rewards, bce_loss],
-                           'FCPO-tutti': [cheiswt_rewards, cheiswt_loss], 'BCE-tutti': [bcewt_rewards, bcewt_loss],
+                           'CHEIS-tutti': [cheiswt_rewards, cheiswt_loss], 'BCE-tutti': [bcewt_rewards, bcewt_loss],
                            'CHEIS-reduced': [cheisr_rewards, cheisr_loss], 'without local optimization': [cheisg_rewards, cheisg_loss]}.items():
             rewards[algo] = []
             loss[algo] = []
@@ -96,7 +96,7 @@ def reward_plot(base_directory):
             rewards, loss, cheis_rewards, cheis_loss, bce_rewards, bce_loss, cheisf_rewards, cheisf_loss, cheisr_rewards, cheisr_loss, cheisg_rewards, cheisg_loss = pickle.load(f)
 
     # plot the results
-    learning_algos=['CHEIS', 'BCE', 'CHEIS-reduced', 'FCPO-tutti', 'BCE-tutti', 'without local optimization']
+    learning_algos=['CHEIS', 'BCE', 'CHEIS-reduced', 'CHEIS-tutti', 'BCE-tutti', 'without local optimization']
     for j, algo in enumerate(learning_algos):
         if j % 3 == 1:
             fig1, ax1 = plt.subplots(1, 1, figsize=(2, 1.3), gridspec_kw={'height_ratios': [1], 'width_ratios': [1]})

@@ -128,7 +128,7 @@ def avg_edge_power(exp, algos=['cheis', 'bce', 'ppp']):
     print(powers)
     return powers
 
-def full_edge_power(exp, algos=['fcpo', 'bce', 'ppp']):
+def full_edge_power(exp, algos=['cheis', 'bce', 'ppp']):
     engine = create_engine(conn_str)
     powers = {}
     df = pd.DataFrame()

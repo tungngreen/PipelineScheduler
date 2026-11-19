@@ -8,7 +8,7 @@ from natsort import natsorted
 from analyze_object_counts import objectcount
 from run_log_analyzes import full_analysis, logSystemMetrics
 from final_figures import overall_performance_timeseries, system_overhead, reduced_slo, continual_learning_performance, \
-     hyperparameter_sensitivity, warm_start_performance, fcpoMainFigure
+     hyperparameter_sensitivity, warm_start_performance, cheisMainFigure
 from rl_analyzes import reward_plot
 
 
@@ -144,5 +144,5 @@ if __name__ == '__main__':
         warm_start_performance(args.directory)
         system_overhead(os.path.join(args.directory, 'cheis_overhead'))
         hyperparameter_sensitivity(args.directory)
-        fcpoMainFigure(args.directory)
+        cheisMainFigure(args.directory)
         logSystemMetrics(args.directory)
